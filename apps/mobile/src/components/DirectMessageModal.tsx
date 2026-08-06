@@ -1,23 +1,42 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { sendDirectMessage } from '../api';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { photoUrl, sendDirectMessage } from '../api';
 import { COIN_NAME_PLURAL, formatCoins } from '../config/economy';
 import { CoinIcon } from './coins';
+import { haptic } from '../lib/haptics';
 import { useWallet } from '../lib/wallet';
-import { colors, radius, shadows, spacing } from '../theme';
 import type { DirectMessageResult } from '../types';
-import { Button } from './ui';
+
+// Écran d'envoi du premier message : PLEIN ÉCRAN, pas une petite carte. La
+// photo du profil habille tout le fond (floutée), le portrait net trône au
+// centre, et l'écriture devient un moment à part entière. Les informations
+// affichées restent simples : à qui on écrit, ce que ça coûte, une seule
+// règle dite avec des mots de tous les jours.
+//
+// La logique est inchangée : mêmes règles de contenu, même envoi, même
+// contrat (target / onClose / onResult) pour les écrans qui l'utilisent.
 
 interface Target {
   user_id: string;
   display_name: string;
+  // Présent sur les profils du feed et des favoris : sert au fond et au
+  // portrait. Sans photo, l'écran retombe sur le dégradé de marque.
+  photos?: { path: string }[];
 }
 
 const DM_MAX = 150;
@@ -29,16 +48,18 @@ const FORBIDDEN_SPECIALS = /[@#$%^&*()_+=<>[\]{}/\\|~:;"`€£§°]/;
 const FORBIDDEN_KEYWORDS =
   /\b(whatsapp|instagram|insta|facebook|telegram|snapchat|tiktok|gmail|e?-?mail|num[ée]ro|t[ée]l[ée]phone)\b/i;
 
+// Les règles sont techniques, leur affichage ne doit pas l'être : chaque
+// refus se dit en une phrase simple.
 function dmContentError(text: string): string | null {
   if (!text) return null;
   if (/[0-9]/.test(text)) {
-    return 'Les chiffres ne sont pas autorisés : ne partage pas de numéro ou d\'informations personnelles. Ajuste ton message.';
+    return 'Évite les chiffres : garde ton numéro pour plus tard.';
   }
   if (FORBIDDEN_SPECIALS.test(text)) {
-    return 'Les caractères spéciaux ne sont pas autorisés. Utilise seulement des lettres et une ponctuation simple. Ajuste ton message.';
+    return 'Utilise seulement des lettres et une ponctuation simple.';
   }
   if (FORBIDDEN_KEYWORDS.test(text)) {
-    return 'Ton message ne doit pas contenir d\'informations personnelles ni de réseaux sociaux. Ajuste ton message.';
+    return "Les réseaux sociaux attendront : fais d'abord connaissance ici.";
   }
   return null;
 }
@@ -83,95 +104,304 @@ export function DirectMessageModal({
       const msg = e instanceof Error ? e.message : '';
       setError(
         msg.includes('dm_filtre')
-          ? "Ce profil n'accepte que les DM des personnes qui correspondent à ses critères."
+          ? "Ce profil ne reçoit que les messages des personnes qui correspondent à ses critères."
           : msg.includes('message_contenu_interdit')
-            ? 'Ton message contient des chiffres, caractères spéciaux ou informations personnelles. Ajuste ton message.'
-            : "Le message n'a pas pu être envoyé. Réessaie.",
+            ? 'Ton message semble contenir un numéro ou un réseau social. Reformule-le simplement.'
+            : "Le message n'est pas parti. Réessaie.",
       );
       setSending(false);
     }
   };
 
+  const photoPath = target?.photos?.[0]?.path ?? null;
+  const shownError = contentError ?? error;
+
   return (
-    <Modal visible={target !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-        <View style={styles.card}>
-          <Text style={styles.title}>Envoyer un DM</Text>
-          <Text style={styles.hint}>
-            Écris un message direct à {target?.display_name}. Parle avec ton cœur et, surtout,
-            sois poli(e). Si {target?.display_name} répond, le match se crée automatiquement et
-            répondre ne lui coûte rien. Maximum {DM_MAX} caractères, sans chiffres, caractères
-            spéciaux ni informations personnelles.
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Écris quelque chose de sympa…"
-            placeholderTextColor={colors.textMuted}
-            value={draft}
-            onChangeText={setDraft}
-            multiline
-            maxLength={DM_MAX}
-            autoFocus
+    <Modal
+      visible={target !== null}
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.screen}>
+        {/* Fond : la photo du profil, floutée et assombrie. L'écran est un
+            tête-à-tête, pas un formulaire. */}
+        {photoPath ? (
+          <Image
+            source={{ uri: photoUrl(photoPath) }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            blurRadius={40}
           />
-          <Text style={styles.counter}>Caractères restants : {DM_MAX - draft.length}</Text>
-          {!!contentError && <Text style={styles.error}>{contentError}</Text>}
-          <View style={styles.costRow}>
-            <CoinIcon size={14} />
-            <Text style={styles.costText}>
-              {freeLeft === null
-                ? `Ce DM te coûtera ${formatCoins(costs.dm_cost)} ${COIN_NAME_PLURAL}.`
-                : freeLeft > 0
-                  ? `Gratuit — il te reste ${freeLeft} DM offert${freeLeft > 1 ? 's' : ''}.`
-                  : `Ce DM te coûtera ${formatCoins(costs.dm_cost)} ${COIN_NAME_PLURAL} (solde : ${formatCoins(wallet?.balance ?? 0)}).`}
-            </Text>
-          </View>
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          <Button
-            title="Envoyer"
-            onPress={send}
-            loading={sending}
-            disabled={!draft.trim() || contentError !== null}
+        ) : (
+          <LinearGradient
+            colors={['#1c0b13', '#4a1030', '#9d174d']}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={StyleSheet.absoluteFill}
           />
-          <Button title="Annuler" variant="ghost" onPress={onClose} />
-        </View>
-      </KeyboardAvoidingView>
+        )}
+        <LinearGradient
+          colors={['rgba(28,11,19,0.55)', 'rgba(28,11,19,0.75)', 'rgba(28,11,19,0.92)']}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.flex}
+          >
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => {
+                  haptic.tap();
+                  onClose();
+                }}
+                hitSlop={12}
+                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="close" size={22} color="#ffffff" />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.content}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Portrait net dans un anneau dégradé, posé sur le fond flouté. */}
+              <View style={styles.avatarRing}>
+                <LinearGradient
+                  colors={['#ec4899', '#f472b6']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.avatarClip}>
+                  {photoPath ? (
+                    <Image
+                      source={{ uri: photoUrl(photoPath) }}
+                      style={styles.avatar}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarFallback]}>
+                      <Ionicons name="person" size={38} color="rgba(255,255,255,0.8)" />
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <Text style={styles.title}>Un premier mot pour {target?.display_name}</Text>
+              <Text style={styles.subtitle}>
+                Parle avec ton cœur et reste courtois(e). Si {target?.display_name} répond,
+                le match se crée et votre conversation commence.
+              </Text>
+
+              <View style={styles.inputCard}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Écris quelque chose de sympa…"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  value={draft}
+                  onChangeText={setDraft}
+                  multiline
+                  maxLength={DM_MAX}
+                  autoFocus
+                />
+                <Text style={styles.counter}>
+                  {draft.length}/{DM_MAX}
+                </Text>
+              </View>
+
+              <View style={styles.ruleRow}>
+                <Ionicons name="shield-checkmark-outline" size={15} color="rgba(255,255,255,0.65)" />
+                <Text style={styles.ruleText}>
+                  Pas de numéro ni de réseaux sociaux : juste des mots.
+                </Text>
+              </View>
+
+              {!!shownError && <Text style={styles.error}>{shownError}</Text>}
+            </ScrollView>
+
+            <View style={styles.footer}>
+              <View style={styles.costRow}>
+                {freeLeft !== null && freeLeft > 0 ? (
+                  <>
+                    <View style={styles.freePill}>
+                      <Text style={styles.freePillText}>Offert</Text>
+                    </View>
+                    <Text style={styles.costText}>
+                      Encore {freeLeft} message{freeLeft > 1 ? 's' : ''} offert
+                      {freeLeft > 1 ? 's' : ''}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <CoinIcon size={15} />
+                    <Text style={styles.costText}>
+                      {formatCoins(costs.dm_cost)} {COIN_NAME_PLURAL}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              <Pressable
+                onPress={() => {
+                  haptic.impact();
+                  send();
+                }}
+                disabled={!draft.trim() || contentError !== null || sending}
+                style={({ pressed }) => [
+                  styles.sendBtn,
+                  (!draft.trim() || contentError !== null) && { opacity: 0.4 },
+                  pressed && { transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <LinearGradient
+                  colors={['#ec4899', '#be185d']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                {sending ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <>
+                    <Text style={styles.sendText}>Envoyer</Text>
+                    <Ionicons name="paper-plane" size={17} color="#ffffff" />
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(14,15,12,.6)',
-    justifyContent: 'center',
-    padding: spacing.lg,
+  screen: { flex: 1, backgroundColor: '#1c0b13' },
+  safe: { flex: 1 },
+  flex: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    ...shadows.floating,
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  avatarRing: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    padding: 3,
+    overflow: 'hidden',
+    marginBottom: 18,
+  },
+  avatarClip: { flex: 1, borderRadius: 45, overflow: 'hidden' },
+  avatar: { width: '100%', height: '100%' },
+  avatarFallback: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
+    color: '#ffffff',
+    fontSize: 25,
     fontWeight: '800',
-    color: colors.primaryDeep,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    maxWidth: 320,
   },
-  costRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  costText: { fontSize: 14, fontWeight: '600', color: colors.primary, flexShrink: 1 },
-  hint: { fontSize: 13, color: colors.textMuted, lineHeight: 18 },
-  input: {
-    minHeight: 160,
-    maxHeight: 240,
-    borderRadius: radius.sm,
-    backgroundColor: colors.inputBg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+  subtitle: {
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 15,
-    color: colors.text,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 320,
+    marginTop: 8,
+    marginBottom: 22,
+  },
+  inputCard: {
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 20,
+    padding: 16,
+  },
+  input: {
+    minHeight: 120,
+    maxHeight: 200,
+    fontSize: 17,
+    lineHeight: 24,
+    color: '#ffffff',
     textAlignVertical: 'top',
   },
-  error: { color: colors.danger, fontSize: 13, textAlign: 'center' },
-  counter: { fontSize: 12, color: colors.textMuted, textAlign: 'right' },
+  counter: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    textAlign: 'right',
+    marginTop: 6,
+    fontVariant: ['tabular-nums'],
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  ruleText: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
+  error: {
+    color: '#fda4af',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+    maxWidth: 320,
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 10,
+    gap: 12,
+  },
+  costRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  freePill: {
+    backgroundColor: 'rgba(74,222,128,0.2)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  freePillText: { color: '#4ade80', fontSize: 12, fontWeight: '800' },
+  costText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' },
+  sendBtn: {
+    height: 56,
+    borderRadius: 999,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sendText: { fontSize: 16, fontWeight: '800', color: '#ffffff' },
 });

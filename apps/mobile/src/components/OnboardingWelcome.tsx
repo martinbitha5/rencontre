@@ -162,7 +162,7 @@ export function OnboardingWelcome({
               .reduceMotion(ReduceMotion.System)}
             style={pc.subtitle}
           >
-            Ton profil est prêt. De belles rencontres t'attendent.
+            {"Ton profil est prêt. De belles rencontres t'attendent."}
           </Animated.Text>
 
           <View style={pc.checks}>

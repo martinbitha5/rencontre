@@ -973,7 +973,7 @@ export default function Onboarding() {
 
               {step === 'children' && (
                 <>
-                  <SectionLabel delay={120}>J'ai des enfants</SectionLabel>
+                  <SectionLabel delay={120}>{"J'ai des enfants"}</SectionLabel>
                   <View style={styles.tileRow}>
                     {HAS_CHILDREN_OPTIONS.map((o, i) => (
                       <ChoiceTile
@@ -1047,7 +1047,7 @@ export default function Onboarding() {
                       >
                         <Ionicons name="checkmark" size={14} color="#ffffff" />
                         <Text style={styles.countPillDoneText}>
-                          {interests.length} choisis, c'est parfait
+                          {interests.length} {"choisis, c'est parfait"}
                         </Text>
                       </Animated.View>
                     ) : (
