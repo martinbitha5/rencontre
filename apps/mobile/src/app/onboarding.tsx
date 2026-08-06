@@ -28,12 +28,49 @@ import { useAuth } from '../lib/auth';
 import { detectCity } from '../lib/cityGeo';
 import { haptic } from '../lib/haptics';
 import { pickPhotoMessage, pickProfilePhoto } from '../lib/photoPicker';
-import { GOAL_OPTIONS } from '../profileOptions';
+import {
+  EDUCATION_OPTIONS,
+  FREQUENCY_OPTIONS,
+  GOAL_OPTIONS,
+  HAS_CHILDREN_OPTIONS,
+  INTEREST_OPTIONS,
+  LANGUAGE_OPTIONS,
+  RELIGION_OPTIONS,
+  WANTS_CHILDREN_OPTIONS,
+} from '../profileOptions';
 import { colors, radius, spacing } from '../theme';
 import type { City, Gender, MyPhoto } from '../types';
 
-const STEPS = ['name', 'birthdate', 'gender', 'goal', 'city', 'photos', 'bio'] as const;
+// L'inscription se fait en deux temps : d'abord ce qui est indispensable
+// pour exister dans le deck, ensuite ce qui remplit la fiche « Plus d'infos ».
+// Les étapes de la seconde moitié se passent d'un geste : personne ne doit
+// être bloqué, mais un profil vide n'intéresse personne non plus.
+const STEPS = [
+  'name',
+  'birthdate',
+  'gender',
+  'goal',
+  'city',
+  'photos',
+  'about',
+  'lifestyle',
+  'children',
+  'background',
+  'interests',
+  'bio',
+] as const;
 type Step = (typeof STEPS)[number];
+
+// Étapes que l'on peut sauter : elles enrichissent le profil sans être
+// nécessaires au fonctionnement de l'app.
+const OPTIONAL_STEPS: Step[] = [
+  'about',
+  'lifestyle',
+  'children',
+  'background',
+  'interests',
+  'bio',
+];
 
 const STEP_META: Record<Step, { title: string; subtitle: string }> = {
   name: {
@@ -60,9 +97,29 @@ const STEP_META: Record<Step, { title: string; subtitle: string }> = {
     title: 'Tes photos',
     subtitle: "Au moins une, jusqu'à six. La première est ta photo principale.",
   },
+  about: {
+    title: 'Ton profil',
+    subtitle: 'Ces informations apparaissent sur ta fiche, sous tes photos.',
+  },
+  lifestyle: {
+    title: 'Ton mode de vie',
+    subtitle: 'Tabac et alcool : deux réponses qui évitent bien des malentendus.',
+  },
+  children: {
+    title: 'Les enfants',
+    subtitle: 'Un sujet qui compte pour beaucoup de monde, autant être clair.',
+  },
+  background: {
+    title: 'Religion et langues',
+    subtitle: 'Ce qui aide à se comprendre dès le premier message.',
+  },
+  interests: {
+    title: "Tes centres d'intérêt",
+    subtitle: 'Choisis ce qui te ressemble : ce sont souvent eux qui lancent la conversation.',
+  },
   bio: {
     title: 'Quelques mots sur toi',
-    subtitle: 'Facultatif, mais une bio soignée fait vraiment la différence.',
+    subtitle: 'La touche personnelle qui donne envie de répondre.',
   },
 };
 
@@ -107,6 +164,41 @@ function profileSaveError(e: unknown): string {
     return 'Connexion perdue. Vérifie ton réseau et réessaie.';
   }
   return msg ? `Enregistrement refusé : ${msg}` : "Impossible d'enregistrer le profil. Réessaie.";
+}
+
+// Groupe de pastilles à choix multiple (langues, centres d'intérêt).
+function ChipGroup({
+  options,
+  values,
+  onToggle,
+}: {
+  options: string[];
+  values: string[];
+  onToggle: (v: string) => void;
+}) {
+  return (
+    <View style={styles.chipWrap}>
+      {options.map((o) => {
+        const on = values.includes(o);
+        return (
+          <Pressable
+            key={o}
+            onPress={() => {
+              haptic.select();
+              onToggle(o);
+            }}
+            style={({ pressed }) => [
+              styles.chip,
+              on && styles.chipOn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={[styles.chipText, on && styles.chipTextOn]}>{o}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 // Rangée de liste iOS : libellé à gauche, coche à droite quand sélectionnée.
@@ -163,6 +255,18 @@ export default function Onboarding() {
   const [photos, setPhotos] = useState<MyPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
   const [bio, setBio] = useState('');
+  // Champs de la fiche détaillée : ils remplissent la section « Plus d'infos »
+  // que voyaient vide les nouveaux inscrits.
+  const [height, setHeight] = useState('');
+  const [job, setJob] = useState('');
+  const [education, setEducation] = useState<string | null>(null);
+  const [smoking, setSmoking] = useState<string | null>(null);
+  const [drinking, setDrinking] = useState<string | null>(null);
+  const [hasChildren, setHasChildren] = useState<string | null>(null);
+  const [wantsChildren, setWantsChildren] = useState<string | null>(null);
+  const [religion, setReligion] = useState<string | null>(null);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [interests, setInterests] = useState<string[]>([]);
   const [detectedCity, setDetectedCity] = useState<City | null>(null);
   const detectionStarted = useRef(false);
   const cityConfirmed = useRef(false);
@@ -241,7 +345,15 @@ export default function Onboarding() {
         return cityId ? null : 'Choisis ta ville dans la liste.';
       case 'photos':
         return photos.length >= 1 ? null : 'Ajoute au moins une photo.';
-      case 'bio':
+      case 'about': {
+        if (height === '') return null;
+        const h = Number(height);
+        return Number.isFinite(h) && h >= 100 && h <= 250
+          ? null
+          : 'Indique ta taille en centimètres (100 à 250).';
+      }
+      default:
+        // Étapes de complétion : rien n'est exigé.
         return null;
     }
   };
@@ -295,6 +407,18 @@ export default function Onboarding() {
         relationship_goal: goal,
         city_id: cityId,
         bio: bio.trim(),
+        // Champs de la fiche détaillée : ce qui est resté vide part en null,
+        // la fiche masque d'elle-même les lignes sans valeur.
+        height_cm: height === '' ? null : Number(height),
+        job_title: job.trim() || null,
+        education,
+        smoking,
+        drinking,
+        has_children: hasChildren,
+        wants_children: wantsChildren,
+        religion,
+        languages,
+        interests,
         is_onboarded: true,
       });
       haptic.success();
@@ -637,6 +761,161 @@ export default function Onboarding() {
               </>
             )}
 
+            {step === 'about' && (
+              <>
+                <View style={styles.group}>
+                  <View style={styles.rowSingle}>
+                    <Text style={styles.rowLabel}>Taille</Text>
+                    <View style={styles.inlineField}>
+                      <TextInput
+                        style={styles.inlineInput}
+                        placeholder="175"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        value={height}
+                        onChangeText={setHeight}
+                      />
+                      <Text style={styles.unit}>cm</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.rowSingle, styles.rowDivider]}>
+                    <Text style={styles.rowLabel}>Profession</Text>
+                    <TextInput
+                      style={styles.inlineInputWide}
+                      placeholder="Ton métier"
+                      placeholderTextColor={colors.textMuted}
+                      value={job}
+                      onChangeText={setJob}
+                      maxLength={80}
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.groupLabel}>Études</Text>
+                <View style={styles.group}>
+                  {EDUCATION_OPTIONS.map((o, i) => (
+                    <SelectRow
+                      key={o.value}
+                      first={i === 0}
+                      label={o.label}
+                      selected={education === o.value}
+                      onPress={() => setEducation(education === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {step === 'lifestyle' && (
+              <>
+                <Text style={styles.groupLabel}>Tabac</Text>
+                <View style={styles.group}>
+                  {FREQUENCY_OPTIONS.map((o, i) => (
+                    <SelectRow
+                      key={o.value}
+                      first={i === 0}
+                      label={o.label}
+                      selected={smoking === o.value}
+                      onPress={() => setSmoking(smoking === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.groupLabel}>Alcool</Text>
+                <View style={styles.group}>
+                  {FREQUENCY_OPTIONS.map((o, i) => (
+                    <SelectRow
+                      key={o.value}
+                      first={i === 0}
+                      label={o.label}
+                      selected={drinking === o.value}
+                      onPress={() => setDrinking(drinking === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {step === 'children' && (
+              <>
+                <Text style={styles.groupLabel}>J'ai des enfants</Text>
+                <View style={styles.group}>
+                  {HAS_CHILDREN_OPTIONS.map((o, i) => (
+                    <SelectRow
+                      key={o.value}
+                      first={i === 0}
+                      label={o.label}
+                      selected={hasChildren === o.value}
+                      onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.groupLabel}>Je veux des enfants</Text>
+                <View style={styles.group}>
+                  {WANTS_CHILDREN_OPTIONS.map((o, i) => (
+                    <SelectRow
+                      key={o.value}
+                      first={i === 0}
+                      label={o.label}
+                      selected={wantsChildren === o.value}
+                      onPress={() =>
+                        setWantsChildren(wantsChildren === o.value ? null : o.value)
+                      }
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {step === 'background' && (
+              <>
+                <Text style={styles.groupLabel}>Religion</Text>
+                <View style={styles.group}>
+                  {RELIGION_OPTIONS.map((r, i) => (
+                    <SelectRow
+                      key={r}
+                      first={i === 0}
+                      label={r}
+                      selected={religion === r}
+                      onPress={() => setReligion(religion === r ? null : r)}
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.groupLabel}>Langues parlées</Text>
+                <ChipGroup
+                  options={LANGUAGE_OPTIONS}
+                  values={languages}
+                  onToggle={(v) =>
+                    setLanguages((prev) =>
+                      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
+                    )
+                  }
+                />
+              </>
+            )}
+
+            {step === 'interests' && (
+              <>
+                <ChipGroup
+                  options={INTEREST_OPTIONS}
+                  values={interests}
+                  onToggle={(v) =>
+                    setInterests((prev) =>
+                      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
+                    )
+                  }
+                />
+                <Text style={styles.note}>
+                  {interests.length === 0
+                    ? 'Aucun choisi pour le moment.'
+                    : `${interests.length} sélectionné${interests.length > 1 ? 's' : ''}.`}
+                </Text>
+              </>
+            )}
+
             {step === 'bio' && (
               <>
                 <View style={styles.group}>
@@ -667,6 +946,20 @@ export default function Onboarding() {
             loading={saving}
             disabled={validateStep() !== null}
           />
+          {/* Les étapes de complétion se passent d'un geste, sauf la dernière
+              qui porte le bouton d'enregistrement. */}
+          {OPTIONAL_STEPS.includes(step) && !isLast && (
+            <Pressable
+              onPress={() => {
+                setError(null);
+                setStepIndex(stepIndex + 1);
+              }}
+              hitSlop={8}
+              style={styles.skipBtn}
+            >
+              <Text style={styles.skipText}>Passer cette étape</Text>
+            </Pressable>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -753,6 +1046,42 @@ const styles = StyleSheet.create({
 
   note: { fontSize: 14, color: colors.textMuted, lineHeight: 20 },
   noteRight: { textAlign: 'right' },
+
+  // Champ posé à droite d'une rangée de liste (taille, profession).
+  inlineField: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  inlineInput: {
+    minWidth: 56,
+    fontSize: 17,
+    color: colors.text,
+    textAlign: 'right',
+    paddingVertical: 8,
+  },
+  inlineInputWide: {
+    flex: 1,
+    fontSize: 17,
+    color: colors.text,
+    textAlign: 'right',
+    paddingVertical: 8,
+    marginLeft: spacing.md,
+  },
+  unit: { fontSize: 17, color: colors.textMuted },
+
+  // Pastilles à choix multiple : langues, centres d'intérêt.
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.cardSolid,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  chipOn: { borderColor: colors.accent, backgroundColor: colors.surface },
+  chipText: { fontSize: 15, color: colors.text },
+  chipTextOn: { color: colors.accent, fontWeight: '600' },
+
+  skipBtn: { alignSelf: 'center', paddingVertical: 6 },
+  skipText: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2 },
 
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
