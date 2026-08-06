@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Paiement | Dowe</title>
+<meta name="theme-color" content="#ffffff" />
+<link rel="stylesheet" href="theme.css" />
+<style>
+  body { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; }
+  .card { text-align: center; padding: 32px 26px; max-width: 340px; width: 100%; }
+  .amount {
+    font-size: 2rem; font-weight: 600; letter-spacing: -.03em;
+    color: var(--heading); margin: 10px 0 6px;
+  }
+  .hint { font-size: .88rem; color: var(--muted); line-height: 1.55; }
+  .hint.label {
+    text-transform: uppercase; letter-spacing: .08em; font-weight: 700;
+    font-size: .68rem; color: var(--faint);
+  }
+  .btn { margin-top: 22px; padding: 12px 26px; font-size: .95rem; }
+  .spinner { width: 28px; height: 28px; margin: 0 auto 16px;
+             border: 3px solid var(--accent-soft); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="spinner" id="spinner"></div>
+  <div class="hint label">Paiement sécurisé Dowe</div>
+  <div class="amount" id="amount"></div>
+  <div class="hint" id="status">Préparation du paiement…</div>
+  <button class="btn" id="payBtn" style="display:none">Payer maintenant</button>
+</div>
+<script>
+  // Page de paiement MultiPay (Interswitch Web Checkout RDC).
+  //
+  // La commande est décrite par la fonction Edge multipay-pay (JSON) : rien
+  // d'autre que le montant et les identifiants marchand ne transite ici, et
+  // le crédit de l'achat n'a lieu que côté serveur (multipay-return), après
+  // revérification de la transaction chez Interswitch.
+  var API_BASE = 'https://sbsxgwdpdjxsrxcccwno.supabase.co/functions/v1';
+
+  function fail(message) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('status').textContent = message;
+  }
+
+  var ref = new URLSearchParams(window.location.search).get('ref') || '';
+  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
+    fail('Cette page de paiement est introuvable.');
+  } else {
+    fetch(API_BASE + '/multipay-pay?ref=' + encodeURIComponent(ref))
+      .then(function (res) {
+        if (!res.ok) throw new Error('http_' + res.status);
+        return res.json();
+      })
+      .then(function (order) {
+        if (order.status !== 'pending') {
+          // Déjà traité : direction la page de résultat via le serveur.
+          window.location.href = order.return_url;
+          return;
+        }
+        document.getElementById('amount').textContent = order.amount_label;
+
+        var script = document.createElement('script');
+        script.src = order.checkout_js;
+        script.onload = function () { ready(order); };
+        script.onerror = function () {
+          fail('Impossible de charger le paiement. Vérifie ta connexion puis réessaie.');
+        };
+        document.body.appendChild(script);
+      })
+      .catch(function () {
+        fail('Impossible de préparer le paiement. Vérifie ta connexion puis réessaie.');
+      });
+  }
+
+  var launched = false;
+  function ready(order) {
+    if (typeof window.webpayCheckout !== 'function') {
+      fail('Le module de paiement ne répond pas. Réessaie dans un instant.');
+      return;
+    }
+    var btn = document.getElementById('payBtn');
+    btn.style.display = 'inline-block';
+    btn.addEventListener('click', function () { launch(order); });
+    launch(order);
+  }
+
+  function launch(order) {
+    if (launched) return;
+    launched = true;
+    document.getElementById('status').textContent =
+      'Termine le paiement dans la fenêtre sécurisée.';
+    document.getElementById('payBtn').style.display = 'none';
+    var params = {
+      merchant_code: order.merchant_code,
+      pay_item_id: order.pay_item_id,
+      txn_ref: order.txn_ref,
+      amount: order.amount_minor,
+      currency: order.currency,
+      cust_email: order.cust_email,
+      cust_id: order.cust_id,
+      // Retour « nu », sans marqueur : c'est le lien Annuler d'Interswitch qui
+      // l'emprunte. Le serveur traite donc ce cas comme un abandon.
+      site_redirect_url: order.return_url,
+      mode: order.mode,
+      onComplete: function (resp) {
+        // Le tunnel est allé à son terme : on le signale avec done=1 et on
+        // remonte le code de réponse. C'est ce marqueur qui distingue un
+        // paiement mené jusqu'au bout d'un simple retour en arrière.
+        // Le résultat annoncé ici ne décide de rien : le serveur revérifie la
+        // transaction chez Interswitch avant tout crédit.
+        var code = '';
+        if (resp) {
+          code = resp.resp || resp.responseCode || resp.code || resp.ResponseCode || '';
+        }
+        window.location.href =
+          order.return_url + '&done=1&code=' + encodeURIComponent(code);
+      }
+    };
+    // Un numéro vide fait refuser la transaction par Interswitch (« Incorrect
+    // Transaction »). Mieux vaut ne pas envoyer le champ du tout que l'envoyer
+    // vide : la commande est déjà valide côté serveur, le numéro n'est qu'un
+    // pré-remplissage.
+    if (order.cust_mobile_no) params.cust_mobile_no = order.cust_mobile_no;
+    window.webpayCheckout(params);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "Dowe",
+    "slug": "dowe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "dowe",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.dowe.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Dowe a besoin d'accéder à vos photos pour créer votre profil."
+      }
+    },
+    "android": {
+      "package": "com.dowe.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#db2777",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#db2777",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Dowe a besoin d'accéder à vos photos pour créer votre profil."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#db2777",
+          "defaultChannel": "default"
+        }
+      ],
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Dowe utilise le micro pour envoyer des notes vocales."
+        }
+      ],
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Dowe utilise la caméra pour scanner les codes QR des soirées."
+        }
+      ],
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Dowe utilise ta position uniquement pour vérifier ta ville. Ta position exacte n'est jamais partagée."
+        }
+      ],
+      "expo-asset",
+      "@react-native-community/datetimepicker"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

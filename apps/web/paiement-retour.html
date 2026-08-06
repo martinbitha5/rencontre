@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Résultat du paiement | Dowe</title>
+<meta name="theme-color" content="#ffffff" />
+<link rel="stylesheet" href="theme.css" />
+<style>
+  body { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 24px; }
+  .card { text-align: center; padding: 32px 26px; max-width: 360px; width: 100%; }
+  .dot { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 18px;
+         display: flex; align-items: center; justify-content: center;
+         font-size: 24px; font-weight: 700; color: #fff; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 8px; }
+  p { font-size: .92rem; color: var(--muted); line-height: 1.55; }
+  .btn { margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="dot" id="dot"></div>
+  <h1 id="title"></h1>
+  <p id="message"></p>
+  <a class="btn" id="back" href="dowe://checkout-return">Revenir dans Dowe</a>
+</div>
+<script>
+  // Atterrissage après vérification serveur (multipay-return). Le statut de
+  // l'URL n'est qu'un affichage : l'app redemande toujours le vrai statut au
+  // serveur avant d'annoncer quoi que ce soit.
+  var params = new URLSearchParams(window.location.search);
+  var status = params.get('status');
+  var ref = params.get('ref') || '';
+  if (['success', 'failed', 'cancelled'].indexOf(status) === -1) status = 'pending';
+
+  var content = {
+    success: {
+      title: 'Paiement confirmé',
+      message: 'Ton achat a été activé. Tu peux revenir dans l\'application.',
+      color: '#16a34a', mark: 'OK'
+    },
+    cancelled: {
+      title: 'Paiement annulé',
+      message: 'Tu as quitté le paiement avant la fin. Aucun montant n\'a été débité.',
+      color: '#dc2626', mark: 'X'
+    },
+    failed: {
+      title: 'Paiement non abouti',
+      message: 'Le paiement a été refusé. Aucun montant ne sera débité.',
+      color: '#dc2626', mark: 'X'
+    },
+    pending: {
+      title: 'Paiement en attente',
+      message: 'Le paiement est en cours de confirmation. Ton achat sera activé dès sa validation.',
+      color: '#b45309', mark: '…'
+    }
+  }[status];
+
+  document.getElementById('title').textContent = content.title;
+  document.getElementById('message').textContent = content.message;
+  var dot = document.getElementById('dot');
+  dot.style.background = content.color;
+  dot.textContent = content.mark;
+
+  var deepLink = 'dowe://checkout-return?ref=' + encodeURIComponent(ref) +
+    '&status=' + encodeURIComponent(status);
+  document.getElementById('back').setAttribute('href', deepLink);
+  // Retour automatique vers l'app : le navigateur intégré se referme dès que
+  // le scheme dowe:// est atteint.
+  setTimeout(function () { window.location.href = deepLink; }, 1200);
+</script>
+</body>
+</html>

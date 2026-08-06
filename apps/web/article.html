@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Article | Dowe</title>
+  <link rel="preconnect" href="https://sbsxgwdpdjxsrxcccwno.supabase.co" crossorigin>
+  <link rel="dns-prefetch" href="https://sbsxgwdpdjxsrxcccwno.supabase.co">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    body { line-height: 1.8; font-size: 17px; }
+    .topbar {
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+      padding: 18px 28px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .logo {
+      width: 40px; height: 40px; border-radius: var(--radius);
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 22px rgba(230, 23, 95, .28);
+    }
+    .logo svg { width: 22px; height: 22px; }
+    .back { justify-self: end; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 52px 24px 90px; }
+    .kicker { display: inline-block; margin-bottom: 12px; }
+    h1 {
+      font-size: clamp(1.9rem, 5vw, 2.9rem);
+      font-weight: 800; line-height: 1.15; margin-bottom: 16px;
+      color: var(--heading);
+    }
+    .meta {
+      text-transform: uppercase; letter-spacing: .08em; font-weight: 700;
+      color: var(--faint); font-size: .72rem; margin-bottom: 30px;
+    }
+    .cover {
+      width: 100%; border-radius: var(--radius); margin-bottom: 38px;
+      aspect-ratio: 16 / 9; object-fit: cover;
+      background: var(--accent-soft);
+      border: 1px solid var(--glass-border);
+    }
+    .content h2 { font-size: 1.4rem; font-weight: 700; margin: 36px 0 14px; color: var(--heading); }
+    .content h3 { font-size: 1.12rem; font-weight: 600; margin: 28px 0 10px; color: var(--heading); }
+    .content p { margin-bottom: 18px; color: var(--text); }
+    .content ul, .content ol { margin: 0 0 18px 22px; color: var(--text); }
+    .content li { margin-bottom: 8px; }
+    .content img { max-width: 100%; border-radius: var(--radius); margin: 12px 0; }
+    .content a { color: var(--accent); }
+    .content blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 4px 18px; margin: 22px 0;
+      color: var(--text);
+      background: rgba(255, 255, 255, .7);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+    .content strong { color: var(--heading); }
+    .state { text-align: center; color: var(--muted); padding: 90px 20px; }
+    .backlink {
+      display: inline-block; margin-top: 44px;
+      color: var(--accent); text-decoration: none; font-weight: 600;
+      border-bottom: 2px solid var(--accent-soft); padding-bottom: 1px;
+    }
+    .backlink:hover { border-bottom-color: var(--accent); }
+    @media (max-width: 600px) {
+      body { font-size: 16px; }
+      .topbar { padding: 14px 16px; }
+      .logo { width: 34px; height: 34px; }
+      .logo svg { width: 19px; height: 19px; }
+      .wrap { padding: 32px 20px 60px; }
+      .cover { margin-bottom: 26px; }
+      .content h2 { font-size: 1.22rem; margin: 28px 0 12px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="index.html">DOWE</a>
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>
+    </span>
+    <a class="back" href="blog.html">Tous les articles</a>
+  </nav>
+
+  <div class="wrap">
+    <div id="article" class="state">Chargement…</div>
+  </div>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="blog.html">Blog</a>
+      <a href="faq.html">F.A.Q</a>
+      <a href="conditions.html">Conditions générales</a>
+      <a href="confidentialite.html">Confidentialité</a>
+      <a href="conseils.html">Conseils et sécurité</a>
+      <a href="securite-enfants.html">Sécurité des enfants</a>
+      <a href="mentions-legales.html">Mentions légales</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <p class="foot-legal">Dowe est un service édité par Goblaire Ltd, société immatriculée en Angleterre et au pays de Galles sous le numéro 16239328. Siège social : 20 Wenlock Road, Londres N1 7GU, Angleterre.</p>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+
+  <script type="module">
+    import { marked } from 'https://esm.sh/marked@12';
+    import DOMPurify from 'https://esm.sh/dompurify@3';
+
+    const SUPABASE_URL = 'https://sbsxgwdpdjxsrxcccwno.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_m7L5upRFZXPIaBltmLIkAQ_P77Ij01u';
+
+    const box = document.getElementById('article');
+    const slug = decodeURIComponent(location.hash.slice(1))
+      || new URLSearchParams(location.search).get('slug');
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function readTime(text) {
+      const words = String(text || '').split(/\s+/).filter(Boolean).length;
+      return Math.max(1, Math.round(words / 200)) + ' min de lecture';
+    }
+
+    async function load() {
+      if (!slug) {
+        location.replace('blog.html');
+        return;
+      }
+      try {
+        const res = await fetch(
+          SUPABASE_URL + '/rest/v1/posts' +
+          '?select=title,excerpt,content,cover_url,published_at' +
+          '&published=eq.true&slug=eq.' + encodeURIComponent(slug) + '&limit=1',
+          { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
+        );
+        if (!res.ok) throw new Error('http ' + res.status);
+        const [post] = await res.json();
+        if (!post) {
+          box.textContent = "Cet article n'existe pas ou n'est plus disponible.";
+          return;
+        }
+
+        document.title = post.title + ' | Dowe';
+
+        const kicker = document.createElement('p');
+        kicker.className = 'kicker';
+        kicker.textContent = 'Article';
+
+        const h1 = document.createElement('h1');
+        h1.textContent = post.title;
+
+        const meta = document.createElement('p');
+        meta.className = 'meta';
+        meta.textContent = fmtDate(post.published_at) + ' · ' + readTime(post.content);
+
+        const content = document.createElement('div');
+        content.className = 'content';
+        content.innerHTML = DOMPurify.sanitize(marked.parse(post.content || ''));
+
+        const backlink = document.createElement('a');
+        backlink.className = 'backlink';
+        backlink.href = 'blog.html';
+        backlink.textContent = 'Voir tous les articles';
+
+        box.classList.remove('state');
+        box.replaceChildren(kicker, h1, meta);
+        if (post.cover_url) {
+          const img = document.createElement('img');
+          img.className = 'cover';
+          img.src = post.cover_url;
+          img.alt = post.title;
+          img.loading = 'eager';
+          img.fetchPriority = 'high';
+          box.append(img);
+        }
+        box.append(content, backlink);
+      } catch {
+        box.textContent = "Impossible de charger l'article pour le moment. Réessayez dans un instant.";
+      }
+    }
+
+    load();
+    addEventListener('hashchange', () => location.reload());
+  </script>
+</body>
+</html>

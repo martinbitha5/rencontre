@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blog | Dowe</title>
+  <meta name="description" content="Conseils rencontre, nouveautés et histoires de la communauté Dowe.">
+  <link rel="preconnect" href="https://sbsxgwdpdjxsrxcccwno.supabase.co" crossorigin>
+  <link rel="dns-prefetch" href="https://sbsxgwdpdjxsrxcccwno.supabase.co">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    body { line-height: 1.7; font-size: 16px; }
+
+    /* Bandeau annonce */
+    .announce {
+      background: var(--accent);
+      color: #fff;
+      text-align: center;
+      font-size: .88rem;
+      font-weight: 500;
+      padding: 10px 44px;
+      position: relative;
+    }
+    .announce button {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: #fff;
+      font-size: 1.1rem; cursor: pointer; opacity: .8; padding: 4px 8px;
+    }
+    .announce button:hover { opacity: 1; }
+
+    /* Héro : le script y pose en fond la photo du dernier article (propriété
+       background-image en ligne). On ne déclare donc ici que la taille, la
+       position et un voile rose par-dessus — un raccourci `background` serait
+       écrasé et l'image s'afficherait à sa taille naturelle. */
+    .hero {
+      position: relative;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--dark);
+      background-size: cover;
+      background-position: center;
+      isolation: isolate;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(180deg,
+        rgba(16, 17, 19, .55) 0%,
+        rgba(16, 17, 19, .4) 45%,
+        rgba(16, 17, 19, .8) 96%);
+    }
+    .hero-nav {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 20px 28px;
+    }
+    .hero-nav .logo {
+      width: 44px; height: 44px; border-radius: var(--radius);
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 22px rgba(230, 23, 95, .28);
+    }
+    .hero-nav .logo svg { width: 24px; height: 24px; }
+    .hero-nav .brand { color: #fff; }
+    .hero-nav .back { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
+    .hero-nav .back:hover { background: rgba(255, 255, 255, .14); }
+    .hero-nav .nav-right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+    .search-btn {
+      width: 38px; height: 38px; border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .6);
+      background: transparent;
+      color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s ease; flex-shrink: 0;
+    }
+    .search-btn:hover { background: rgba(255, 255, 255, .14); }
+    .search-btn svg { width: 17px; height: 17px; }
+
+    /* Barre de recherche */
+    .search-panel { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: none; }
+    .search-panel.open { display: block; }
+    .search-panel input {
+      font-size: 1.02rem; padding: 13px 20px; margin-top: 30px;
+      border-radius: var(--radius-btn);
+    }
+    .search-panel input::placeholder { color: var(--faint); }
+    .search-count { color: var(--muted); font-size: .9rem; margin: 12px 4px 0; }
+
+    .hero-title {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 30px 24px 80px;
+    }
+    .hero-title h1 {
+      font-size: clamp(2rem, 5.6vw, 3.4rem);
+      font-weight: 900; line-height: 1.15; max-width: 820px;
+      color: #fff; text-shadow: 0 2px 24px rgba(0, 0, 0, .35);
+    }
+
+    main { max-width: 1120px; margin: 0 auto; padding: 56px 24px 90px; }
+    .kicker {
+      display: inline-block; font-size: .62rem;
+      color: var(--accent); background: var(--accent-soft);
+      border-radius: 999px; padding: 4px 14px; margin-bottom: 16px;
+    }
+
+    /* Article vedette */
+    .featured {
+      display: grid; grid-template-columns: 1.15fr 1fr;
+      gap: 44px; align-items: center;
+      text-decoration: none; color: inherit; margin-bottom: 72px;
+    }
+    .featured .cover {
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius);
+      background: var(--accent-soft);
+      background-size: cover; background-position: center;
+      border: 1px solid var(--glass-border);
+      overflow: hidden;
+    }
+    .featured h2 {
+      font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+      font-weight: 800; line-height: 1.15; margin-bottom: 18px;
+      color: var(--heading);
+    }
+    .featured p.excerpt { color: var(--muted); font-size: 1.02rem; margin-bottom: 20px; }
+    .meta {
+      text-transform: uppercase; letter-spacing: .08em; font-weight: 700;
+      color: var(--faint); font-size: .7rem;
+    }
+
+    /* Grille */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 48px 40px; }
+    .post {
+      text-decoration: none; color: inherit;
+    }
+    .post .cover {
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius);
+      background: var(--accent-soft);
+      background-size: cover; background-position: center;
+      border: 1px solid var(--glass-border);
+      margin-bottom: 20px;
+      transition: opacity .15s;
+    }
+    .post:hover .cover { opacity: .88; }
+    .post h2 {
+      font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+      font-weight: 700; line-height: 1.2; margin-bottom: 12px;
+      color: var(--heading);
+    }
+    .post:hover h2 { color: var(--accent); }
+    .post p.excerpt {
+      color: var(--muted); font-size: .96rem; margin-bottom: 14px;
+      display: -webkit-box; -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .state { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 1rem; }
+
+    @media (max-width: 820px) {
+      .featured { grid-template-columns: 1fr; gap: 24px; margin-bottom: 56px; }
+      .grid { grid-template-columns: 1fr; gap: 44px; }
+      .hero { min-height: 320px; }
+      .hero-title { padding-bottom: 56px; }
+      .hero-nav { padding: 16px 18px; }
+      main { padding-top: 44px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="announce" id="announce">
+    Dowe arrive bientôt sur iOS et Android
+    <button type="button" aria-label="Fermer" onclick="this.parentElement.remove()">&#10005;</button>
+  </div>
+
+  <header class="hero" id="hero">
+    <nav class="hero-nav">
+      <a class="brand" href="index.html">DOWE</a>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>
+      </span>
+      <div class="nav-right">
+        <button type="button" class="search-btn" id="search-btn" aria-label="Rechercher un article" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11" cy="11" r="7"/>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+          </svg>
+        </button>
+        <a class="back" href="index.html">Accueil</a>
+      </div>
+    </nav>
+    <div class="hero-title">
+      <h1>Des histoires et des conseils pour se rencontrer en RDC</h1>
+    </div>
+  </header>
+
+  <div class="search-panel" id="search-panel">
+    <input type="search" id="search-input" placeholder="Rechercher un article…" autocomplete="off">
+    <p class="search-count" id="search-count"></p>
+  </div>
+
+  <main>
+    <div id="content" class="state">Chargement des articles…</div>
+  </main>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="blog.html">Blog</a>
+      <a href="faq.html">F.A.Q</a>
+      <a href="conditions.html">Conditions générales</a>
+      <a href="confidentialite.html">Confidentialité</a>
+      <a href="conseils.html">Conseils et sécurité</a>
+      <a href="securite-enfants.html">Sécurité des enfants</a>
+      <a href="mentions-legales.html">Mentions légales</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <p class="foot-legal">Dowe est un service édité par Goblaire Ltd, société immatriculée en Angleterre et au pays de Galles sous le numéro 16239328. Siège social : 20 Wenlock Road, Londres N1 7GU, Angleterre.</p>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+
+  <script>
+    const SUPABASE_URL = 'https://sbsxgwdpdjxsrxcccwno.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_m7L5upRFZXPIaBltmLIkAQ_P77Ij01u';
+    const CACHE_KEY = 'dowe_blog_posts_v1';
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function readTime(post) {
+      const words = String(post.content || post.excerpt || '').split(/\s+/).filter(Boolean).length;
+      return Math.max(1, Math.round(words / 200)) + ' min de lecture';
+    }
+
+    function cardMeta(post) {
+      return fmtDate(post.published_at) + ' · ' + readTime(post);
+    }
+
+    function makeCover(post, eager) {
+      const cover = document.createElement('div');
+      cover.className = 'cover';
+      if (post.cover_url) {
+        cover.style.backgroundImage = "url('" + encodeURI(post.cover_url) + "')";
+      }
+      return cover;
+    }
+
+    let ALL = [];
+
+    function norm(text) {
+      return String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+
+    function render(posts) {
+      const box = document.getElementById('content');
+      if (!posts.length) {
+        box.className = 'state';
+        box.textContent = 'Les premiers articles arrivent très bientôt.';
+        return;
+      }
+
+      // Héro : image du dernier article en fond
+      const latest = posts[0];
+      if (latest.cover_url) {
+        document.getElementById('hero').style.backgroundImage = "url('" + encodeURI(latest.cover_url) + "')";
+      }
+
+      const frag = document.createDocumentFragment();
+
+      // Article vedette
+      const feat = document.createElement('a');
+      feat.className = 'featured';
+      feat.href = 'article.html#' + encodeURIComponent(latest.slug);
+      const featBody = document.createElement('div');
+      const k = document.createElement('p'); k.className = 'kicker'; k.textContent = 'Article';
+      const h = document.createElement('h2'); h.textContent = latest.title;
+      const ex = document.createElement('p'); ex.className = 'excerpt'; ex.textContent = latest.excerpt || '';
+      const m = document.createElement('p'); m.className = 'meta'; m.textContent = cardMeta(latest);
+      featBody.append(k, h, ex, m);
+      feat.append(makeCover(latest, true), featBody);
+      frag.append(feat);
+
+      // Grille des autres articles
+      if (posts.length > 1) {
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        for (const post of posts.slice(1)) {
+          const a = document.createElement('a');
+          a.className = 'post';
+          a.href = 'article.html#' + encodeURIComponent(post.slug);
+          const k2 = document.createElement('p'); k2.className = 'kicker'; k2.textContent = 'Article';
+          const h2 = document.createElement('h2'); h2.textContent = post.title;
+          const p2 = document.createElement('p'); p2.className = 'excerpt'; p2.textContent = post.excerpt || '';
+          const m2 = document.createElement('p'); m2.className = 'meta'; m2.textContent = cardMeta(post);
+          a.append(makeCover(post, false), k2, h2, p2, m2);
+          grid.append(a);
+        }
+        frag.append(grid);
+      }
+
+      box.classList.remove('state');
+      box.replaceChildren(frag);
+    }
+
+    async function loadPosts() {
+      const box = document.getElementById('content');
+
+      // Cache local : affichage instantané lors des visites répétées
+      try {
+        const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
+        if (cached && Date.now() - cached.at < CACHE_TTL) {
+          ALL = cached.posts;
+          render(cached.posts);
+          return;
+        }
+      } catch {}
+
+      try {
+        const res = await fetch(
+          SUPABASE_URL + '/rest/v1/posts' +
+          '?select=slug,title,excerpt,content,cover_url,published_at' +
+          '&published=eq.true&order=published_at.desc&limit=30',
+          { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY } }
+        );
+        if (!res.ok) throw new Error('http ' + res.status);
+        const posts = await res.json();
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), posts })); } catch {}
+        ALL = posts;
+        render(posts);
+      } catch {
+        box.textContent = 'Impossible de charger les articles pour le moment. Réessayez dans un instant.';
+      }
+    }
+
+    // ---------- Recherche ----------
+    function renderResults(posts) {
+      const box = document.getElementById('content');
+      if (!posts.length) {
+        box.className = 'state';
+        box.textContent = 'Aucun article ne correspond à votre recherche.';
+        return;
+      }
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      for (const post of posts) {
+        const a = document.createElement('a');
+        a.className = 'post';
+        a.href = 'article.html#' + encodeURIComponent(post.slug);
+        const k = document.createElement('p'); k.className = 'kicker'; k.textContent = 'Article';
+        const h = document.createElement('h2'); h.textContent = post.title;
+        const p = document.createElement('p'); p.className = 'excerpt'; p.textContent = post.excerpt || '';
+        const m = document.createElement('p'); m.className = 'meta'; m.textContent = cardMeta(post);
+        a.append(makeCover(post, false), k, h, p, m);
+        grid.append(a);
+      }
+      box.className = '';
+      box.replaceChildren(grid);
+    }
+
+    const searchBtn = document.getElementById('search-btn');
+    const searchPanel = document.getElementById('search-panel');
+    const searchInput = document.getElementById('search-input');
+    const searchCount = document.getElementById('search-count');
+
+    searchBtn.addEventListener('click', () => {
+      const open = searchPanel.classList.toggle('open');
+      searchBtn.setAttribute('aria-expanded', open);
+      if (open) {
+        searchInput.focus();
+        searchPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        searchInput.value = '';
+        searchCount.textContent = '';
+        render(ALL);
+      }
+    });
+
+    searchInput.addEventListener('input', () => {
+      const q = norm(searchInput.value.trim());
+      if (!q) {
+        searchCount.textContent = '';
+        render(ALL);
+        return;
+      }
+      const hits = ALL.filter(p =>
+        norm(p.title).includes(q) || norm(p.excerpt).includes(q) || norm(p.content).includes(q)
+      );
+      searchCount.textContent = hits.length + (hits.length > 1 ? ' résultats' : ' résultat');
+      renderResults(hits);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') searchBtn.click();
+    });
+
+    loadPosts();
+  </script>
+</body>
+</html>

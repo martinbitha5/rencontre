@@ -1,0 +1,201 @@
+/* Thème public Dowe — design repris de Tinder (page sauvegardée du 2026-08-02).
+   Source de vérité unique des couleurs, du fond, des cartes et des boutons.
+   Toute page publique charge cette feuille en premier, puis ses règles de
+   mise en page. Le backoffice (admin.css) porte les mêmes noms de variables.
+
+   Jetons relevés dans leur CSS :
+   - flamme #fd267a vers #ff6036 (brand-gradient-start/end), accent #ff2358
+   - gris : 05 #f9f9fb, 10 #f0f1f4, 15 #e7e9ee, 20 #d1d4dd, 40 #979eaf,
+     60 #656a78, 90 #24262a, 95 #101113
+   - texte #24262a sur fond blanc, fond secondaire #f0f1f4, sombre #101113
+   - rayons : small 8, medium 12, large 16, 2xl 24 — boutons en pilule
+   - polices Regola / Proxima Nova (propriétaires) -> Montserrat en substitut
+
+   Les anciennes surfaces en verre dépoli s'appuient sur --card, --glass-border
+   et --blur : en les redéfinissant en blanc opaque, bordure grise et flou nul,
+   toutes les pages basculent en plat sans retoucher leurs styles locaux. */
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --accent: #fd267a;
+  --accent-hover: #e6175f;
+  --flame: linear-gradient(45deg, #fd267a, #ff6036);
+  --accent-soft: #ffe1ea;
+  --bg: #ffffff;
+  --bg-soft: #f0f1f4;
+  --dark: #101113;
+  --card: #ffffff;
+  --card-solid: #ffffff;
+  --glass-border: #e7e9ee;
+  --line: #e7e9ee;
+  --text: #24262a;
+  --heading: #101113;
+  --muted: #656a78;
+  --faint: #979eaf;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
+  --ok: #16a34a;
+  --ok-soft: #f0fdf4;
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+  --radius: 16px;
+  --radius-lg: 24px;
+  --radius-btn: 999px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --sans: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, sans-serif;
+  --blur: none;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: var(--bg); scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+a { color: var(--accent); }
+h1, h2, h3, h4 { color: var(--heading); letter-spacing: -.02em; }
+
+/* Étiquette de section : Tinder n'utilise pas de monospace — gras, capitales,
+   espacement court. La classe garde son nom pour ne pas toucher les pages. */
+.kicker, .group-label, .brand-mark {
+  font-family: var(--sans);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+
+/* ---------- Barre du haut ---------- */
+
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar-inner {
+  max-width: 1120px; margin: 0 auto; padding: 0 24px;
+  height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--sans); text-transform: uppercase; letter-spacing: .04em;
+  font-size: 1.05rem; font-weight: 800;
+  color: var(--heading); text-decoration: none;
+}
+.brand::before {
+  content: ""; width: 22px; height: 22px; flex: 0 0 22px;
+  /* Le logo : empreinte digitale blanche sur carre arrondi flamme */
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='6' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>") center / contain no-repeat;
+}
+
+/* ---------- Boutons : pilules, comme chez eux ---------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--flame); color: #fff; border: 1px solid transparent;
+  border-radius: 999px; padding: 12px 26px;
+  font-size: .92rem; font-weight: 700; text-decoration: none;
+  cursor: pointer; white-space: nowrap;
+  transition: filter .12s ease, transform .12s ease;
+}
+.btn:hover { filter: brightness(.94); transform: scale(1.02); color: #fff; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.ghost {
+  background: #fff; color: var(--heading); border-color: var(--faint);
+  filter: none;
+}
+.btn.ghost:hover { background: var(--bg-soft); color: var(--heading); filter: none; }
+.btn.danger { background: transparent; color: var(--danger); border-color: #fecaca; }
+.btn.danger:hover { background: var(--danger-soft); color: var(--danger); filter: none; }
+.btn.sm { padding: 7px 16px; font-size: .82rem; }
+.btn.lg { padding: 15px 34px; font-size: 1rem; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Lien de retour de la barre du haut : pilule bordée */
+.back {
+  color: var(--heading); text-decoration: none; font-size: .86rem; font-weight: 600;
+  padding: 8px 18px; border: 1px solid var(--faint);
+  background: #fff;
+  border-radius: 999px; transition: background .12s ease;
+}
+.back:hover { background: var(--bg-soft); }
+
+/* ---------- Cartes : plat, bordure grise, rayon large ---------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 0 1px 2px rgba(16, 17, 19, .04);
+}
+.card h2, .card h3 { color: var(--heading); }
+
+/* ---------- Pastilles ---------- */
+
+.pill {
+  display: inline-block; font-size: .71rem; font-weight: 700; border-radius: 999px;
+  padding: 2px 10px; white-space: nowrap;
+}
+.pill.grey { background: var(--bg-soft); color: var(--muted); }
+.pill.rose { background: var(--accent-soft); color: var(--accent); }
+.pill.green { background: var(--ok-soft); color: var(--ok); }
+.pill.red { background: var(--danger-soft); color: var(--danger); }
+
+.kicker {
+  display: inline-block; font-size: .68rem;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 999px; padding: 4px 14px; margin-bottom: 14px;
+}
+
+/* ---------- Champs ---------- */
+
+input[type=text], input[type=email], input[type=password], input[type=number],
+input[type=search], select, textarea {
+  width: 100%; border: 1px solid #d1d4dd; border-radius: 8px;
+  padding: 11px 14px; background: #fff; font-size: .92rem;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(253, 38, 122, .15);
+}
+
+/* ---------- Pied de page : sombre, comme le leur ---------- */
+
+footer {
+  background: var(--dark);
+  border-top: none;
+  padding: 44px 24px 50px;
+  text-align: center; font-size: .88rem; color: #b4b9c6;
+}
+.foot-nav {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 10px 22px; margin-bottom: 22px;
+}
+footer a { color: #d1d4dd; text-decoration: none; font-weight: 600; }
+footer a:hover { color: #fff; }
+.foot-legal {
+  max-width: 620px; margin: 0 auto 10px;
+  font-size: .8rem; line-height: 1.6; color: #7d8496;
+}
+.foot-copy { font-size: .82rem; color: #7d8496; }
+
+@media (max-width: 600px) {
+  .topbar-inner { padding: 0 16px; height: 58px; }
+  .brand { font-size: .95rem; }
+  .back { padding: 6px 14px; font-size: .8rem; }
+  footer { padding: 36px 20px 44px; }
+  .foot-nav { gap: 9px 16px; }
+  /* En dessous, iOS zoome à chaque champ touché */
+  input[type=text], input[type=email], input[type=password], input[type=number],
+  input[type=search], select, textarea { font-size: 16px; }
+}

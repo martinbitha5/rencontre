@@ -1,0 +1,21 @@
+node_modules/
+.expo/
+.DS_Store
+
+# Secrets : jamais versionnés. Le modèle sans valeur est .env.example.
+.env
+.env.*
+!.env.example
+
+# Sorties de build
+dist/
+build/
+web-build/
+*.tsbuildinfo
+
+# Liens de déploiement locaux
+.vercel/
+
+# Outillage local
+.claude/
+*.log

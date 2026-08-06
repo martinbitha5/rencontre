@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>F.A.Q | Dowe</title>
+  <meta name="description" content="Les réponses aux questions les plus fréquentes sur Dowe.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    body { line-height: 1.75; font-size: 16px; }
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      padding: 0 24px; height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .hero {
+      background: #f9f9fb;
+      border-bottom: 1px solid var(--line);
+      padding: 56px 24px 40px;
+    }
+    .hero-inner, main { max-width: 720px; margin: 0 auto; }
+    .hero h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--heading); line-height: 1.25; }
+    .updated { color: var(--muted); font-size: .88rem; margin-top: 10px; }
+    main { padding: 40px 24px 72px; }
+    .group-title {
+      font-size: .7rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin: 34px 0 12px;
+    }
+    .group-title:first-child { margin-top: 0; }
+    details {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      margin-bottom: 10px; overflow: hidden;
+    }
+    summary {
+      cursor: pointer; list-style: none;
+      padding: 16px 48px 16px 20px;
+      font-weight: 600; color: var(--heading);
+      position: relative; user-select: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: "+"; position: absolute; right: 18px; top: 50%;
+      transform: translateY(-50%); font-size: 1.3rem; font-weight: 400;
+      color: var(--accent); transition: transform .2s;
+    }
+    details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+    .answer { padding: 14px 20px 18px; color: var(--text); font-size: .96rem; }
+    .answer p { margin-bottom: 10px; }
+    .answer p:last-child { margin-bottom: 0; }
+    @media (max-width: 600px) {
+      body { font-size: 15px; }
+      .topbar { padding: 0 16px; height: 58px; }
+      .hero { padding: 34px 20px 28px; }
+      main { padding: 28px 20px 56px; }
+      summary { padding: 14px 42px 14px 16px; font-size: .95rem; }
+      summary::after { right: 14px; }
+      .answer { padding: 12px 16px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="index.html">DOWE</a>
+    <a class="back" href="index.html">Accueil</a>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-inner">
+      <span class="kicker">Questions fréquentes</span>
+      <h1>Comment pouvons-nous vous aider ?</h1>
+      <p class="updated">Si vous ne trouvez pas votre réponse ici, écrivez-nous via la <a href="contact.html">page contact</a>.</p>
+    </div>
+  </div>
+
+  <main>
+    <p class="group-title">Démarrer</p>
+
+    <details>
+      <summary>C'est quoi Dowe, exactement ?</summary>
+      <div class="answer">
+        <p>Dowe est une application de rencontre pensée pour la République démocratique du Congo. Vous découvrez des profils de votre ville, vous likez ceux qui vous plaisent, et quand l'intérêt est réciproque, c'est un match : la discussion peut commencer.</p>
+        <p>Vous pouvez aussi écrire à quelqu'un sans attendre le match, voir qui a visité votre profil, entrer dans une soirée partenaire en scannant son QR code et en payant l'entrée sur place, et faire vérifier votre compte pour rassurer les autres membres.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Dowe est-il gratuit ?</summary>
+      <div class="answer">
+        <p>Oui. Créer un compte, remplir son profil, découvrir des profils, matcher et discuter avec ses matchs sont gratuits, avec 5 messages directs offerts et 400 pièces de bienvenue.</p>
+        <p>Les likes sont gratuits eux aussi. Ils sont illimités dès que votre profil est vérifié, et limités à 30 par jour tant qu'il ne l'est pas. La vérification est gratuite.</p>
+        <p>Certaines actions précises consomment des pièces, la monnaie interne de l'application. Le coût est toujours affiché avant que vous validiez.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Comment créer un compte ?</summary>
+      <div class="answer">
+        <p>Téléchargez l'application, puis inscrivez-vous avec votre adresse e-mail, votre compte Google ou votre compte Apple. Vous complétez ensuite votre profil en quelques étapes : prénom, date de naissance, genre, ville et commune, photos, présentation.</p>
+        <p>Vous pouvez ajouter ensuite des détails facultatifs qui font toute la différence : taille, métier, études, langues, centres d'intérêt, objectif de relation, enfants, rapport au tabac et à l'alcool, religion.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Dans quelles villes Dowe est-il disponible ?</summary>
+      <div class="answer">
+        <p>Dowe couvre les 26 provinces de la RDC, à travers leur chef-lieu : Kinshasa, Lubumbashi, Goma, Bukavu, Kisangani, Mbuji-Mayi, Kananga, Matadi, Kolwezi, Tshikapa, Kindu, Mbandaka, Bunia, Kalemie, Kamina, Kabinda, Isiro, Buta, Gemena, Gbadolite, Lisala, Boende, Inongo, Bandundu, Kenge et Lodja.</p>
+        <p>Par défaut, on vous propose des profils de votre ville. Une option dans les filtres permet de chercher dans tout le pays.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Faut-il 18 ans pour s'inscrire ?</summary>
+      <div class="answer">
+        <p>Oui, sans exception. La date de naissance est contrôlée par notre serveur, pas seulement par le formulaire : un compte déclarant moins de 18 ans ne peut pas être créé. Tout compte soupçonné d'appartenir à un mineur est suspendu, puis supprimé si le doute persiste. Voir la page <a href="securite-enfants.html">sécurité des enfants</a>.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Rencontres, matchs et messages</p>
+
+    <details>
+      <summary>Comment fonctionnent les matchs ?</summary>
+      <div class="answer">
+        <p>Quand un profil vous plaît, likez-le. Si cette personne vous like aussi, c'est un match : vous apparaissez dans les discussions l'un de l'autre et vous pouvez vous écrire. Le match mutuel est gratuit, des deux côtés.</p>
+        <p>Personne ne sait que vous l'avez liké tant que le match n'a pas eu lieu, sauf si vous ouvrez son profil : votre visite apparaît alors dans son onglet Vues.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Combien de likes puis-je envoyer par jour ?</summary>
+      <div class="answer">
+        <p>Cela dépend d'une seule chose : votre profil est vérifié, ou il ne l'est pas.</p>
+        <p><strong>Profil vérifié</strong> : likes illimités, tous les jours. C'est gratuit, il n'y a pas d'abonnement à prendre.<br>
+        <strong>Profil non vérifié</strong> : 30 likes par jour, remis à zéro chaque jour.</p>
+        <p>Ce choix est volontaire. Faire vérifier son profil prend deux minutes, prouve aux autres que vous êtes bien la personne sur vos photos, et rend beaucoup plus difficile la création de faux comptes en série. Plutôt que de vendre la levée de la limite, nous la donnons à ceux qui contribuent à un fil plus sain.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Puis-je écrire à quelqu'un sans avoir matché ?</summary>
+      <div class="answer">
+        <p>Oui, c'est le message direct. Depuis une fiche de profil, vous pouvez envoyer un premier message sans attendre le like réciproque. Vos 5 premiers messages directs sont offerts, ensuite chacun coûte 200 pièces.</p>
+        <p>C'est toujours celui qui écrit en premier qui paie. Répondre à un message direct reçu est gratuit, et cette réponse crée le match : la conversation devient une discussion ordinaire.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>À quoi sert l'onglet Activité ?</summary>
+      <div class="answer">
+        <p>Il rassemble tout ce qui vous concerne, en quatre parties :</p>
+        <p><strong>DMs</strong> : les messages directs reçus et envoyés, en attente de réponse.<br>
+        <strong>Likes</strong> : les personnes qui vous ont liké. Vous les voyez en clair, gratuitement.<br>
+        <strong>Vues</strong> : qui a ouvert votre profil dans les dernières 24 heures.<br>
+        <strong>Favoris</strong> : jusqu'à 10 profils que vous mettez de côté. Ils restent privés, personne ne sait que vous l'avez fait.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Quelqu'un m'a liké : dois-je payer pour lui répondre ?</summary>
+      <div class="answer">
+        <p>Non. Vous voyez gratuitement qui vous a liké, et ces profils continuent d'apparaître dans votre fil Rencontres : si vous les likez à votre tour en les croisant, le match se fait sans rien dépenser.</p>
+        <p>Le like retour depuis l'onglet Likes, à 400 pièces, n'est qu'un raccourci : il crée le match tout de suite, sans attendre de recroiser le profil.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>J'ai passé un profil par erreur, c'est perdu ?</summary>
+      <div class="answer">
+        <p>Non. Les profils que vous passez sont rangés dans un historique accessible depuis votre profil. Vous pouvez les reliker gratuitement, ou les retirer définitivement de la liste. Un re-like compte comme un like ordinaire, donc il consomme votre quota du jour si votre profil n'est pas vérifié.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Qu'est-ce que je peux envoyer dans une conversation ?</summary>
+      <div class="answer">
+        <p>Des messages écrits, des notes vocales, des photos et des vidéos, ainsi que des réactions sur les messages reçus. Les nouveaux messages arrivent en temps réel et déclenchent une notification.</p>
+        <p>Un appui long sur une conversation permet de l'archiver. Elle reste active : vous la désarchivez quand vous voulez.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Mes messages sont-ils privés ?</summary>
+      <div class="answer">
+        <p>Oui. Vos conversations ne sont visibles que de vous et de votre interlocuteur. Notre équipe n'y accède que dans un seul cas : l'examen d'un signalement, pour protéger la communauté. Chaque ouverture de ce type est enregistrée dans notre journal interne.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Pourquoi je ne vois plus de profils ?</summary>
+      <div class="answer">
+        <p>Cela arrive quand vous avez vu tous les profils correspondant à vos critères dans votre ville. Élargissez votre tranche d'âge, assouplissez vos filtres, activez la recherche dans tout le pays, ou repassez plus tard : de nouveaux membres s'inscrivent chaque jour.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Puis-je filtrer plus finement les profils proposés ?</summary>
+      <div class="answer">
+        <p>Oui, depuis Profil, Paramètres, Filtres de recherche. La ville, la recherche dans tout le pays, l'âge, le genre, la religion, les enfants et le tabac sont gratuits.</p>
+        <p>Trois filtres se débloquent avec des pièces, une seule fois à l'activation : les profils en ligne uniquement (8 000 pièces), le filtre par intentions (8 000 pièces) et le filtre des messages directs (16 000 pièces), qui ne laisse écrire que les profils correspondant exactement à vos critères. Les désactiver est gratuit.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Les pièces</p>
+
+    <details>
+      <summary>C'est quoi une pièce ?</summary>
+      <div class="answer">
+        <p>La pièce est la monnaie interne de Dowe : un simple solde rechargeable, rangé dans votre portefeuille et utilisable uniquement dans l'application. Ce n'est pas une cryptomonnaie, il n'y a aucune blockchain derrière, et les pièces ne s'échangent ni contre de l'argent, ni entre membres.</p>
+        <p>Vous recevez 400 pièces à l'inscription.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>À quoi servent les pièces ?</summary>
+      <div class="answer">
+        <p>À trois choses, et le coût est toujours affiché avant validation :</p>
+        <p>Écrire en premier sans match, une fois les 5 messages directs offerts utilisés : 200 pièces.<br>
+        Liker en retour depuis l'onglet Likes pour matcher tout de suite : 400 pièces.<br>
+        Débloquer un filtre de recherche avancé : 8 000 ou 16 000 pièces.</p>
+        <p>L'entrée dans une soirée partenaire ne se paie pas en pièces : elle se règle en francs, au moment du scan.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Combien coûtent les pièces ?</summary>
+      <div class="answer">
+        <p>Quatre packs sont proposés dans l'écran Recharger :</p>
+        <p><strong>Découverte</strong> : 800 pièces pour 4 500 CDF.<br>
+        <strong>Élan</strong> : 3 000 pièces pour 13 300 CDF.<br>
+        <strong>Envol</strong> : 6 500 pièces pour 22 200 CDF.<br>
+        <strong>Prestige</strong> : 20 000 pièces pour 44 300 CDF.</p>
+        <p>Plus le pack est grand, moins la pièce coûte cher. Les prix en dollars affichés sur l'App Store et Google Play sont l'équivalent de ces montants dans votre devise.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Mes pièces expirent-elles ?</summary>
+      <div class="answer">
+        <p>Les pièces des packs Découverte, Élan et Envol, celles offertes à l'inscription et celles gagnées en récompense n'expirent jamais.</p>
+        <p>Seules les pièces du pack Prestige ont une durée de validité de 30 jours. Elles sont toujours dépensées en premier, avant votre solde permanent, et votre portefeuille affiche en permanence la part concernée et sa date limite.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Faut-il des pièces pour entrer à une soirée ?</summary>
+      <div class="answer">
+        <p>Non. L'entrée d'une soirée se paie en francs congolais, directement, par carte bancaire ou par Mobile Money. Votre solde de pièces n'est pas touché et n'a pas besoin d'être approvisionné avant de venir.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Peut-on gagner des pièces gratuitement ?</summary>
+      <div class="answer">
+        <p>Oui, dans l'écran Récompenses :</p>
+        <p>Faire vérifier son compte : 400 pièces.<br>
+        Partager l'application, une seule fois : 200 pièces.<br>
+        Parrainer quelqu'un qui fait vérifier son compte : 600 pièces par filleul.</p>
+        <p>La prime de parrainage est versée automatiquement quand votre filleul obtient sa vérification. Votre code de parrainage figure dans ce même écran, et le filleul doit le saisir avant de faire vérifier son compte.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Payer</p>
+
+    <details>
+      <summary>Comment payer en RDC ?</summary>
+      <div class="answer">
+        <p>Par Mobile Money, directement dans l'application : Airtel Money, Orange Money et M-Pesa (Vodacom). Vous choisissez votre offre, votre opérateur, vous saisissez votre numéro, et un écran de résumé affiche le montant exact avant tout débit.</p>
+        <p>Une fenêtre de paiement sécurisée s'ouvre ensuite, tenue par notre prestataire de paiement agréé. Vous y terminez l'opération par Mobile Money ou par carte bancaire, puis vous revenez automatiquement dans l'application.</p>
+        <p>Sur l'App Store et Google Play, le paiement passe par le moyen enregistré sur votre compte Apple ou Google.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Dowe voit-il mes coordonnées bancaires ?</summary>
+      <div class="answer">
+        <p>Non. Nous transmettons à notre prestataire de paiement le montant, votre numéro de téléphone et votre adresse e-mail, ce qui lui permet d'ouvrir la transaction et de vous envoyer votre reçu.</p>
+        <p>Tout ce qui est confidentiel, code PIN Mobile Money comme numéro de carte, se saisit dans la fenêtre sécurisée du prestataire. Ces informations ne passent pas par nos serveurs et ne sont pas stockées chez nous. Pour les achats sur les stores, tout est traité par Apple ou Google.</p>
+        <p>Enfin, votre solde n'est jamais crédité sur simple déclaration de votre téléphone : notre serveur revérifie la transaction auprès du prestataire avant de vous créditer.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Mon paiement est passé mais mon solde n'a pas bougé</summary>
+      <div class="answer">
+        <p>Le crédit est déclenché par la confirmation de l'opérateur et arrive en général en quelques secondes. Fermez puis rouvrez l'écran de votre portefeuille pour rafraîchir le solde.</p>
+        <p>Si rien n'apparaît après quelques minutes, écrivez-nous via la <a href="contact.html">page contact</a> avec la date, le montant, l'opérateur et la référence du paiement reçue par SMS. Un service payé mais non délivré est recrédité ou remboursé.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Quelqu'un me demande d'envoyer de l'argent au nom de Dowe</summary>
+      <div class="answer">
+        <p>C'est une arnaque, sans exception. Nos paiements se font uniquement depuis les écrans de l'application, sur un numéro Mobile Money que vous saisissez vous-même, ou via l'App Store et Google Play.</p>
+        <p>Nous ne vous demanderons jamais d'envoyer de l'argent sur un numéro personnel, de communiquer un code reçu par SMS, ni de donner votre mot de passe. Signalez immédiatement toute demande de ce type.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Le mode Incognito</p>
+
+    <details>
+      <summary>Que m'apporte l'Incognito ?</summary>
+      <div class="answer">
+        <p>Quatre choses : votre profil sort du fil Rencontres et du fil des soirées, personne ne tombe dessus par hasard ; votre dernière activité n'est plus affichée ; vos visites ne sont plus enregistrées dans les Vues des autres ; et vous débloquez le code secret qui verrouille l'application.</p>
+        <p>Vous continuez, de votre côté, à voir tout le monde et à écrire en premier.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Combien coûte l'Incognito ?</summary>
+      <div class="answer">
+        <p>Il se prend au forfait : 3 mois pour 110 900 CDF, 6 mois pour 177 400 CDF, 12 mois pour 287 700 CDF. Plus le forfait est long, moins le mois revient cher.</p>
+        <p>Il n'y a pas d'engagement et pas de reconduction automatique quand vous payez par Mobile Money : à l'échéance, vous décidez de reprendre ou non. Un nouvel achat avant la fin prolonge simplement la date.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>C'est quoi le code secret ?</summary>
+      <div class="answer">
+        <p>Un code à quatre chiffres demandé à l'ouverture de Dowe et après une absence prolongée. Il est rangé dans le coffre-fort de votre téléphone et n'est jamais envoyé à nos serveurs.</p>
+        <p>Il protège contre quelqu'un qui prend votre téléphone déverrouillé en main. Il ne chiffre pas vos messages, et il n'existe aucune récupération : un code oublié se règle en désinstallant puis en réinstallant l'application.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Vérification et soirées</p>
+
+    <details>
+      <summary>Comment faire vérifier mon profil ?</summary>
+      <div class="answer">
+        <p>Depuis votre profil, lancez la vérification : le serveur tire au sort un geste et vous demande un selfie le reproduisant, visage net et entièrement visible, sans lunettes de soleil ni casquette baissée.</p>
+        <p>Notre équipe compare ce selfie à vos photos de profil, sous 24 heures. Le geste est tiré au sort et attribué à votre compte : impossible de le choisir ou de réutiliser une ancienne photo.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>À quoi sert le badge de vérification ?</summary>
+      <div class="answer">
+        <p>Il indique aux autres membres que la personne sur les photos est bien celle qui tient le compte. Un profil vérifié like sans limite, est mieux mis en avant, reçoit davantage de réponses, et la vérification rapporte 400 pièces.</p>
+        <p>Ce badge n'est pas un contrôle d'identité officiel et ne dit rien du casier judiciaire ni des intentions de la personne. Gardez les mêmes réflexes de prudence, décrits sur la page <a href="conseils.html">conseils et sécurité</a>.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Comment fonctionnent les soirées ?</summary>
+      <div class="answer">
+        <p>Certains lieux et organisateurs partenaires affichent un QR code à l'entrée. Ouvrez Scanner depuis votre profil et visez le code : l'application affiche le prix de l'entrée fixé par l'organisateur, puis ouvre une fenêtre de paiement sécurisée où vous réglez par carte bancaire ou par Mobile Money. L'entrée se paie une seule fois, et vous pouvez ensuite sortir et revenir librement sans repayer.</p>
+        <p>Une fois entré, l'onglet Rencontres bascule et vous montre les personnes présentes à la soirée. Vous ne voyez cette liste que si vous êtes vous-même sur place.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Le scan a été refusé, pourquoi ?</summary>
+      <div class="answer">
+        <p>Le code ne correspond à aucune soirée en cours : vérifiez auprès de l'organisateur que la soirée est bien ouverte. Si c'est le paiement qui n'a pas abouti, aucun montant n'est débité et vous pouvez réessayer ; une fois le paiement confirmé, re-scannez le code, votre entrée sera reconnue.</p>
+      </div>
+    </details>
+
+    <p class="group-title">Sécurité et compte</p>
+
+    <details>
+      <summary>Comment bloquer ou signaler quelqu'un ?</summary>
+      <div class="answer">
+        <p>Sur chaque profil et dans chaque conversation, y compris sans match, vous trouverez une option pour bloquer et une option pour signaler. Le blocage est immédiat : la personne ne peut plus vous voir ni vous contacter, la conversation se ferme, et elle n'en est pas informée.</p>
+        <p>Signaler bloque également la personne. Les signalements sont examinés par notre équipe, et ceux qui concernent un mineur passent en priorité absolue.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Quels sont vos conseils pour une première rencontre ?</summary>
+      <div class="answer">
+        <p>Restez dans l'application pour discuter le temps de faire connaissance. Choisissez un lieu public, prévenez un proche, organisez votre propre transport. Et surtout : n'envoyez jamais d'argent et ne partagez jamais d'informations bancaires, quelle que soit l'histoire qu'on vous raconte.</p>
+        <p>La page <a href="conseils.html">conseils et sécurité</a> détaille les arnaques les plus courantes en RDC et les réflexes qui les désamorcent.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Comment supprimer mon compte ?</summary>
+      <div class="answer">
+        <p>Dans l'application : Profil, puis Paramètres, puis Supprimer mon compte. La suppression est immédiate et irréversible : profil, photos, matchs, messages et solde de pièces sont définitivement effacés, sans remboursement.</p>
+        <p>Se déconnecter ou désinstaller l'application ne supprime pas le compte : le profil reste visible et les conversations restent ouvertes.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Où voir le détail de mes dépenses ?</summary>
+      <div class="answer">
+        <p>Dans Profil, Mon portefeuille : vous y trouvez votre solde, la part éventuellement périssable avec sa date limite, et l'historique complet de vos transactions, crédits comme dépenses.</p>
+      </div>
+    </details>
+  </main>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="blog.html">Blog</a>
+      <a href="faq.html">F.A.Q</a>
+      <a href="conditions.html">Conditions générales</a>
+      <a href="confidentialite.html">Confidentialité</a>
+      <a href="conseils.html">Conseils et sécurité</a>
+      <a href="securite-enfants.html">Sécurité des enfants</a>
+      <a href="mentions-legales.html">Mentions légales</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <p class="foot-legal">Dowe est un service édité par Goblaire Ltd, société immatriculée en Angleterre et au pays de Galles sous le numéro 16239328. Siège social : 20 Wenlock Road, Londres N1 7GU, Angleterre.</p>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+</body>
+</html>
