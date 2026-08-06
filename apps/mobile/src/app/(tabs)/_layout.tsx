@@ -41,6 +41,8 @@ function M3TabIcon({
 }
 
 function tabIcon(active: keyof typeof Ionicons.glyphMap, inactive: keyof typeof Ionicons.glyphMap) {
+  // Fonction de rendu passée à tabBarIcon, pas un composant nommé.
+  // eslint-disable-next-line react/display-name
   return ({ color, size, focused }: { color: string; size: number; focused: boolean }) => {
     const name = focused ? active : inactive;
     if (isIOS) return <Ionicons name={name} size={size} color={color} />;
@@ -92,7 +94,9 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: isIOS ? colors.primary : m3.onSecondaryContainer,
+        // Actif en fuchsia sur les deux plateformes : c'est la signature de la
+        // référence Heyama (icône et libellé roses, inactifs gris).
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         // iOS : barre de verre. Posée en absolu pour que le contenu défile
         // dessous et se devine au travers du flou ; le fond est peint par

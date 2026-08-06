@@ -13,8 +13,16 @@ const light = {
   primary: '#9d174d', // prune rose — texte fort, éléments actifs
   primaryDark: '#831843',
   primaryDeep: '#831843',
-  accent: '#db2777', // rose franc — boutons d'action
-  accentPressed: '#be185d',
+  accent: '#e321ab', // fuchsia de la référence — boutons d'action, coeur du deck
+  accentPressed: '#c4148f',
+  // Dégradé des bandeaux d'en-tête (style Heyama) : magenta vif qui
+  // s'éclaircit vers le bas, titre blanc posé dessus.
+  headerGradFrom: '#df1cae',
+  headerGradTo: '#f36ecf',
+  // Violet des actions DM et incognito : hors palette rose, comme la
+  // référence, pour distinguer le message payant du like.
+  purple: '#6d28d9',
+  purpleDark: '#5b21b6',
   background: '#fdf2f8', // rose très pâle, visible au travers des surfaces
   surface: 'rgba(255, 255, 255, 0.62)', // verre : cartes secondaires et inputs
   card: 'rgba(255, 255, 255, 0.85)', // verre plus dense : cartes principales
@@ -42,6 +50,10 @@ const dark: typeof light = {
   primaryDeep: '#f9a8d4', // titres : rose clair sur fond prune noir
   accent: '#ec4899',
   accentPressed: '#f472b6',
+  headerGradFrom: '#7a0f5e',
+  headerGradTo: '#b01a86',
+  purple: '#8b5cf6',
+  purpleDark: '#6d28d9',
   background: '#1c0b13', // prune presque noire
   surface: 'rgba(255, 255, 255, 0.07)',
   card: 'rgba(255, 255, 255, 0.10)',

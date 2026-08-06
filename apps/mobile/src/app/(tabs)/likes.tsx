@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -13,7 +14,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   getFavorites,
@@ -30,14 +30,14 @@ import { InsufficientCoinsModal } from '../../components/coins';
 import { DirectMessageModal } from '../../components/DirectMessageModal';
 import { UnicornMascot, type MascotVariant } from '../../components/mascot';
 import { ProfileDetailModal } from '../../components/ProfileDetailModal';
-import { Centered, HeaderBand, VerifiedBadge } from '../../components/ui';
+import { Centered, VerifiedBadge } from '../../components/ui';
 import { formatCoins } from '../../config/economy';
 import { useAuth } from '../../lib/auth';
 import { cacheGet, cacheSet } from '../../lib/cache';
 import { prefetchPhotos } from '../../lib/preload';
 import { haptic } from '../../lib/haptics';
 import { useWallet } from '../../lib/wallet';
-import { colors, onLight, radius, shadows, spacing } from '../../theme';
+import { colors, radius, shadows, spacing } from '../../theme';
 import {
   activeLabel,
   ageFromBirthDate,
@@ -75,6 +75,45 @@ function EmptyState({
       <Text style={styles.emptyText}>{text}</Text>
     </Centered>
   );
+}
+
+// Avatar rond des rangées de liste : photo ou initiale, badge bleu certifié
+// qui mord sur le coin quand le profil est vérifié.
+function RowAvatar({
+  path,
+  name,
+  verified,
+}: {
+  path?: string | null;
+  name?: string | null;
+  verified?: boolean;
+}) {
+  return (
+    <View>
+      {path ? (
+        <Image
+          source={{ uri: photoUrl(path) }}
+          style={styles.rowAvatar}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
+      ) : (
+        <View style={[styles.rowAvatar, styles.noPhoto]}>
+          <Text style={styles.rowAvatarLetter}>{name?.[0]?.toUpperCase() ?? '?'}</Text>
+        </View>
+      )}
+      {verified && (
+        <View style={styles.rowBadge}>
+          <VerifiedBadge size={16} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Séparateur hairline entre les rangées, aligné après l'avatar.
+function RowSeparator() {
+  return <View style={styles.rowSeparator} />;
 }
 
 export default function Activity() {
@@ -339,15 +378,13 @@ export default function Activity() {
   };
 
   // ------------------------------------------------------------------
-  // Pager : les quatre pages défilent au balayage horizontal, et le trait
-  // sous les onglets glisse en continu avec le doigt. Toucher un onglet
-  // fait défiler le pager au même endroit : une seule source de vérité,
-  // la position de défilement.
+  // Pager : les quatre pages défilent au balayage horizontal. Toucher un
+  // onglet fait défiler le pager au même endroit ; à la fin d'un balayage,
+  // l'onglet actif se cale sur la page affichée.
   // ------------------------------------------------------------------
   const { width } = useWindowDimensions();
   const pagerRef = useRef<ScrollView>(null);
   const didInitScroll = useRef(false);
-  const scrollX = useSharedValue(SECTIONS.indexOf('likers') * width);
 
   const syncSection = useCallback((index: number) => {
     const next = SECTIONS[Math.max(0, Math.min(SECTIONS.length - 1, index))];
@@ -360,13 +397,6 @@ export default function Activity() {
     pagerRef.current?.scrollTo({ x: SECTIONS.indexOf(key) * width, animated: true });
   };
 
-  // Le trait glisse sous les onglets : sa position suit la page au pixel.
-  // Largeur d'un onglet = largeur utile du bandeau divisée par quatre.
-  const tabWidth = (width - 2 * spacing.md) / SECTIONS.length;
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: (scrollX.value / width) * tabWidth + spacing.md }],
-  }));
-
   if (loading) {
     return (
       <Centered>
@@ -376,33 +406,49 @@ export default function Activity() {
   }
 
   const tabs: { key: Section; label: string }[] = [
-    { key: 'requests', label: `DMs${requests.length ? ` (${requests.length})` : ''}` },
-    { key: 'likers', label: `Likes${likers.length ? ` (${likers.length})` : ''}` },
-    { key: 'views', label: `Vues${views.length ? ` (${views.length})` : ''}` },
-    { key: 'favorites', label: `Favoris (${favorites.length}/10)` },
+    { key: 'requests', label: 'DMs' },
+    { key: 'likers', label: 'Likes' },
+    { key: 'views', label: 'Vues' },
+    { key: 'favorites', label: 'Favoris' },
   ];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <HeaderBand title="Activité">
-        <View style={styles.tabs}>
-          {tabs.map((t) => {
-            const active = section === t.key;
-            return (
-              <Pressable key={t.key} style={styles.tab} onPress={() => goToSection(t.key)}>
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
-              </Pressable>
-            );
-          })}
-          {/* Trait unique qui glisse d'un onglet à l'autre, collé au doigt
-              pendant le balayage des pages. */}
-          <Animated.View
-            style={[styles.tabIndicator, { width: tabWidth - 2 * spacing.md }, indicatorStyle]}
-          />
-        </View>
-      </HeaderBand>
+    <View style={styles.root}>
+      {/* En-tête plein-bleed : dégradé magenta vertical, la zone d'encoche
+          comprise. Titre blanc centré, puis la rangée d'onglets texte. */}
+      <LinearGradient
+        colors={[colors.headerGradFrom, colors.headerGradTo]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.header}
+      >
+        <SafeAreaView edges={['top']}>
+          <Text style={styles.headerTitle}>Activité</Text>
+          {/* Onglets texte sur le dégradé : actif blanc pur avec un trait
+              souligné arrondi centré sous le libellé, inactifs blanc 70 %.
+              La rangée défile horizontalement si elle dépasse. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabs}
+          >
+            {tabs.map((t) => {
+              const active = section === t.key;
+              return (
+                <Pressable key={t.key} style={styles.tab} onPress={() => goToSection(t.key)}>
+                  <Text style={active ? styles.tabTextActive : styles.tabText}>{t.label}</Text>
+                  <View style={[styles.tabUnderline, active && styles.tabUnderlineActive]} />
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
 
-      <View style={styles.body}>
+      {/* Feuille claire aux coins supérieurs arrondis qui recouvre le bas du
+          dégradé, avec sa poignée grise centrée. */}
+      <View style={styles.sheet}>
+        <View style={styles.sheetHandle} />
         {/* Les quatre pages défilent au balayage horizontal ; toucher un
             onglet amène à la même page. Toutes les pages restent montées :
             les listes sont déjà chargées, changer d'onglet est instantané. */}
@@ -422,10 +468,6 @@ export default function Activity() {
               animated: false,
             });
           }}
-          onScroll={(e) => {
-            scrollX.value = e.nativeEvent.contentOffset.x;
-          }}
-          scrollEventThrottle={16}
           onMomentumScrollEnd={(e) =>
             syncSection(Math.round(e.nativeEvent.contentOffset.x / width))
           }
@@ -475,40 +517,34 @@ export default function Activity() {
               data={requests}
               keyExtractor={(m) => m.match_id}
               style={styles.pageList}
-              contentContainerStyle={{ paddingVertical: spacing.sm }}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={RowSeparator}
               renderItem={({ item }) => (
                 <Pressable
                   style={({ pressed }) => [
-                    styles.requestRow,
+                    styles.row,
                     pressed && { backgroundColor: colors.surface },
                   ]}
                   onPress={() => openChat(item)}
                 >
-                  {item.photo_path ? (
-                    <Image
-                      source={{ uri: photoUrl(item.photo_path) }}
-                      style={styles.requestAvatar}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                  ) : (
-                    <View style={[styles.requestAvatar, styles.noPhoto]}>
-                      <Text style={styles.requestAvatarLetter}>
-                        {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                      </Text>
-                    </View>
-                  )}
+                  <RowAvatar
+                    path={item.photo_path}
+                    name={item.display_name}
+                    verified={item.is_verified}
+                  />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.requestName}>{item.display_name}</Text>
-                    <Text style={styles.requestPreview} numberOfLines={1}>
+                    <Text style={styles.rowName}>{item.display_name}</Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>
                       {item.last_message ?? 'Nouveau message'}
                     </Text>
-                    <Text style={styles.requestTime}>
+                  </View>
+                  <View style={styles.rowRight}>
+                    <Text style={styles.rowTime}>
                       {timeAgo(item.last_message_at ?? item.matched_at)}
                     </Text>
-                  </View>
-                  <View style={styles.replyBtn}>
-                    <Text style={styles.replyBtnText}>Répondre</Text>
+                    <View style={styles.accentPill}>
+                      <Text style={styles.accentPillText}>Répondre</Text>
+                    </View>
                   </View>
                 </Pressable>
               )}
@@ -520,36 +556,20 @@ export default function Activity() {
               data={sent}
               keyExtractor={(m) => m.match_id}
               style={styles.pageList}
-              contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
+              contentContainerStyle={styles.sentContent}
               renderItem={({ item }) => (
                 <Pressable
                   style={({ pressed }) => [styles.sentCard, pressed && { opacity: 0.92 }]}
                   onPress={() => openChat(item)}
                 >
                   <View style={styles.sentHead}>
-                    <View>
-                      {item.photo_path ? (
-                        <Image
-                          source={{ uri: photoUrl(item.photo_path) }}
-                          style={styles.sentAvatar}
-                          contentFit="cover"
-                          cachePolicy="memory-disk"
-                        />
-                      ) : (
-                        <View style={[styles.sentAvatar, styles.noPhoto]}>
-                          <Text style={styles.requestAvatarLetter}>
-                            {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                          </Text>
-                        </View>
-                      )}
-                      {item.is_verified && (
-                        <View style={styles.sentBadge}>
-                          <VerifiedBadge size={15} />
-                        </View>
-                      )}
-                    </View>
+                    <RowAvatar
+                      path={item.photo_path}
+                      name={item.display_name}
+                      verified={item.is_verified}
+                    />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.requestName}>{item.display_name}</Text>
+                      <Text style={styles.rowName}>{item.display_name}</Text>
                       <Text style={styles.sentTime}>
                         Envoyé {timeAgo(item.last_message_at ?? item.matched_at)}
                       </Text>
@@ -588,51 +608,45 @@ export default function Activity() {
         </View>
 
         <View style={{ width }}>
-          {/* Page Likes */}
+          {/* Page Likes : rangées blanches, avatar badgé, like retour en
+              pilule accent avec son coût. */}
           {likers.length === 0 ? (
             <EmptyState variant="likes" text="Personne pour l'instant. Continue à liker, ça finit toujours par matcher." />
           ) : (
             <FlatList
               data={likers}
-              numColumns={2}
               keyExtractor={(l) => l.user_id}
-              columnWrapperStyle={{ gap: spacing.sm }}
               style={styles.pageList}
-              contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={RowSeparator}
               renderItem={({ item }) => (
-                <Pressable style={styles.cell} onPress={() => setLikerDetail(item)}>
-                  {item.photos?.[0] ? (
-                    <Image
-                      source={{ uri: photoUrl(item.photos[0].path) }}
-                      style={styles.photo}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                  ) : (
-                    <View style={[styles.photo, styles.noPhoto]}>
-                      <Text style={styles.noPhotoText}>
-                        {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.cellInfo}>
-                    <View style={styles.cellNameRow}>
-                      <Text style={styles.cellName} numberOfLines={1}>
-                        {item.display_name}, {ageFromBirthDate(item.birth_date)}
-                      </Text>
-                      {item.is_verified && <VerifiedBadge size={15} />}
-                    </View>
-                    <Text style={styles.cellCity} numberOfLines={1}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.row,
+                    pressed && { backgroundColor: colors.surface },
+                  ]}
+                  onPress={() => setLikerDetail(item)}
+                >
+                  <RowAvatar
+                    path={item.photos?.[0]?.path}
+                    name={item.display_name}
+                    verified={item.is_verified}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowName} numberOfLines={1}>
+                      {item.display_name}, {ageFromBirthDate(item.birth_date)}
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>
                       {timeAgo(item.liked_at)}
                     </Text>
                   </View>
                   <Pressable
-                    style={styles.likeBackBtn}
+                    style={styles.accentPill}
                     onPress={() => doLikeBack(item)}
                     hitSlop={6}
                   >
-                    <Ionicons name="heart" size={18} color={colors.textOnAccent} />
-                    <Text style={styles.likeBackCost}>{formatCoins(costs.like_back_cost)}</Text>
+                    <Ionicons name="heart" size={16} color={colors.textOnAccent} />
+                    <Text style={styles.accentPillText}>{formatCoins(costs.like_back_cost)}</Text>
                   </Pressable>
                 </Pressable>
               )}
@@ -641,7 +655,7 @@ export default function Activity() {
         </View>
 
         <View style={{ width }}>
-          {/* Page Vues */}
+          {/* Page Vues : rangées blanches, heure de la visite à droite. */}
           {views.length === 0 ? (
             <EmptyState
               variant="views"
@@ -650,38 +664,32 @@ export default function Activity() {
           ) : (
             <FlatList
               data={views}
-              numColumns={2}
               keyExtractor={(v) => v.user_id}
-              columnWrapperStyle={{ gap: spacing.sm }}
               style={styles.pageList}
-              contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={RowSeparator}
               renderItem={({ item }) => (
-                <Pressable style={styles.cell} onPress={() => setViewDetail(item)}>
-                  {item.photos?.[0] ? (
-                    <Image
-                      source={{ uri: photoUrl(item.photos[0].path) }}
-                      style={styles.photo}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                  ) : (
-                    <View style={[styles.photo, styles.noPhoto]}>
-                      <Text style={styles.noPhotoText}>
-                        {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.cellInfo}>
-                    <View style={styles.cellNameRow}>
-                      <Text style={styles.cellName} numberOfLines={1}>
-                        {item.display_name}, {ageFromBirthDate(item.birth_date)}
-                      </Text>
-                      {item.is_verified && <VerifiedBadge size={15} />}
-                    </View>
-                    <Text style={styles.cellCity} numberOfLines={1}>
-                      {timeAgo(item.viewed_at)}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.row,
+                    pressed && { backgroundColor: colors.surface },
+                  ]}
+                  onPress={() => setViewDetail(item)}
+                >
+                  <RowAvatar
+                    path={item.photos?.[0]?.path}
+                    name={item.display_name}
+                    verified={item.is_verified}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowName} numberOfLines={1}>
+                      {item.display_name}, {ageFromBirthDate(item.birth_date)}
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={1}>
+                      A consulté ton profil
                     </Text>
                   </View>
+                  <Text style={styles.rowTime}>{timeAgo(item.viewed_at)}</Text>
                 </Pressable>
               )}
             />
@@ -689,7 +697,8 @@ export default function Activity() {
         </View>
 
         <View style={{ width }}>
-          {/* Page Favoris */}
+          {/* Page Favoris : rangées blanches, présence en sous-texte, retrait
+              par la croix à droite. */}
           {favorites.length === 0 ? (
             <EmptyState
               variant="favorites"
@@ -698,40 +707,33 @@ export default function Activity() {
           ) : (
             <FlatList
               data={favorites}
-              numColumns={2}
               keyExtractor={(f) => f.user_id}
-              columnWrapperStyle={{ gap: spacing.sm }}
               style={styles.pageList}
-              contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={RowSeparator}
               renderItem={({ item }) => {
                 const online = activeLabel(item.last_active_at);
                 return (
-                  <Pressable style={styles.cell} onPress={() => setFavoriteDetail(item)}>
-                    {item.photos?.[0] ? (
-                      <Image
-                        source={{ uri: photoUrl(item.photos[0].path) }}
-                        style={styles.photo}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                      />
-                    ) : (
-                      <View style={[styles.photo, styles.noPhoto]}>
-                        <Text style={styles.noPhotoText}>
-                          {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.cellInfo}>
-                      <View style={styles.cellNameRow}>
-                        <Text style={styles.cellName} numberOfLines={1}>
-                          {item.display_name}, {ageFromBirthDate(item.birth_date)}
-                        </Text>
-                        {item.is_verified && <VerifiedBadge size={15} />}
-                      </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.row,
+                      pressed && { backgroundColor: colors.surface },
+                    ]}
+                    onPress={() => setFavoriteDetail(item)}
+                  >
+                    <RowAvatar
+                      path={item.photos?.[0]?.path}
+                      name={item.display_name}
+                      verified={item.is_verified}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName} numberOfLines={1}>
+                        {item.display_name}, {ageFromBirthDate(item.birth_date)}
+                      </Text>
                       {!!online && (
                         <View style={styles.onlineRow}>
                           {online === 'En ligne' && <View style={styles.onlineDot} />}
-                          <Text style={styles.cellCity} numberOfLines={1}>
+                          <Text style={styles.rowSub} numberOfLines={1}>
                             {online}
                           </Text>
                         </View>
@@ -742,7 +744,7 @@ export default function Activity() {
                       onPress={() => unfavorite(item)}
                       hitSlop={8}
                     >
-                      <Ionicons name="close" size={14} color={onLight.ink} />
+                      <Ionicons name="close" size={16} color={colors.textMuted} />
                     </Pressable>
                   </Pressable>
                 );
@@ -795,62 +797,105 @@ export default function Activity() {
         cost={insufficientCost}
         onClose={() => setInsufficientCost(null)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
+// Débord du dégradé sous la feuille : la feuille remonte d'autant, ses coins
+// arrondis se découpent sur le magenta.
+const SHEET_OVERLAP = 28;
+
 const styles = StyleSheet.create({
-  // Le haut (inset + bandeau) est vert forêt, le contenu reste blanc.
-  safe: { flex: 1, backgroundColor: colors.primary },
-  body: { flex: 1, backgroundColor: colors.background },
-  // Barre d'onglets dans le bandeau : libellés blancs, un seul trait qui
-  // glisse sous l'onglet actif au rythme du balayage des pages.
-  // Les quatre onglets se partagent toute la largeur du bandeau.
+  // Le fond général reste celui du contenu ; le haut est peint par le dégradé.
+  root: { flex: 1, backgroundColor: colors.background },
+  // L'en-tête déborde de la hauteur de recouvrement : la feuille claire vient
+  // s'y poser sans laisser de raccord.
+  header: { paddingBottom: SHEET_OVERLAP + spacing.md },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  // Rangée d'onglets sur le dégradé : espacement régulier, défile si besoin.
   tabs: {
+    flexGrow: 1,
     flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'flex-end',
     marginTop: spacing.md,
-    paddingBottom: 6,
+    paddingHorizontal: spacing.md,
   },
-  tab: { flex: 1, alignItems: 'center' },
+  tab: { alignItems: 'center', paddingHorizontal: spacing.sm },
   tabText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255,255,255,.6)',
-    paddingBottom: 6,
+    color: 'rgba(255,255,255,0.7)',
   },
-  tabTextActive: { color: colors.textOnPrimary, fontWeight: '800' },
-  tabIndicator: {
-    position: 'absolute',
-    left: 0,
-    bottom: 0,
+  tabTextActive: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  // Trait souligné arrondi centré sous le libellé actif ; transparent sur les
+  // inactifs pour que la rangée ne bouge pas d'un pixel au changement.
+  tabUnderline: {
+    width: 28,
     height: 3,
-    borderRadius: radius.full,
-    backgroundColor: colors.textOnPrimary,
+    borderRadius: 2,
+    marginTop: 6,
+    backgroundColor: 'transparent',
+  },
+  tabUnderlineActive: { backgroundColor: '#ffffff' },
+  // Feuille claire posée sur le dégradé : coins supérieurs arrondis, poignée
+  // grise centrée en guise d'amorce.
+  sheet: {
+    flex: 1,
+    marginTop: -SHEET_OVERLAP,
+    borderTopLeftRadius: SHEET_OVERLAP,
+    borderTopRightRadius: SHEET_OVERLAP,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    marginTop: spacing.sm,
+    backgroundColor: colors.border,
   },
   // Chaque page du pager occupe la hauteur disponible : les listes défilent
   // dans leur page, l'état vide se centre.
   pageList: { flex: 1 },
-  dmSegmentWrap: { alignItems: 'center', marginTop: spacing.md },
+  // Padding bas généreux : la barre d'onglets flotte au-dessus du contenu.
+  listContent: { paddingVertical: spacing.sm, paddingBottom: spacing.xl },
+  sentContent: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md },
+  // Contrôle segmenté Reçus / Envoyés : conteneur gris très clair à bordure
+  // hairline, le segment actif est une pilule blanche légèrement surélevée.
+  dmSegmentWrap: { paddingHorizontal: spacing.md, marginTop: spacing.sm },
   dmSegment: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
-    borderRadius: radius.full,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     padding: 3,
-    minWidth: 220,
   },
   dmSegmentItem: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: radius.full,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  dmSegmentItemActive: { backgroundColor: colors.primary },
-  dmSegmentText: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
-  dmSegmentTextActive: { color: colors.textOnPrimary },
+  dmSegmentItemActive: { backgroundColor: colors.cardSolid, ...shadows.card },
+  dmSegmentText: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
+  dmSegmentTextActive: { color: colors.text, fontWeight: '800' },
   // Cartes des DMs envoyés, à la Heyama : la carte porte le message entier,
   // l'état de lecture et la corbeille.
   sentCard: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.cardSolid,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -859,17 +904,6 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   sentHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  sentAvatar: { width: 46, height: 46, borderRadius: 23 },
-  // Le badge bleu mord sur le coin de l'avatar, posé sur une pastille du fond
-  // de carte pour rester net sur la photo.
-  sentBadge: {
-    position: 'absolute',
-    bottom: -3,
-    right: -3,
-    backgroundColor: colors.cardSolid,
-    borderRadius: 10,
-    padding: 1,
-  },
   sentTime: { fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
   sentMessage: { fontSize: 15, color: colors.text, lineHeight: 21 },
   sentFooter: {
@@ -897,73 +931,65 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     lineHeight: 22,
   },
-  requestRow: {
+  // Rangées de liste : fond blanc, avatar rond badgé, nom gras, sous-texte
+  // gris, heure ou action à droite, séparées par un trait hairline.
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.sm + 4,
+    backgroundColor: colors.cardSolid,
   },
-  requestAvatar: { width: 56, height: 56, borderRadius: 28 },
-  requestAvatarLetter: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  requestName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  requestPreview: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
-  requestTime: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  replyBtn: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  rowAvatar: { width: 54, height: 54, borderRadius: 27 },
+  rowAvatarLetter: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
+  // Le badge bleu mord sur le coin de l'avatar, posé sur une pastille du fond
+  // de rangée pour rester net sur la photo.
+  rowBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 10,
+    padding: 1,
   },
-  replyBtnText: { fontSize: 13, fontWeight: '800', color: colors.textOnAccent },
-  cell: {
-    flex: 1,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
+  rowName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  rowSub: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  rowTime: { fontSize: 12.5, color: colors.textMuted },
+  rowRight: { alignItems: 'flex-end', gap: 6 },
+  rowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginLeft: spacing.md + 54 + spacing.md,
   },
-  photo: { aspectRatio: 3 / 4 },
   noPhoto: {
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noPhotoText: { fontSize: 44, color: 'rgba(255,255,255,.6)', fontWeight: '700' },
-  cellInfo: { padding: spacing.sm },
-  cellNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cellName: { fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 },
-  cellCity: { fontSize: 13, color: colors.textMuted },
-  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.success,
   },
-  likeBackBtn: {
-    position: 'absolute',
-    right: spacing.sm,
-    bottom: 54,
+  // Pilule d'action accent (répondre, liker en retour avec son coût).
+  accentPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: colors.accent,
     borderRadius: radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-  likeBackCost: { fontSize: 13, fontWeight: '800', color: colors.textOnAccent },
+  accentPillText: { fontSize: 13, fontWeight: '800', color: colors.textOnAccent },
   removeBtn: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,.92)',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

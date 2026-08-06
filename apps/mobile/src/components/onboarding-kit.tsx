@@ -10,39 +10,27 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  Easing,
-  FadeInDown,
-  ReduceMotion,
-  ZoomIn,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { haptic } from '../lib/haptics';
 import { colors, isDark, radius, shadows, spacing } from '../theme';
 
-// Kit de l'onboarding : les primitives visuelles qui donnent au parcours son
-// caractère. Tout le mouvement vit sur le thread UI (Reanimated), les entrées
-// respectent « Réduire les animations » du système, et chaque interaction rend
-// un retour immédiat (ressort + haptique) avant de changer l'état.
+// Kit de l'onboarding : les primitives visuelles du parcours. Pas d'animation
+// décorative : les états s'affichent directement, le retour d'appui passe par
+// une simple baisse d'opacité, et l'haptique confirme chaque choix.
 
-// Dégradé signature du parcours : rose franc vers prune en clair, rose vif
-// vers rose clair en sombre (la prune noire absorberait le dégradé).
+// Dégradé signature du parcours : le fuchsia de la référence vers sa version
+// appuyée en clair, rose vif vers rose clair en sombre (la prune noire
+// absorberait le dégradé).
 export const ACCENT_GRADIENT = (isDark
   ? ['#ec4899', '#f472b6']
-  : ['#db2777', '#9d174d']) as [string, string];
-
-// Ressort commun des appuis : sec et vivant, jamais élastique.
-const POP = { damping: 16, stiffness: 280 };
+  : [colors.accent, colors.accentPressed]) as [string, string];
 
 // ---------------------------------------------------------------------------
-// En-tête : chevron retour + barre de progression fluide. La barre rattrape
-// chaque étape au ressort, le dégradé donne la direction, et le compteur reste
-// discret. Pas de segments : la fluidité EST l'indicateur.
+// En-tête : chevron retour + barre de progression au dégradé. La largeur est
+// recalculée à chaque rendu, sans animation.
 // ---------------------------------------------------------------------------
 export function OnboardingHeader({
   step,
@@ -53,14 +41,6 @@ export function OnboardingHeader({
   total: number;
   onBack: () => void;
 }) {
-  const p = useSharedValue(step / total);
-
-  useEffect(() => {
-    p.value = withSpring(step / total, { damping: 20, stiffness: 140 });
-  }, [step, total, p]);
-
-  const fill = useAnimatedStyle(() => ({ width: `${p.value * 100}%` }));
-
   return (
     <View style={kh.header}>
       <Pressable
@@ -75,14 +55,14 @@ export function OnboardingHeader({
         <Ionicons name="chevron-back" size={20} color={colors.text} />
       </Pressable>
       <View style={kh.track}>
-        <Animated.View style={[kh.fill, fill]}>
+        <View style={[kh.fill, { width: `${(step / total) * 100}%` }]}>
           <LinearGradient
             colors={ACCENT_GRADIENT}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={StyleSheet.absoluteFill}
           />
-        </Animated.View>
+        </View>
       </View>
       <Text style={kh.count}>
         {step}
@@ -93,58 +73,19 @@ export function OnboardingHeader({
 }
 
 // ---------------------------------------------------------------------------
-// Fond ambiant : deux halos de couleur qui dérivent très lentement derrière le
-// contenu. C'est la profondeur de l'écran — imperceptible en soi, mais sans
-// lui la page redevient un formulaire posé sur un aplat.
+// Pastille d'étape : l'icône qui donne sa personnalité à chaque question.
 // ---------------------------------------------------------------------------
-export function AmbientBackground() {
-  const t = useSharedValue(0);
-
-  useEffect(() => {
-    t.value = withRepeat(
-      withTiming(1, {
-        duration: 9000,
-        easing: Easing.inOut(Easing.quad),
-        reduceMotion: ReduceMotion.System,
-      }),
-      -1,
-      true,
-    );
-  }, [t]);
-
-  const blobA = useAnimatedStyle(() => ({
-    transform: [{ translateX: t.value * 34 }, { translateY: t.value * 22 }],
-  }));
-  const blobB = useAnimatedStyle(() => ({
-    transform: [{ translateX: -t.value * 28 }, { translateY: -t.value * 34 }],
-  }));
-
+export function StepBadge({ icon }: { icon: keyof typeof Ionicons.glyphMap }) {
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Animated.View style={[ka.blob, ka.blobA, blobA]} />
-      <Animated.View style={[ka.blob, ka.blobB, blobB]} />
+    <View style={kb.badge}>
+      <Ionicons name={icon} size={22} color={colors.accent} />
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pastille d'étape : l'icône qui donne sa personnalité à chaque question,
-// posée dans un halo teinté qui apparaît d'un ressort.
-// ---------------------------------------------------------------------------
-export function StepBadge({ icon }: { icon: keyof typeof Ionicons.glyphMap }) {
-  return (
-    <Animated.View
-      entering={ZoomIn.springify().damping(15).reduceMotion(ReduceMotion.System)}
-      style={kb.badge}
-    >
-      <Ionicons name={icon} size={22} color={colors.accent} />
-    </Animated.View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Bouton principal : pilule au dégradé signature, compression au ressort,
-// flèche qui dit « on avance ». L'unique bouton plein de l'écran.
+// Bouton principal : pilule au dégradé signature, retour d'appui par opacité.
+// L'unique bouton plein de l'écran.
 // ---------------------------------------------------------------------------
 export function GradientButton({
   title,
@@ -159,47 +100,40 @@ export function GradientButton({
   loading?: boolean;
   icon?: keyof typeof Ionicons.glyphMap | null;
 }) {
-  const scale = useSharedValue(1);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   return (
-    <Animated.View style={st}>
-      <Pressable
-        disabled={disabled || loading}
-        onPressIn={() => {
-          scale.value = withSpring(0.97, POP);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, POP);
-        }}
-        onPress={() => {
-          haptic.impact();
-          onPress();
-        }}
-        style={[kg.btn, disabled && { opacity: 0.35 }]}
-      >
-        <LinearGradient
-          colors={ACCENT_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        {loading ? (
-          <ActivityIndicator color="#ffffff" />
-        ) : (
-          <>
-            <Text style={kg.text}>{title}</Text>
-            {icon !== null && <Ionicons name={icon} size={18} color="#ffffff" />}
-          </>
-        )}
-      </Pressable>
-    </Animated.View>
+    <Pressable
+      disabled={disabled || loading}
+      onPress={() => {
+        haptic.impact();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        kg.btn,
+        disabled && { opacity: 0.35 },
+        pressed && { opacity: 0.85 },
+      ]}
+    >
+      <LinearGradient
+        colors={ACCENT_GRADIENT}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {loading ? (
+        <ActivityIndicator color="#ffffff" />
+      ) : (
+        <>
+          <Text style={kg.text}>{title}</Text>
+          {icon !== null && <Ionicons name={icon} size={18} color="#ffffff" />}
+        </>
+      )}
+    </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Carte d'option pleine largeur : icône dans un carré teinté, libellé, coche
-// qui surgit d'un ressort à la sélection. Les cartes entrent en cascade.
+// à la sélection.
 // ---------------------------------------------------------------------------
 export function OptionCard({
   icon,
@@ -207,126 +141,92 @@ export function OptionCard({
   hint,
   selected,
   onPress,
-  index = 0,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   hint?: string;
   selected?: boolean;
   onPress: () => void;
-  index?: number;
 }) {
-  const scale = useSharedValue(1);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   return (
-    <Animated.View
-      entering={FadeInDown.duration(240)
-        .delay(Math.min(index, 8) * 45)
-        .reduceMotion(ReduceMotion.System)}
-      style={st}
+    <Pressable
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        ko.card,
+        selected && ko.cardOn,
+        pressed && { opacity: 0.85 },
+      ]}
     >
-      <Pressable
-        onPressIn={() => {
-          scale.value = withSpring(0.97, POP);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, POP);
-        }}
-        onPress={() => {
-          haptic.select();
-          onPress();
-        }}
-        style={[ko.card, selected && ko.cardOn]}
-      >
-        <View style={[ko.iconBox, selected && ko.iconBoxOn]}>
-          <Ionicons
-            name={icon}
-            size={19}
-            color={selected ? colors.textOnAccent : colors.accent}
-          />
+      <View style={[ko.iconBox, selected && ko.iconBoxOn]}>
+        <Ionicons
+          name={icon}
+          size={19}
+          color={selected ? colors.textOnAccent : colors.accent}
+        />
+      </View>
+      <View style={ko.body}>
+        <Text style={[ko.label, selected && ko.labelOn]}>{label}</Text>
+        {!!hint && <Text style={ko.hint}>{hint}</Text>}
+      </View>
+      {selected && (
+        <View style={ko.check}>
+          <Ionicons name="checkmark" size={14} color={colors.textOnAccent} />
         </View>
-        <View style={ko.body}>
-          <Text style={[ko.label, selected && ko.labelOn]}>{label}</Text>
-          {!!hint && <Text style={ko.hint}>{hint}</Text>}
-        </View>
-        {selected && (
-          <Animated.View
-            entering={ZoomIn.springify().damping(13).reduceMotion(ReduceMotion.System)}
-            style={ko.check}
-          >
-            <Ionicons name="checkmark" size={14} color={colors.textOnAccent} />
-          </Animated.View>
-        )}
-      </Pressable>
-    </Animated.View>
+      )}
+    </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Tuile de choix : carte demi-largeur verticale (genre, enfants), grande
-// icône, sélection au ressort.
+// icône, coche à la sélection.
 // ---------------------------------------------------------------------------
 export function ChoiceTile({
   icon,
   label,
   selected,
   onPress,
-  index = 0,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   selected?: boolean;
   onPress: () => void;
-  index?: number;
 }) {
-  const scale = useSharedValue(1);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   return (
-    <Animated.View
-      entering={FadeInDown.duration(240)
-        .delay(Math.min(index, 8) * 60)
-        .reduceMotion(ReduceMotion.System)}
-      style={[{ flex: 1 }, st]}
+    <Pressable
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        kt.tile,
+        selected && kt.tileOn,
+        pressed && { opacity: 0.85 },
+      ]}
     >
-      <Pressable
-        onPressIn={() => {
-          scale.value = withSpring(0.96, POP);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, POP);
-        }}
-        onPress={() => {
-          haptic.select();
-          onPress();
-        }}
-        style={[kt.tile, selected && kt.tileOn]}
-      >
-        <View style={[kt.iconRing, selected && kt.iconRingOn]}>
-          <Ionicons
-            name={icon}
-            size={26}
-            color={selected ? colors.textOnAccent : colors.accent}
-          />
+      <View style={[kt.iconRing, selected && kt.iconRingOn]}>
+        <Ionicons
+          name={icon}
+          size={26}
+          color={selected ? colors.textOnAccent : colors.accent}
+        />
+      </View>
+      <Text style={[kt.label, selected && kt.labelOn]}>{label}</Text>
+      {selected && (
+        <View style={kt.check}>
+          <Ionicons name="checkmark" size={13} color={colors.textOnAccent} />
         </View>
-        <Text style={[kt.label, selected && kt.labelOn]}>{label}</Text>
-        {selected && (
-          <Animated.View
-            entering={ZoomIn.springify().damping(13).reduceMotion(ReduceMotion.System)}
-            style={kt.check}
-          >
-            <Ionicons name="checkmark" size={13} color={colors.textOnAccent} />
-          </Animated.View>
-        )}
-      </Pressable>
-    </Animated.View>
+      )}
+    </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pilules segmentées (Jamais / Parfois / Souvent) : le segment actif reçoit le
-// dégradé d'un ressort. Un nouvel appui sur l'actif le désélectionne (géré par
+// Pilules segmentées (Jamais / Parfois / Souvent) : le segment actif porte le
+// dégradé signature. Un nouvel appui sur l'actif le désélectionne (géré par
 // le parent, comme partout dans le parcours).
 // ---------------------------------------------------------------------------
 export function SegmentPills({
@@ -345,24 +245,21 @@ export function SegmentPills({
         return (
           <Pressable
             key={o.value}
-            style={ks.item}
+            style={({ pressed }) => [ks.item, pressed && { opacity: 0.85 }]}
             onPress={() => {
               haptic.select();
               onChange(o.value);
             }}
           >
             {on && (
-              <Animated.View
-                entering={ZoomIn.springify().damping(16).reduceMotion(ReduceMotion.System)}
-                style={[StyleSheet.absoluteFill, ks.activeClip]}
-              >
+              <View style={[StyleSheet.absoluteFill, ks.activeClip]}>
                 <LinearGradient
                   colors={ACCENT_GRADIENT}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                 />
-              </Animated.View>
+              </View>
             )}
             <Text style={[ks.text, on && ks.textOn]} numberOfLines={1}>
               {o.label}
@@ -375,86 +272,74 @@ export function SegmentPills({
 }
 
 // ---------------------------------------------------------------------------
-// Chip à rebond : la pastille sursaute quand on la choisit. Active : dégradé
-// signature. Utilisée pour langues, religion, études et centres d'intérêt.
+// Chip de sélection : active, elle porte le dégradé signature. Utilisée pour
+// langues, religion, études et centres d'intérêt.
 // ---------------------------------------------------------------------------
 export function BounceChip({
   label,
   active,
   onPress,
-  index = 0,
 }: {
   label: string;
   active?: boolean;
   onPress: () => void;
-  index?: number;
 }) {
-  const scale = useSharedValue(1);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
   return (
-    <Animated.View
-      entering={FadeInDown.duration(220)
-        .delay(Math.min(index, 12) * 28)
-        .reduceMotion(ReduceMotion.System)}
-      style={st}
+    <Pressable
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        kc.chip,
+        active && kc.chipOn,
+        pressed && { opacity: 0.85 },
+      ]}
     >
-      <Pressable
-        onPress={() => {
-          haptic.select();
-          scale.value = withSequence(withSpring(1.1, POP), withSpring(1, POP));
-          onPress();
-        }}
-        style={[kc.chip, active && kc.chipOn]}
-      >
-        {active && (
-          <LinearGradient
-            colors={ACCENT_GRADIENT}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-        <Text style={[kc.text, active && kc.textOn]}>{label}</Text>
-      </Pressable>
-    </Animated.View>
+      {active && (
+        <LinearGradient
+          colors={ACCENT_GRADIENT}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      <Text style={[kc.text, active && kc.textOn]}>{label}</Text>
+    </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Trait de saisie : la ligne sous le grand champ du prénom. Elle s'étire du
-// centre quand la saisie devient valide — la validation se voit sans un mot.
+// Trait de saisie : la ligne sous le grand champ du prénom. Pleine quand la
+// saisie est valide, discrète sinon.
 // ---------------------------------------------------------------------------
 export function FocusLine({ active }: { active: boolean }) {
-  const p = useSharedValue(active ? 1 : 0);
-
-  useEffect(() => {
-    p.value = withSpring(active ? 1 : 0, { damping: 18, stiffness: 160 });
-  }, [active, p]);
-
-  const st = useAnimatedStyle(() => ({
-    transform: [{ scaleX: 0.08 + p.value * 0.92 }],
-    opacity: 0.35 + p.value * 0.65,
-  }));
-
   return (
     <View style={kf.track}>
-      <Animated.View style={[kf.fill, st]}>
+      <View
+        style={[
+          kf.fill,
+          {
+            transform: [{ scaleX: active ? 1 : 0.08 }],
+            opacity: active ? 1 : 0.35,
+          },
+        ]}
+      >
         <LinearGradient
           colors={ACCENT_GRADIENT}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={StyleSheet.absoluteFill}
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Curseur de taille : une poignée sur un rail, on touche n'importe où et elle
-// accourt. Le segment parcouru se teinte, la poignée grossit sous le doigt.
-// `value` null = pas encore choisi : la poignée attend au centre, estompée.
+// s'y place. Le segment parcouru se teinte. `value` null = pas encore choisi :
+// la poignée attend au centre, estompée.
 // ---------------------------------------------------------------------------
 const THUMB = 36;
 const TRACK_H = 6;
@@ -472,7 +357,6 @@ export function HeightSlider({
 }) {
   const [usable, setUsable] = useState(0);
   const x = useSharedValue(0);
-  const pressed = useSharedValue(0);
   const last = useSharedValue(value ?? -1);
   const span = Math.max(max - min, 1);
 
@@ -483,14 +367,11 @@ export function HeightSlider({
     x.value = ((v - min) / span) * u;
   };
 
-  // « Effacer » côté parent : la poignée revient au centre en douceur.
+  // « Effacer » côté parent : la poignée revient au centre, sans transition.
   useEffect(() => {
     if (value === null && usable > 0) {
       last.value = -1;
-      x.value = withSpring(((Math.round((min + max) / 2) - min) / span) * usable, {
-        damping: 20,
-        stiffness: 160,
-      });
+      x.value = ((Math.round((min + max) / 2) - min) / span) * usable;
     }
   }, [value, usable, min, max, span, x, last]);
 
@@ -512,21 +393,14 @@ export function HeightSlider({
 
   const pan = Gesture.Pan()
     .onBegin((e) => {
-      pressed.value = 1;
       moveTo(e.x);
     })
     .onUpdate((e) => {
       moveTo(e.x);
-    })
-    .onFinalize(() => {
-      pressed.value = 0;
     });
 
   const thumbStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: x.value },
-      { scale: withSpring(pressed.value ? 1.15 : 1, POP) },
-    ],
+    transform: [{ translateX: x.value }],
   }));
   const fillStyle = useAnimatedStyle(() => ({ width: x.value + THUMB / 2 }));
 
@@ -600,32 +474,6 @@ const kh = StyleSheet.create({
   countTotal: { color: colors.textMuted, fontWeight: '600' },
 });
 
-const ka = StyleSheet.create({
-  blob: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    opacity: isDark ? 0.16 : 0.45,
-  },
-  blobA: {
-    top: -90,
-    right: -110,
-    backgroundColor: colors.washFrom,
-    shadowColor: colors.washFrom,
-    shadowOpacity: 1,
-    shadowRadius: 70,
-  },
-  blobB: {
-    bottom: -60,
-    left: -130,
-    backgroundColor: colors.washTo,
-    shadowColor: colors.washTo,
-    shadowOpacity: 1,
-    shadowRadius: 70,
-  },
-});
-
 const kb = StyleSheet.create({
   badge: {
     width: 46,
@@ -633,9 +481,10 @@ const kb = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.cardSolid,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.card,
   },
 });
 
@@ -658,17 +507,16 @@ const ko = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: 'transparent',
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
+    ...shadows.card,
   },
   cardOn: {
     borderColor: colors.accent,
-    backgroundColor: colors.cardSolid,
-    ...shadows.card,
   },
   iconBox: {
     width: 40,
@@ -695,19 +543,19 @@ const ko = StyleSheet.create({
 
 const kt = StyleSheet.create({
   tile: {
+    flex: 1,
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: 'transparent',
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.sm,
+    ...shadows.card,
   },
   tileOn: {
     borderColor: colors.accent,
-    backgroundColor: colors.cardSolid,
-    ...shadows.card,
   },
   iconRing: {
     width: 58,
@@ -759,7 +607,7 @@ const kc = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: colors.cardSolid,
     paddingHorizontal: 16,
     paddingVertical: 10,
     overflow: 'hidden',

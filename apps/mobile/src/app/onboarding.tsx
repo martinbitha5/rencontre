@@ -15,13 +15,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, {
-  FadeInDown,
-  FadeInLeft,
-  FadeInRight,
-  ReduceMotion,
-  ZoomIn,
-} from 'react-native-reanimated';
 import {
   deletePhoto,
   getCities,
@@ -31,7 +24,6 @@ import {
   uploadPhoto,
 } from '../api';
 import {
-  AmbientBackground,
   BounceChip,
   ChoiceTile,
   FocusLine,
@@ -57,7 +49,7 @@ import {
   RELIGION_OPTIONS,
   WANTS_CHILDREN_OPTIONS,
 } from '../profileOptions';
-import { colors, radius, spacing } from '../theme';
+import { colors, radius, shadows, spacing } from '../theme';
 import type { City, Gender, MyPhoto } from '../types';
 
 // L'inscription se fait en deux temps : d'abord ce qui est indispensable
@@ -212,15 +204,8 @@ function profileSaveError(e: unknown): string {
 }
 
 // Libellé de section à l'intérieur d'une étape (Je suis / Tabac / Religion...).
-function SectionLabel({ children, delay = 0 }: { children: string; delay?: number }) {
-  return (
-    <Animated.Text
-      entering={FadeInDown.duration(240).delay(delay).reduceMotion(ReduceMotion.System)}
-      style={styles.sectionLabel}
-    >
-      {children}
-    </Animated.Text>
-  );
+function SectionLabel({ children }: { children: string }) {
+  return <Text style={styles.sectionLabel}>{children}</Text>;
 }
 
 export default function Onboarding() {
@@ -260,9 +245,6 @@ export default function Onboarding() {
   const [detectedCity, setDetectedCity] = useState<City | null>(null);
   const detectionStarted = useRef(false);
   const cityConfirmed = useRef(false);
-  // Sens de navigation : le contenu de l'étape entre par la droite en avançant,
-  // par la gauche en revenant.
-  const direction = useRef<1 | -1>(1);
   const scrollRef = useRef<ScrollView>(null);
 
   const step: Step = STEPS[stepIndex];
@@ -358,8 +340,7 @@ export default function Onboarding() {
     }
   };
 
-  const goTo = (index: number, dir: 1 | -1) => {
-    direction.current = dir;
+  const goTo = (index: number) => {
     setStepIndex(index);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
@@ -382,14 +363,14 @@ export default function Onboarding() {
             text: `Utiliser ${detectedCity.name}`,
             onPress: () => {
               setCityId(detectedCity.id);
-              goTo(stepIndex + 1, 1);
+              goTo(stepIndex + 1);
             },
           },
           {
             text: `Garder ${chosenCity?.name ?? 'mon choix'}`,
             onPress: () => {
               cityConfirmed.current = true;
-              goTo(stepIndex + 1, 1);
+              goTo(stepIndex + 1);
             },
           },
         ],
@@ -399,7 +380,7 @@ export default function Onboarding() {
 
     if (stepIndex < STEPS.length - 1) {
       haptic.tap();
-      goTo(stepIndex + 1, 1);
+      goTo(stepIndex + 1);
       return;
     }
 
@@ -441,7 +422,7 @@ export default function Onboarding() {
   const back = () => {
     if (stepIndex > 0) {
       setError(null);
-      goTo(stepIndex - 1, -1);
+      goTo(stepIndex - 1);
     }
   };
 
@@ -496,13 +477,8 @@ export default function Onboarding() {
     return <OnboardingWelcome name={name.trim()} onEnter={refreshProfile} />;
   }
 
-  const stepEntering = (direction.current === 1 ? FadeInRight : FadeInLeft)
-    .duration(260)
-    .reduceMotion(ReduceMotion.System);
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <AmbientBackground />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
@@ -515,32 +491,16 @@ export default function Onboarding() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Le contenu entier de l'étape entre d'un seul mouvement, dans le
-              sens de la navigation ; à l'intérieur, pastille, titre et corps
-              se décalent de quelques dizaines de millisecondes. */}
-          <Animated.View key={step} entering={stepEntering}>
+          <View key={step}>
             <View style={styles.titleBlock}>
               <StepBadge icon={meta.icon} />
-              <Animated.Text
-                entering={FadeInDown.duration(260).delay(40).reduceMotion(ReduceMotion.System)}
-                style={styles.title}
-              >
-                {meta.title}
-              </Animated.Text>
-              <Animated.Text
-                entering={FadeInDown.duration(260).delay(90).reduceMotion(ReduceMotion.System)}
-                style={styles.subtitle}
-              >
-                {meta.subtitle}
-              </Animated.Text>
+              <Text style={styles.title}>{meta.title}</Text>
+              <Text style={styles.subtitle}>{meta.subtitle}</Text>
             </View>
 
             <View style={styles.body}>
               {step === 'name' && (
-                <Animated.View
-                  entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
-                  style={styles.nameBlock}
-                >
+                <View style={styles.nameBlock}>
                   <TextInput
                     style={styles.nameField}
                     placeholder="Ton prénom"
@@ -558,7 +518,7 @@ export default function Onboarding() {
                       ? 'Parfait, ça sonne bien.'
                       : 'Au moins 2 caractères.'}
                   </Text>
-                </Animated.View>
+                </View>
               )}
 
               {step === 'birthdate' && (
@@ -566,10 +526,7 @@ export default function Onboarding() {
                   {/* Roue de date native : on fait défiler jour, mois et année,
                       et la borne des 18 ans est portée par le sélecteur. */}
                   {Platform.OS === 'ios' ? (
-                    <Animated.View
-                      entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
-                      style={styles.wheelCard}
-                    >
+                    <View style={styles.wheelCard}>
                       <DateTimePicker
                         value={birthDate ?? DEFAULT_DATE}
                         mode="date"
@@ -581,26 +538,22 @@ export default function Onboarding() {
                         onChange={(_, d) => d && setBirthDate(d)}
                         style={styles.wheel}
                       />
-                    </Animated.View>
+                    </View>
                   ) : (
                     <>
-                      <Animated.View
-                        entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                      <Pressable
+                        style={({ pressed }) => [styles.dateField, pressed && { opacity: 0.85 }]}
+                        onPress={() => {
+                          haptic.tap();
+                          setPickerOpen(true);
+                        }}
                       >
-                        <Pressable
-                          style={({ pressed }) => [styles.dateField, pressed && { opacity: 0.85 }]}
-                          onPress={() => {
-                            haptic.tap();
-                            setPickerOpen(true);
-                          }}
-                        >
-                          <Ionicons name="calendar-outline" size={20} color={colors.accent} />
-                          <Text style={birthDate ? styles.dateValue : styles.datePlaceholder}>
-                            {birthDate ? DATE_FMT.format(birthDate) : 'Choisir ma date'}
-                          </Text>
-                          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                        </Pressable>
-                      </Animated.View>
+                        <Ionicons name="calendar-outline" size={20} color={colors.accent} />
+                        <Text style={birthDate ? styles.dateValue : styles.datePlaceholder}>
+                          {birthDate ? DATE_FMT.format(birthDate) : 'Choisir ma date'}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                      </Pressable>
                       {pickerOpen && (
                         <DateTimePicker
                           value={birthDate ?? DEFAULT_DATE}
@@ -618,16 +571,10 @@ export default function Onboarding() {
                   )}
 
                   {birthDate && age !== null && (
-                    // La pastille d'âge sursaute à chaque nouvelle valeur : la
-                    // roue répond, on sait qu'on est entendu.
                     <View style={styles.ageRow}>
-                      <Animated.View
-                        key={age}
-                        entering={ZoomIn.springify().damping(14).reduceMotion(ReduceMotion.System)}
-                        style={styles.agePill}
-                      >
+                      <View style={styles.agePill}>
                         <Text style={styles.agePillText}>{age} ans</Text>
-                      </Animated.View>
+                      </View>
                       <Text style={styles.ageDate}>{DATE_FMT.format(birthDate)}</Text>
                     </View>
                   )}
@@ -636,39 +583,35 @@ export default function Onboarding() {
 
               {step === 'gender' && (
                 <>
-                  <SectionLabel delay={120}>Je suis</SectionLabel>
+                  <SectionLabel>Je suis</SectionLabel>
                   <View style={styles.tileRow}>
                     <ChoiceTile
                       icon="male"
                       label="Un homme"
                       selected={gender === 'homme'}
                       onPress={() => setGender('homme')}
-                      index={0}
                     />
                     <ChoiceTile
                       icon="female"
                       label="Une femme"
                       selected={gender === 'femme'}
                       onPress={() => setGender('femme')}
-                      index={1}
                     />
                   </View>
 
-                  <SectionLabel delay={200}>Je recherche</SectionLabel>
+                  <SectionLabel>Je recherche</SectionLabel>
                   <View style={styles.tileRow}>
                     <ChoiceTile
                       icon="male"
                       label="Un homme"
                       selected={lookingFor === 'homme'}
                       onPress={() => setLookingFor('homme')}
-                      index={2}
                     />
                     <ChoiceTile
                       icon="female"
                       label="Une femme"
                       selected={lookingFor === 'femme'}
                       onPress={() => setLookingFor('femme')}
-                      index={3}
                     />
                   </View>
                 </>
@@ -676,14 +619,13 @@ export default function Onboarding() {
 
               {step === 'goal' && (
                 <View style={styles.cardStack}>
-                  {GOAL_OPTIONS.map((o, i) => (
+                  {GOAL_OPTIONS.map((o) => (
                     <OptionCard
                       key={o.value}
                       icon={GOAL_ICONS[o.value] ?? 'heart'}
                       label={o.label}
                       selected={goal === o.value}
                       onPress={() => setGoal(o.value)}
-                      index={i}
                     />
                   ))}
                 </View>
@@ -691,10 +633,7 @@ export default function Onboarding() {
 
               {step === 'city' && (
                 <>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
-                    style={styles.searchField}
-                  >
+                  <View style={styles.searchField}>
                     <Ionicons name="search" size={18} color={colors.accent} />
                     <TextInput
                       style={styles.searchInput}
@@ -723,47 +662,41 @@ export default function Onboarding() {
                         <Ionicons name="close-circle" size={18} color={colors.textMuted} />
                       </Pressable>
                     )}
-                  </Animated.View>
+                  </View>
 
                   {citySuggestions.length > 0 && (
                     <View style={styles.cardStack}>
-                      {citySuggestions.map((c, i) => (
-                        <Animated.View
+                      {citySuggestions.map((c) => (
+                        <Pressable
                           key={c.id}
-                          entering={FadeInDown.duration(220)
-                            .delay(i * 40)
-                            .reduceMotion(ReduceMotion.System)}
+                          style={({ pressed }) => [
+                            styles.cityCard,
+                            pressed && { opacity: 0.85 },
+                          ]}
+                          onPress={() => {
+                            haptic.select();
+                            setCityId(c.id);
+                            setCityQuery(c.name);
+                            Keyboard.dismiss();
+                          }}
                         >
-                          <Pressable
-                            style={({ pressed }) => [
-                              styles.cityCard,
-                              pressed && { opacity: 0.85 },
-                            ]}
-                            onPress={() => {
-                              haptic.select();
-                              setCityId(c.id);
-                              setCityQuery(c.name);
-                              Keyboard.dismiss();
-                            }}
-                          >
-                            <View style={styles.cityIcon}>
-                              <Ionicons
-                                name={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
-                                size={16}
-                                color={colors.accent}
-                              />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.cityName}>{c.name}</Text>
-                              <Text style={styles.cityHint}>
-                                {c.province} · République démocratique du Congo
-                              </Text>
-                            </View>
-                            {detectedCity?.id === c.id && (
-                              <Text style={styles.cityDetected}>Position</Text>
-                            )}
-                          </Pressable>
-                        </Animated.View>
+                          <View style={styles.cityIcon}>
+                            <Ionicons
+                              name={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
+                              size={16}
+                              color={colors.accent}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.cityName}>{c.name}</Text>
+                            <Text style={styles.cityHint}>
+                              {c.province} · République démocratique du Congo
+                            </Text>
+                          </View>
+                          {detectedCity?.id === c.id && (
+                            <Text style={styles.cityDetected}>Position</Text>
+                          )}
+                        </Pressable>
                       ))}
                     </View>
                   )}
@@ -775,10 +708,7 @@ export default function Onboarding() {
                   )}
 
                   {!!chosenCity && (
-                    <Animated.View
-                      entering={FadeInDown.duration(240).reduceMotion(ReduceMotion.System)}
-                      style={styles.noteRow}
-                    >
+                    <View style={styles.noteRow}>
                       <Ionicons
                         name={
                           detectedCity?.id === chosenCity.id
@@ -795,7 +725,7 @@ export default function Onboarding() {
                           ? 'Ville confirmée par ta position.'
                           : `${chosenCity.name} · ${chosenCity.province}`}
                       </Text>
-                    </Animated.View>
+                    </View>
                   )}
                 </>
               )}
@@ -807,13 +737,7 @@ export default function Onboarding() {
                       const photo = photos[i];
                       if (photo) {
                         return (
-                          <Animated.View
-                            key={photo.id}
-                            entering={ZoomIn.springify()
-                              .damping(15)
-                              .reduceMotion(ReduceMotion.System)}
-                            style={styles.photoCell}
-                          >
+                          <View key={photo.id} style={styles.photoCell}>
                             <Image
                               source={{ uri: photoUrl(photo.storage_path) }}
                               style={styles.photoImg}
@@ -832,16 +756,13 @@ export default function Onboarding() {
                             >
                               <Ionicons name="close" size={14} color="#ffffff" />
                             </Pressable>
-                          </Animated.View>
+                          </View>
                         );
                       }
                       const isNext = i === photos.length;
                       return (
-                        <Animated.View
+                        <View
                           key={`empty-${i}`}
-                          entering={FadeInDown.duration(240)
-                            .delay(i * 40)
-                            .reduceMotion(ReduceMotion.System)}
                           style={[styles.photoCell, styles.photoEmpty, isNext && styles.photoNext]}
                         >
                           <Pressable
@@ -859,7 +780,7 @@ export default function Onboarding() {
                               />
                             )}
                           </Pressable>
-                        </Animated.View>
+                        </View>
                       );
                     })}
                   </View>
@@ -881,11 +802,8 @@ export default function Onboarding() {
 
               {step === 'about' && (
                 <>
-                  <SectionLabel delay={120}>Taille</SectionLabel>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(150).reduceMotion(ReduceMotion.System)}
-                    style={styles.heightCard}
-                  >
+                  <SectionLabel>Taille</SectionLabel>
+                  <View style={styles.heightCard}>
                     <View style={styles.heightReadout}>
                       <Text style={styles.heightValue}>{height === '' ? '—' : height}</Text>
                       <Text style={styles.heightUnit}> cm</Text>
@@ -912,13 +830,10 @@ export default function Onboarding() {
                       <Text style={styles.heightBound}>{HEIGHT_MIN} cm</Text>
                       <Text style={styles.heightBound}>{HEIGHT_MAX} cm</Text>
                     </View>
-                  </Animated.View>
+                  </View>
 
-                  <SectionLabel delay={200}>Profession</SectionLabel>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(230).reduceMotion(ReduceMotion.System)}
-                    style={styles.inputCard}
-                  >
+                  <SectionLabel>Profession</SectionLabel>
+                  <View style={styles.inputCard}>
                     <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
                     <TextInput
                       style={styles.inputCardField}
@@ -928,17 +843,16 @@ export default function Onboarding() {
                       onChangeText={setJob}
                       maxLength={80}
                     />
-                  </Animated.View>
+                  </View>
 
-                  <SectionLabel delay={280}>Études</SectionLabel>
+                  <SectionLabel>Études</SectionLabel>
                   <View style={styles.chipWrap}>
-                    {EDUCATION_OPTIONS.map((o, i) => (
+                    {EDUCATION_OPTIONS.map((o) => (
                       <BounceChip
                         key={o.value}
                         label={o.label}
                         active={education === o.value}
                         onPress={() => setEducation(education === o.value ? null : o.value)}
-                        index={i}
                       />
                     ))}
                   </View>
@@ -947,77 +861,63 @@ export default function Onboarding() {
 
               {step === 'lifestyle' && (
                 <>
-                  <SectionLabel delay={120}>Tabac</SectionLabel>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(150).reduceMotion(ReduceMotion.System)}
-                  >
-                    <SegmentPills
-                      options={FREQUENCY_OPTIONS}
-                      value={smoking}
-                      onChange={(v) => setSmoking(smoking === v ? null : v)}
-                    />
-                  </Animated.View>
+                  <SectionLabel>Tabac</SectionLabel>
+                  <SegmentPills
+                    options={FREQUENCY_OPTIONS}
+                    value={smoking}
+                    onChange={(v) => setSmoking(smoking === v ? null : v)}
+                  />
 
-                  <SectionLabel delay={220}>Alcool</SectionLabel>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(250).reduceMotion(ReduceMotion.System)}
-                  >
-                    <SegmentPills
-                      options={FREQUENCY_OPTIONS}
-                      value={drinking}
-                      onChange={(v) => setDrinking(drinking === v ? null : v)}
-                    />
-                  </Animated.View>
+                  <SectionLabel>Alcool</SectionLabel>
+                  <SegmentPills
+                    options={FREQUENCY_OPTIONS}
+                    value={drinking}
+                    onChange={(v) => setDrinking(drinking === v ? null : v)}
+                  />
                 </>
               )}
 
               {step === 'children' && (
                 <>
-                  <SectionLabel delay={120}>{"J'ai des enfants"}</SectionLabel>
+                  <SectionLabel>{"J'ai des enfants"}</SectionLabel>
                   <View style={styles.tileRow}>
-                    {HAS_CHILDREN_OPTIONS.map((o, i) => (
+                    {HAS_CHILDREN_OPTIONS.map((o) => (
                       <ChoiceTile
                         key={o.value}
                         icon={o.value === 'oui' ? 'people' : 'person'}
                         label={o.label}
                         selected={hasChildren === o.value}
                         onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
-                        index={i}
                       />
                     ))}
                   </View>
 
-                  <SectionLabel delay={220}>Je veux des enfants</SectionLabel>
-                  <Animated.View
-                    entering={FadeInDown.duration(260).delay(250).reduceMotion(ReduceMotion.System)}
-                  >
-                    <SegmentPills
-                      options={WANTS_CHILDREN_OPTIONS}
-                      value={wantsChildren}
-                      onChange={(v) => setWantsChildren(wantsChildren === v ? null : v)}
-                    />
-                  </Animated.View>
+                  <SectionLabel>Je veux des enfants</SectionLabel>
+                  <SegmentPills
+                    options={WANTS_CHILDREN_OPTIONS}
+                    value={wantsChildren}
+                    onChange={(v) => setWantsChildren(wantsChildren === v ? null : v)}
+                  />
                 </>
               )}
 
               {step === 'background' && (
                 <>
-                  <SectionLabel delay={120}>Religion</SectionLabel>
+                  <SectionLabel>Religion</SectionLabel>
                   <View style={styles.chipWrap}>
-                    {RELIGION_OPTIONS.map((r, i) => (
+                    {RELIGION_OPTIONS.map((r) => (
                       <BounceChip
                         key={r}
                         label={r}
                         active={religion === r}
                         onPress={() => setReligion(religion === r ? null : r)}
-                        index={i}
                       />
                     ))}
                   </View>
 
-                  <SectionLabel delay={260}>Langues parlées</SectionLabel>
+                  <SectionLabel>Langues parlées</SectionLabel>
                   <View style={styles.chipWrap}>
-                    {LANGUAGE_OPTIONS.map((l, i) => (
+                    {LANGUAGE_OPTIONS.map((l) => (
                       <BounceChip
                         key={l}
                         label={l}
@@ -1027,7 +927,6 @@ export default function Onboarding() {
                             prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l],
                           )
                         }
-                        index={i + 6}
                       />
                     ))}
                   </View>
@@ -1036,34 +935,25 @@ export default function Onboarding() {
 
               {step === 'interests' && (
                 <>
-                  {/* Compteur vivant : il sursaute à chaque choix, et passe au
-                      vert quand le minimum est atteint. */}
+                  {/* Compteur : il passe au vert quand le minimum est atteint. */}
                   <View style={styles.interestHead}>
                     {interests.length >= MIN_INTERESTS ? (
-                      <Animated.View
-                        key="done"
-                        entering={ZoomIn.springify().damping(13).reduceMotion(ReduceMotion.System)}
-                        style={[styles.countPill, styles.countPillDone]}
-                      >
+                      <View style={[styles.countPill, styles.countPillDone]}>
                         <Ionicons name="checkmark" size={14} color="#ffffff" />
                         <Text style={styles.countPillDoneText}>
                           {interests.length} {"choisis, c'est parfait"}
                         </Text>
-                      </Animated.View>
+                      </View>
                     ) : (
-                      <Animated.View
-                        key={interests.length}
-                        entering={ZoomIn.duration(160).reduceMotion(ReduceMotion.System)}
-                        style={styles.countPill}
-                      >
+                      <View style={styles.countPill}>
                         <Text style={styles.countPillText}>
                           {interests.length}/{MIN_INTERESTS} minimum
                         </Text>
-                      </Animated.View>
+                      </View>
                     )}
                   </View>
                   <View style={styles.chipWrap}>
-                    {INTEREST_OPTIONS.map((o, i) => (
+                    {INTEREST_OPTIONS.map((o) => (
                       <BounceChip
                         key={o}
                         label={o}
@@ -1073,7 +963,6 @@ export default function Onboarding() {
                             prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
                           )
                         }
-                        index={i}
                       />
                     ))}
                   </View>
@@ -1081,10 +970,7 @@ export default function Onboarding() {
               )}
 
               {step === 'bio' && (
-                <Animated.View
-                  entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
-                  style={styles.bioCard}
-                >
+                <View style={styles.bioCard}>
                   <TextInput
                     style={styles.bioField}
                     placeholder="Ce qui te fait vibrer, ce que tu cherches…"
@@ -1105,22 +991,14 @@ export default function Onboarding() {
                       {bio.length}/{BIO_MAX}
                     </Text>
                   </View>
-                </Animated.View>
+                </View>
               )}
             </View>
-          </Animated.View>
+          </View>
         </ScrollView>
 
         <View style={styles.footer}>
-          {!!error && (
-            <Animated.Text
-              key={error}
-              entering={FadeInDown.duration(200).reduceMotion(ReduceMotion.System)}
-              style={styles.error}
-            >
-              {error}
-            </Animated.Text>
-          )}
+          {!!error && <Text style={styles.error}>{error}</Text>}
           <GradientButton
             title={isLast ? 'Terminer' : 'Continuer'}
             icon={isLast ? 'checkmark' : 'arrow-forward'}
@@ -1134,7 +1012,7 @@ export default function Onboarding() {
             <Pressable
               onPress={() => {
                 setError(null);
-                goTo(stepIndex + 1, 1);
+                goTo(stepIndex + 1);
               }}
               hitSlop={8}
               style={styles.skipBtn}
@@ -1189,13 +1067,13 @@ const styles = StyleSheet.create({
   },
   nameHint: { fontSize: 13, color: colors.textMuted },
 
-  // La roue occupe une carte à elle seule, sans bord ni ombre : le mouvement
-  // suffit à la désigner.
+  // La roue occupe une carte blanche à elle seule.
   wheelCard: {
     backgroundColor: colors.cardSolid,
-    borderRadius: radius.md,
+    borderRadius: 24,
     overflow: 'hidden',
     paddingVertical: spacing.xs,
+    ...shadows.card,
   },
   wheel: { alignSelf: 'stretch' },
   dateField: {
@@ -1203,11 +1081,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     minHeight: 56,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     paddingHorizontal: spacing.md,
     borderWidth: 1.5,
     borderColor: colors.border,
+    ...shadows.card,
   },
   dateValue: { flex: 1, fontSize: 17, color: colors.text, fontWeight: '600' },
   datePlaceholder: { flex: 1, fontSize: 17, color: colors.textMuted },
@@ -1232,21 +1111,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     minHeight: 56,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     paddingHorizontal: spacing.md,
     borderWidth: 1.5,
     borderColor: colors.border,
+    ...shadows.card,
   },
   searchInput: { flex: 1, fontSize: 17, color: colors.text },
   cityCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
+    ...shadows.card,
   },
   cityIcon: {
     width: 32,
@@ -1267,9 +1148,9 @@ const styles = StyleSheet.create({
   photoCell: {
     width: '31.5%',
     aspectRatio: 3 / 4,
-    borderRadius: radius.md,
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: colors.card,
+    backgroundColor: colors.cardSolid,
   },
   photoImg: { width: '100%', height: '100%' },
   photoEmpty: { borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed' },
@@ -1316,12 +1197,13 @@ const styles = StyleSheet.create({
   photoDotOn: { backgroundColor: colors.accent },
 
   heightCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 24,
     borderWidth: 1.5,
     borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.xs,
+    ...shadows.card,
   },
   heightReadout: {
     flexDirection: 'row',
@@ -1347,11 +1229,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     minHeight: 56,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 20,
     paddingHorizontal: spacing.md,
     borderWidth: 1.5,
     borderColor: colors.border,
+    ...shadows.card,
   },
   inputCardField: { flex: 1, fontSize: 16, color: colors.text },
 
@@ -1362,7 +1245,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.cardSolid,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1374,12 +1257,13 @@ const styles = StyleSheet.create({
   countPillDoneText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
 
   bioCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 24,
     borderWidth: 1.5,
     borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
+    ...shadows.card,
   },
   bioField: {
     minHeight: 150,

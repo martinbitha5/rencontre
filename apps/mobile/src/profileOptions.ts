@@ -84,6 +84,39 @@ export const INTEREST_OPTIONS: string[] = [
   'Nature',
 ];
 
+// Emoji de chaque centre d'intérêt : les chips de la référence Heyama en
+// portent tous un, sur la carte du deck comme dans la fiche détaillée.
+export const INTEREST_EMOJI: Record<string, string> = {
+  Musique: '🎵',
+  Gospel: '🙏',
+  Rumba: '🎺',
+  Danse: '💃',
+  Cuisine: '🍲',
+  Voyage: '✈️',
+  Lecture: '📚',
+  Cinéma: '🎬',
+  Séries: '📺',
+  Fitness: '💪',
+  Football: '⚽',
+  Basket: '🏀',
+  Mode: '👗',
+  Beauté: '💄',
+  Photographie: '📷',
+  Art: '🎨',
+  Tech: '💻',
+  'Jeux vidéo': '🎮',
+  Entrepreneuriat: '💼',
+  Église: '⛪',
+  Famille: '👨‍👩‍👧',
+  Brunch: '🥐',
+  Karaoké: '🎤',
+  Nature: '🌿',
+};
+
+export function interestEmoji(interest: string): string {
+  return INTEREST_EMOJI[interest] ?? '✨';
+}
+
 export function labelFor(options: Option[], value: string | null | undefined): string | null {
   if (!value) return null;
   return options.find((o) => o.value === value)?.label ?? value;

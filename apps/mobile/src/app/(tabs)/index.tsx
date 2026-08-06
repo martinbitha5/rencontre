@@ -24,8 +24,8 @@ import {
   updateSearchFilters,
 } from '../../api';
 import { useAuth } from '../../lib/auth';
-import { CoinIcon, CoinPill, InsufficientCoinsModal } from '../../components/coins';
-import { COIN_COLOR, COIN_ON_GOLD } from '../../config/economy';
+import { CoinIcon, InsufficientCoinsModal } from '../../components/coins';
+import { formatCoins } from '../../config/economy';
 import { haptic } from '../../lib/haptics';
 import { onPartyAccessChanged } from '../../lib/partySignal';
 import { DirectMessageModal } from '../../components/DirectMessageModal';
@@ -35,7 +35,7 @@ import { ProfileDetailModal } from '../../components/ProfileDetailModal';
 import { SwipeDeck, type SwipeDeckHandle } from '../../components/SwipeDeck';
 import { Button, Centered } from '../../components/ui';
 import { useWallet } from '../../lib/wallet';
-import { colors, radius, shadows, spacing } from '../../theme';
+import { colors, onLight, radius, shadows, spacing } from '../../theme';
 import type { DirectMessageResult, EventSummary, FeedProfile } from '../../types';
 
 // Au-delà de cette absence en arrière-plan, ce que sert l'écran (soirée en
@@ -286,17 +286,38 @@ export default function Discover() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.brand}>Dowe</Text>
+        {/* Conteneur d'en-tête de la référence : solde de pièces puis boutons
+            carrés. Mêmes actions qu'avant, seul l'habillage change. */}
         <View style={styles.headerGroup}>
-          <CoinPill />
-          <Pressable onPress={() => router.push('/history')} hitSlop={8} style={styles.headerBtn}>
+          <Pressable
+            onPress={() => router.push('/recharge')}
+            hitSlop={8}
+            style={styles.balance}
+            accessibilityRole="button"
+            accessibilityLabel="Recharger mes pièces"
+          >
+            <Text style={styles.balanceText}>
+              {wallet ? formatCoins(wallet.balance) : '–'}
+            </Text>
+            <CoinIcon size={16} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/history')}
+            hitSlop={4}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Historique des profils vus"
+          >
             <Ionicons name="arrow-undo-outline" size={20} color={colors.primaryDeep} />
           </Pressable>
           <Pressable
             onPress={() => router.push('/(tabs)/profile/preferences')}
-            hitSlop={8}
+            hitSlop={4}
             style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Préférences de recherche"
           >
-            <Ionicons name="options-outline" size={20} color={colors.primaryDeep} />
+            <Ionicons name="search" size={20} color={colors.primaryDeep} />
           </Pressable>
         </View>
       </View>
@@ -380,7 +401,7 @@ export default function Discover() {
               accessibilityLabel="Passer ce profil"
             >
               <View style={styles.actionInner}>
-                <Ionicons name="close" size={32} color={colors.danger} />
+                <Ionicons name="close" size={32} color={onLight.ink} />
               </View>
             </PressableScale>
             <PressableScale
@@ -391,9 +412,9 @@ export default function Discover() {
               accessibilityLabel="Envoyer un message direct"
             >
               <View style={styles.actionInner}>
-                <Ionicons name="chatbubble" size={26} color={colors.textOnPrimary} />
+                <Ionicons name="chatbubble-ellipses" size={28} color={colors.textOnPrimary} />
                 <View style={styles.msgCostBadge}>
-                  <CoinIcon size={10} color={COIN_ON_GOLD} />
+                  <CoinIcon size={12} />
                 </View>
               </View>
             </PressableScale>
@@ -472,8 +493,7 @@ export default function Discover() {
             </View>
             <Text style={styles.matchTitle}>{likeExplainer} te plaît !</Text>
             <Text style={styles.matchText}>
-              Tu as montré ton intérêt. Si tu reçois un like en retour, c'est un match : vous
-              pourrez alors discuter dans l'onglet Matchs.
+              {"Tu as montré ton intérêt. Si tu reçois un like en retour, c'est un match : vous pourrez alors discuter dans l'onglet Matchs."}
             </Text>
             <Button title="C'est compris !" onPress={() => setLikeExplainer(null)} />
           </View>
@@ -487,7 +507,7 @@ export default function Discover() {
             <View style={styles.modalIcon}>
               <Ionicons name="heart" size={30} color={colors.textOnAccent} />
             </View>
-            <Text style={styles.matchTitle}>C'est un match !</Text>
+            <Text style={styles.matchTitle}>{"C'est un match !"}</Text>
             <Text style={styles.matchText}>
               {matchedName} et toi vous êtes likés mutuellement.
             </Text>
@@ -513,8 +533,8 @@ export default function Discover() {
             <Text style={styles.matchTitle}>Limite atteinte</Text>
             <Text style={styles.matchText}>
               Tu as utilisé tes {limitReached ?? likeQuota.limit} likes du jour. Fais vérifier ton
-              profil et like sans limite, tous les jours. C'est gratuit, et ça rassure les
-              personnes que tu likes.
+              profil et like sans limite, tous les jours.{' '}
+              {"C'est gratuit, et ça rassure les personnes que tu likes."}
             </Text>
             <Button
               title="Faire vérifier mon profil"
@@ -540,17 +560,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  brand: { fontSize: 24, fontWeight: '800', color: colors.primary, letterSpacing: 2 },
+  brand: { fontSize: 30, fontWeight: '800', color: colors.primaryDeep },
   headerGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    gap: 6,
+    backgroundColor: colors.cardSolid,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 6,
   },
-  headerBtn: { padding: 2 },
+  balance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+  },
+  balanceText: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  // Boutons carrés de l'en-tête : fond clair, fine bordure rose.
+  headerBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.cardSolid,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   quotaBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -569,16 +607,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.lg,
+    gap: 18,
     paddingBottom: spacing.md,
   },
+  // Cercle blanc quel que soit le thème, comme les tampons du deck : son X
+  // garde l'encre sombre fixe (onLight).
   actionBtn: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    backgroundColor: '#ffffff',
     ...shadows.floating,
   },
   actionInner: {
@@ -587,27 +625,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Violet foncé du DM : hors palette rose, le message payant se distingue
+  // du like d'un coup d'oeil.
   msgBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.purpleDark,
   },
-  // Pastille or : la monnaie interne garde sa couleur propre, distincte du
-  // rose de la marque, sur tous les écrans.
+  // Pastille blanche portant la pièce dorée : la monnaie interne garde sa
+  // couleur propre, distincte du rose de la marque, sur tous les écrans.
   msgCostBadge: {
     position: 'absolute',
     top: -2,
     right: -2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COIN_COLOR,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  likeBtn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  likeBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.accent },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
   emptyText: {
     fontSize: 15,

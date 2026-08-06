@@ -48,12 +48,12 @@ import {
 } from '../../api';
 import { ProfileDetailModal } from '../../components/ProfileDetailModal';
 import { ReportModal } from '../../components/ReportModal';
-import { Centered } from '../../components/ui';
+import { Centered, VerifiedBadge } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { cacheGet, cacheSet } from '../../lib/cache';
 import { haptic } from '../../lib/haptics';
 import { supabase } from '../../lib/supabase';
-import { colors, radius, spacing } from '../../theme';
+import { colors, isDark, radius, spacing } from '../../theme';
 import type { Message, Reaction, ViewableProfile } from '../../types';
 
 const REACTION_EMOJIS = ['❤️', '😂', '😍', '😮', '😢', '👍'];
@@ -64,6 +64,62 @@ function formatSeconds(s: number): string {
   const r = Math.floor(s % 60);
   return `${m}:${String(r).padStart(2, '0')}`;
 }
+
+// Heure courte « 14:05 » affichée dans la bulle.
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+const DAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
+const MONTHS = [
+  'Janvier',
+  'Février',
+  'Mars',
+  'Avril',
+  'Mai',
+  'Juin',
+  'Juillet',
+  'Août',
+  'Septembre',
+  'Octobre',
+  'Novembre',
+  'Décembre',
+];
+
+// Libellé des séparateurs de date, ex. « Dim. 02 Août ».
+function formatDayLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${DAYS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]}`;
+}
+
+function sameDay(a: string, b: string): boolean {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+// Papier peint : grille déterministe de coeurs très discrets derrière la liste.
+const WALL_HEARTS: { top: `${number}%`; left: `${number}%`; size: number; rotate: number }[] = [
+  { top: '2%', left: '10%', size: 26, rotate: -12 },
+  { top: '4%', left: '62%', size: 30, rotate: 10 },
+  { top: '11%', left: '34%', size: 22, rotate: 6 },
+  { top: '13%', left: '86%', size: 26, rotate: -8 },
+  { top: '20%', left: '6%', size: 32, rotate: 8 },
+  { top: '23%', left: '54%', size: 24, rotate: -14 },
+  { top: '30%', left: '28%', size: 28, rotate: 12 },
+  { top: '32%', left: '78%', size: 34, rotate: -6 },
+  { top: '40%', left: '10%', size: 24, rotate: -10 },
+  { top: '42%', left: '58%', size: 26, rotate: 8 },
+  { top: '49%', left: '34%', size: 30, rotate: -12 },
+  { top: '52%', left: '84%', size: 22, rotate: 14 },
+  { top: '59%', left: '6%', size: 28, rotate: 10 },
+  { top: '61%', left: '52%', size: 32, rotate: -8 },
+  { top: '69%', left: '26%', size: 24, rotate: 6 },
+  { top: '71%', left: '80%', size: 28, rotate: -12 },
+  { top: '78%', left: '8%', size: 34, rotate: -6 },
+  { top: '81%', left: '56%', size: 22, rotate: 12 },
+  { top: '88%', left: '32%', size: 26, rotate: -10 },
+  { top: '90%', left: '82%', size: 30, rotate: 8 },
+];
 
 // Bulle de note vocale : lecture/pause + position.
 function VoiceBubble({
@@ -164,6 +220,20 @@ export default function Chat() {
     () => otherUserId ?? messages.find((m) => m.sender_id !== myId)?.sender_id,
     [otherUserId, messages, myId],
   );
+
+  // Badge bleu de l'en-tête : le statut vérifié n'arrive pas par les params
+  // de route, on le lit une seule fois depuis le profil de l'autre personne.
+  const [otherVerified, setOtherVerified] = useState(false);
+  const verifiedFetched = useRef(false);
+  useEffect(() => {
+    if (verifiedFetched.current) return;
+    const otherId = resolveOtherId();
+    if (!otherId) return;
+    verifiedFetched.current = true;
+    getProfileView(otherId)
+      .then((p) => setOtherVerified(!!p?.is_verified))
+      .catch(() => {});
+  }, [resolveOtherId]);
 
   const applyReaction = useCallback((r: Reaction) => {
     setReactions((prev) => {
@@ -516,39 +586,68 @@ export default function Chat() {
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <Stack.Screen
         options={{
-          // pas de bouton retour ici : geste système uniquement
-          headerLeft: () => null,
           headerBackVisible: false,
           gestureEnabled: true,
+          // Chevron de retour, comme la maquette.
+          headerLeft: () => (
+            <Pressable onPress={() => router.back()} hitSlop={10}>
+              <Ionicons name="chevron-back" size={26} color={colors.text} />
+            </Pressable>
+          ),
           headerTitle: () => (
             <Pressable style={styles.headerTitle} onPress={openProfile} hitSlop={6}>
-              {photoPath ? (
-                <Image
-                  source={{ uri: photoUrl(photoPath) }}
-                  style={styles.headerAvatar}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                />
-              ) : (
-                <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
-                  <Text style={styles.headerAvatarLetter}>
-                    {name?.[0]?.toUpperCase() ?? '?'}
-                  </Text>
-                </View>
-              )}
+              <View>
+                {photoPath ? (
+                  <Image
+                    source={{ uri: photoUrl(photoPath) }}
+                    style={styles.headerAvatar}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
+                ) : (
+                  <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
+                    <Text style={styles.headerAvatarLetter}>
+                      {name?.[0]?.toUpperCase() ?? '?'}
+                    </Text>
+                  </View>
+                )}
+                {/* Badge certifié posé en bas à gauche de l'avatar */}
+                {otherVerified && (
+                  <View style={styles.headerBadge}>
+                    <VerifiedBadge size={14} />
+                  </View>
+                )}
+              </View>
               <Text style={styles.headerName} numberOfLines={1}>
                 {name ?? 'Discussion'}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
             </Pressable>
           ),
           headerRight: () => (
             <Pressable onPress={openMenu} hitSlop={12}>
-              <Ionicons name="ellipsis-vertical" size={20} color={colors.primaryDeep} />
+              <Ionicons name="ellipsis-vertical" size={22} color={colors.text} />
             </Pressable>
           ),
         }}
       />
+      {/* Papier peint : coeurs répétés, purement décoratif */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {WALL_HEARTS.map((h, i) => (
+          <Ionicons
+            key={i}
+            name="heart-outline"
+            size={h.size}
+            color={colors.accent}
+            style={{
+              position: 'absolute',
+              top: h.top,
+              left: h.left,
+              opacity: isDark ? 0.04 : 0.05,
+              transform: [{ rotate: `${h.rotate}deg` }],
+            }}
+          />
+        ))}
+      </View>
       <KeyboardAvoidingView
         style={styles.container}
         behavior="padding"
@@ -569,94 +668,127 @@ export default function Chat() {
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             ListEmptyComponent={
               <Text style={styles.emptyText}>
-                C'est un match ! Envoie le premier message.
+                {"C'est un match ! Envoie le premier message."}
               </Text>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const mine = item.sender_id === myId;
               const isMedia =
                 item.media_path && (item.kind === 'image' || item.kind === 'video');
               const msgReactions = reactions[item.id] ?? [];
-              return (
-                <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
-                  <Pressable
-                    onLongPress={() => setMsgAction(item)}
-                    delayLongPress={280}
+              const prev = index > 0 ? messages[index - 1] : null;
+              const newDay = !prev || !sameDay(prev.created_at, item.created_at);
+              // Un peu plus d'air quand la parole change de côté.
+              const newGroup = !!prev && !newDay && prev.sender_id !== item.sender_id;
+              const metaColor = mine ? 'rgba(255,255,255,0.75)' : colors.textMuted;
+              // Heure dans la bulle ; pour mes messages, suivie de l'état :
+              // horloge le temps de l'envoi, une coche quand le serveur l'a
+              // distribué, deux coches claires quand l'autre l'a lu.
+              const meta = (
+                <>
+                  <Text
                     style={[
-                      styles.bubble,
-                      mine ? styles.bubbleMine : styles.bubbleTheirs,
-                      isMedia && styles.bubbleMedia,
+                      styles.metaTime,
+                      { color: isMedia ? 'rgba(255,255,255,0.9)' : metaColor },
                     ]}
                   >
-                    {item.kind === 'audio' && item.media_path ? (
-                      <VoiceBubble
-                        path={item.media_path}
-                        mine={mine}
-                        onLongPress={() => setMsgAction(item)}
+                    {formatTime(item.created_at)}
+                  </Text>
+                  {mine &&
+                    (item.pending ? (
+                      <Ionicons
+                        name="time-outline"
+                        size={12}
+                        color={isMedia ? 'rgba(255,255,255,0.9)' : metaColor}
                       />
-                    ) : item.kind === 'image' && item.media_path ? (
-                      <Pressable
-                        onPress={() => setFullImage(chatMediaUrl(item.media_path!))}
-                        onLongPress={() => setMsgAction(item)}
-                        delayLongPress={280}
-                      >
-                        <Image
-                          source={{ uri: chatMediaUrl(item.media_path) }}
-                          style={styles.mediaBubble}
-                          contentFit="cover"
-                          transition={150}
-                        />
-                      </Pressable>
-                    ) : item.kind === 'video' && item.media_path ? (
-                      <VideoBubble path={item.media_path} />
+                    ) : item.read_at ? (
+                      <Ionicons name="checkmark-done" size={13} color="#fbcfe8" />
                     ) : (
-                      <Text style={[styles.bubbleText, mine && { color: '#fff' }]}>
-                        {item.content}
+                      <Ionicons
+                        name="checkmark"
+                        size={13}
+                        color={isMedia ? 'rgba(255,255,255,0.9)' : metaColor}
+                      />
+                    ))}
+                </>
+              );
+              return (
+                <View style={newGroup && styles.groupGap}>
+                  {/* Séparateur de date : pilule centrée « Dim. 02 Août » */}
+                  {newDay && (
+                    <View style={styles.dayRow}>
+                      <Text style={styles.dayPill}>{formatDayLabel(item.created_at)}</Text>
+                    </View>
+                  )}
+                  <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
+                    <Pressable
+                      onLongPress={() => setMsgAction(item)}
+                      delayLongPress={280}
+                      style={[
+                        styles.bubble,
+                        mine ? styles.bubbleMine : styles.bubbleTheirs,
+                        isMedia && styles.bubbleMedia,
+                      ]}
+                    >
+                      {item.kind === 'audio' && item.media_path ? (
+                        <VoiceBubble
+                          path={item.media_path}
+                          mine={mine}
+                          onLongPress={() => setMsgAction(item)}
+                        />
+                      ) : item.kind === 'image' && item.media_path ? (
+                        <Pressable
+                          onPress={() => setFullImage(chatMediaUrl(item.media_path!))}
+                          onLongPress={() => setMsgAction(item)}
+                          delayLongPress={280}
+                        >
+                          <Image
+                            source={{ uri: chatMediaUrl(item.media_path) }}
+                            style={styles.mediaBubble}
+                            contentFit="cover"
+                            transition={150}
+                          />
+                        </Pressable>
+                      ) : item.kind === 'video' && item.media_path ? (
+                        <VideoBubble path={item.media_path} />
+                      ) : (
+                        <Text style={[styles.bubbleText, mine && { color: '#fff' }]}>
+                          {item.content}
+                        </Text>
+                      )}
+                      {/* Sur les médias, l'heure se pose sur l'image dans une
+                          petite pastille sombre ; sinon en pied de bulle. */}
+                      {isMedia ? (
+                        <View style={styles.mediaMeta}>{meta}</View>
+                      ) : (
+                        <View style={styles.metaRow}>{meta}</View>
+                      )}
+                    </Pressable>
+                    {msgReactions.length > 0 && (
+                      <View style={styles.reactionsPill}>
+                        {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
+                          const count = msgReactions.filter((r) => r.emoji === emoji).length;
+                          return (
+                            <Text key={emoji} style={styles.reactionText}>
+                              {emoji}
+                              {count > 1 ? ` ${count}` : ''}
+                            </Text>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {/* Le libellé d'état n'accompagne que mon dernier message. */}
+                    {mine && item.id === lastMineId && (
+                      <Text
+                        style={[
+                          styles.statusText,
+                          !item.pending && item.read_at !== null && { color: colors.accent },
+                        ]}
+                      >
+                        {item.pending ? 'Envoi…' : item.read_at ? 'Lu' : 'Distribué'}
                       </Text>
                     )}
-                  </Pressable>
-                  {msgReactions.length > 0 && (
-                    <View style={styles.reactionsPill}>
-                      {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
-                        const count = msgReactions.filter((r) => r.emoji === emoji).length;
-                        return (
-                          <Text key={emoji} style={styles.reactionText}>
-                            {emoji}
-                            {count > 1 ? ` ${count}` : ''}
-                          </Text>
-                        );
-                      })}
-                    </View>
-                  )}
-                  {/* État du message : horloge le temps de l'envoi, une coche
-                      quand le serveur l'a distribué, deux coches roses quand
-                      l'autre l'a lu. Le libellé n'accompagne que le dernier. */}
-                  {mine && (
-                    <View style={styles.statusRow}>
-                      {item.pending ? (
-                        <>
-                          <Ionicons name="time-outline" size={13} color={colors.textMuted} />
-                          {item.id === lastMineId && (
-                            <Text style={styles.statusText}>Envoi…</Text>
-                          )}
-                        </>
-                      ) : item.read_at ? (
-                        <>
-                          <Ionicons name="checkmark-done" size={14} color={colors.accent} />
-                          {item.id === lastMineId && (
-                            <Text style={[styles.statusText, { color: colors.accent }]}>Lu</Text>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark" size={14} color={colors.textMuted} />
-                          {item.id === lastMineId && (
-                            <Text style={styles.statusText}>Distribué</Text>
-                          )}
-                        </>
-                      )}
-                    </View>
-                  )}
+                  </View>
                 </View>
               );
             }}
@@ -679,7 +811,7 @@ export default function Chat() {
               onPress={sendRecording}
               disabled={sending}
             >
-              <Ionicons name="send" size={20} color={colors.textOnAccent} />
+              <Ionicons name="paper-plane" size={20} color={colors.textOnAccent} />
             </Pressable>
           </View>
         ) : (
@@ -691,14 +823,14 @@ export default function Chat() {
               hitSlop={6}
             >
               {sendingMedia ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={colors.accent} />
               ) : (
-                <Ionicons name="image-outline" size={22} color={colors.primary} />
+                <Ionicons name="image-outline" size={22} color={colors.accent} />
               )}
             </Pressable>
             <TextInput
               style={styles.input}
-              placeholder="Écris un message…"
+              placeholder="Tape ton message"
               placeholderTextColor={colors.textMuted}
               value={draft}
               onChangeText={setDraft}
@@ -711,7 +843,7 @@ export default function Chat() {
                 onPress={send}
                 disabled={sending}
               >
-                <Ionicons name="send" size={20} color={colors.textOnAccent} />
+                <Ionicons name="paper-plane" size={20} color={colors.textOnAccent} />
               </Pressable>
             ) : (
               <Pressable
@@ -794,17 +926,25 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1 },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  headerAvatar: { width: 32, height: 32, borderRadius: 16 },
+  headerAvatar: { width: 38, height: 38, borderRadius: 19 },
   headerAvatarFallback: {
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerAvatarLetter: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  headerAvatarLetter: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  // Pastille du badge certifié, superposée en bas à gauche de l'avatar.
+  headerBadge: {
+    position: 'absolute',
+    bottom: -2,
+    left: -3,
+    backgroundColor: colors.cardSolid,
+    borderRadius: 9,
+  },
   headerName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
-    color: colors.primaryDeep,
+    color: colors.text,
     maxWidth: 200,
   },
   list: { padding: spacing.md, gap: 6, flexGrow: 1 },
@@ -816,18 +956,54 @@ const styles = StyleSheet.create({
   },
   msgColMine: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '78%' },
   msgColTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '78%' },
+  // Espace entre deux groupes de parole (6 de gap + 8 = 14).
+  groupGap: { marginTop: 8 },
+  dayRow: { alignItems: 'center', marginVertical: spacing.sm },
+  dayPill: {
+    backgroundColor: 'rgba(70,60,70,0.7)',
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+  },
   bubble: {
-    borderRadius: radius.lg,
+    borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   bubbleMine: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
+    backgroundColor: colors.accent,
+    borderBottomRightRadius: 6,
   },
   bubbleTheirs: {
-    backgroundColor: colors.surface,
-    borderBottomLeftRadius: 4,
+    backgroundColor: colors.cardSolid,
+    borderBottomLeftRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-end',
+    marginTop: 2,
+  },
+  metaTime: { fontSize: 11 },
+  // Sur une photo ou une vidéo : petite pastille sombre en bas à droite.
+  mediaMeta: {
+    position: 'absolute',
+    bottom: 9,
+    right: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: radius.full,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
   reactionsPill: {
     flexDirection: 'row',
@@ -842,14 +1018,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   reactionText: { fontSize: 13 },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
     marginTop: 2,
     marginRight: 4,
   },
-  statusText: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
   actionOverlay: {
     flex: 1,
     backgroundColor: 'rgba(14,15,12,.55)',
@@ -887,40 +1062,43 @@ const styles = StyleSheet.create({
   },
   actionRowText: { fontSize: 16, color: colors.text },
   actionRowTextDanger: { fontSize: 16, color: colors.danger, fontWeight: '600' },
-  bubbleText: { fontSize: 15, color: colors.text, lineHeight: 21 },
+  bubbleText: { fontSize: 16, color: colors.text, lineHeight: 22 },
+  // Barre de saisie posée directement sur le fond, sans bandeau.
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
   },
   input: {
     flex: 1,
-    minHeight: 42,
+    minHeight: 46,
     maxHeight: 120,
     borderRadius: radius.full,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    backgroundColor: colors.cardSolid,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     fontSize: 15,
     color: colors.text,
   },
   sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.surface,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.cardSolid,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -930,7 +1108,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.sm,
-    minHeight: 42,
+    minHeight: 46,
   },
   recordingDot: {
     width: 10,
@@ -948,10 +1126,12 @@ const styles = StyleSheet.create({
   },
   voiceText: { fontSize: 14, fontWeight: '600' },
   attachBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.surface,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.cardSolid,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

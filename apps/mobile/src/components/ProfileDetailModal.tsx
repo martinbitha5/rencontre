@@ -31,9 +31,10 @@ import {
   GOAL_OPTIONS,
   HAS_CHILDREN_OPTIONS,
   WANTS_CHILDREN_OPTIONS,
+  interestEmoji,
   labelFor,
 } from '../profileOptions';
-import { colors, onLight, radius, spacing } from '../theme';
+import { colors, isDark, onLight, radius, spacing } from '../theme';
 import { activeLabel, ageFromBirthDate, type ViewableProfile } from '../types';
 
 interface Props {
@@ -53,6 +54,12 @@ interface Props {
   isSelf?: boolean;
 }
 
+// Rose des cercles de stats en thème clair : plus clair que l'accent pour
+// rester doux sur la bande pâle ; en sombre, l'accent garde le contraste.
+const STAT_CIRCLE = isDark ? colors.accent : '#ee76d3';
+
+// Rangée d'infos style Heyama : cercle à liseré rose avec icône accent,
+// libellé gris à gauche, valeur alignée à droite sur une seule ligne.
 function DetailLine({
   icon,
   label,
@@ -65,15 +72,20 @@ function DetailLine({
   if (!value) return null;
   return (
     <View style={styles.detailRow}>
-      <Ionicons name={icon} size={16} color={colors.textMuted} />
+      <View style={styles.detailIcon}>
+        <Ionicons name={icon} size={16} color={colors.accent} />
+      </View>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="tail">
+        {value}
+      </Text>
     </View>
   );
 }
 
-// Pastille d'info : icône dans un cercle, label gris, valeur en vert forêt.
-function FactPill({
+// Colonne de la bande de stats : grand cercle rose à icône blanche, libellé
+// puis valeur en accent. Une valeur absente fait disparaître la colonne.
+function StatColumn({
   icon,
   label,
   value,
@@ -84,18 +96,18 @@ function FactPill({
 }) {
   if (!value) return null;
   return (
-    <View style={styles.fact}>
-      <View style={styles.factIcon}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
+    <View style={styles.stat}>
+      <View style={styles.statCircle}>
+        <Ionicons name={icon} size={26} color="#ffffff" />
       </View>
-      <Text style={styles.factLabel}>{label}</Text>
-      <Text style={styles.factValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
     </View>
   );
 }
 
 // Vue profil complète, structure fiche Heyama : photo de couverture avec badge
-// d'intention, feuille blanche arrondie (à propos, intérêts, infos), actions.
+// d'intention, feuille arrondie (à propos, intérêts, stats, infos), actions.
 export function ProfileDetailModal({
   profile,
   onClose,
@@ -193,6 +205,7 @@ export function ProfileDetailModal({
   const goal = labelFor(GOAL_OPTIONS, profile.relationship_goal);
   const online = activeLabel(profile.last_active_at);
   const hasActions = !!(onLike || onDislike || onMessage);
+  const age = ageFromBirthDate(profile.birth_date);
 
   // Glissement depuis le bord gauche pour fermer, comme un retour système.
   // Partout ailleurs le geste horizontal appartient aux photos.
@@ -278,7 +291,7 @@ export function ProfileDetailModal({
                   )}
                   <View style={styles.nameRow}>
                     <Text style={styles.name}>
-                      {profile.display_name}, {ageFromBirthDate(profile.birth_date)}
+                      {profile.display_name}, {age}
                     </Text>
                     {profile.is_verified && <VerifiedBadge size={22} />}
                   </View>
@@ -291,7 +304,7 @@ export function ProfileDetailModal({
                 </LinearGradient>
               </View>
 
-              {/* Feuille blanche arrondie qui recouvre le bas de la photo */}
+              {/* Feuille arrondie qui recouvre le bas de la photo */}
               <View style={styles.sheet}>
                 <View style={styles.sheetHandle} />
 
@@ -306,68 +319,74 @@ export function ProfileDetailModal({
                     <Text style={styles.metaText}>{online}</Text>
                   </View>
                 )}
-                {!!profile.job_title && (
-                  <View style={styles.metaRow}>
-                    <Ionicons name="briefcase-outline" size={15} color={colors.textMuted} />
-                    <Text style={styles.metaText}>{profile.job_title}</Text>
-                  </View>
-                )}
 
                 {!!profile.bio && (
                   <>
-                    <Text style={styles.sectionTitle}>À propos</Text>
+                    <Text style={styles.sectionTitle}>{"À propos"}</Text>
                     <Text style={styles.bio}>{profile.bio}</Text>
                   </>
                 )}
 
                 {(profile.interests ?? []).length > 0 && (
                   <>
-                    <Text style={styles.sectionTitle}>Centres d'intérêt</Text>
+                    <Text style={styles.sectionTitle}>{"Centres d'intérêt"}</Text>
                     <View style={styles.chips}>
                       {profile.interests.map((i) => (
                         <View key={i} style={styles.chip}>
-                          <Text style={styles.chipText}>{i}</Text>
+                          <Text style={styles.chipText}>
+                            {interestEmoji(i)} {i}
+                          </Text>
                         </View>
                       ))}
                     </View>
                   </>
                 )}
 
-                {/* Rangée de pastilles Sexe / Âge / Taille */}
-                <View style={styles.factsRow}>
-                  <FactPill
-                    icon="person-outline"
+                {/* Bande de stats pleine largeur : Sexe / Âge / Taille sur
+                    fond rose pâle, la feuille compense son propre padding. */}
+                <View style={styles.statsBand}>
+                  <StatColumn
+                    icon="person"
                     label="Sexe"
-                    value={profile.gender === 'homme' ? 'Homme' : 'Femme'}
+                    value={
+                      profile.gender ? (profile.gender === 'homme' ? 'Homme' : 'Femme') : null
+                    }
                   />
-                  <FactPill
-                    icon="calendar-outline"
-                    label="Âge"
-                    value={`${ageFromBirthDate(profile.birth_date)} ans`}
-                  />
-                  <FactPill
-                    icon="resize-outline"
+                  <StatColumn icon="calendar" label="Âge" value={age ? `${age} ans` : null} />
+                  <StatColumn
+                    icon="shirt-outline"
                     label="Taille"
                     value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null}
                   />
                 </View>
 
+                <Text style={styles.sectionTitle}>{"Pays d'origine"}</Text>
+                <Text style={styles.countryValue}>
+                  {"République démocratique du Congo 🇨🇩"}
+                </Text>
+
                 <Text style={styles.sectionTitle}>
-                  Plus d'infos sur {profile.display_name}
+                  {"Plus d'infos sur "}
+                  {profile.display_name}
                 </Text>
                 <View style={styles.detailCard}>
-                  <DetailLine icon="location-outline" label="Localisation" value={place || null} />
+                  <DetailLine icon="location" label="Localisation" value={place || null} />
+                  <DetailLine
+                    icon="globe-outline"
+                    label="Langues parlées"
+                    value={(profile.languages ?? []).length ? profile.languages.join(', ') : null}
+                  />
+                  <DetailLine
+                    icon="briefcase-outline"
+                    label="Profession"
+                    value={profile.job_title}
+                  />
                   <DetailLine
                     icon="school-outline"
                     label="Études"
                     value={labelFor(EDUCATION_OPTIONS, profile.education)}
                   />
                   <DetailLine icon="book-outline" label="Religion" value={profile.religion} />
-                  <DetailLine
-                    icon="chatbox-ellipses-outline"
-                    label="Langues"
-                    value={(profile.languages ?? []).length ? profile.languages.join(', ') : null}
-                  />
                   <DetailLine
                     icon="people-outline"
                     label="A des enfants"
@@ -404,7 +423,7 @@ export function ProfileDetailModal({
                   >
                     <Text style={styles.safetyAction}>SIGNALER CE PROFIL</Text>
                     <Text style={styles.safetyHint}>
-                      L'utilisateur ne verra jamais ce signalement.
+                      {"L'utilisateur ne verra jamais ce message."}
                     </Text>
                   </Pressable>
 
@@ -416,11 +435,9 @@ export function ProfileDetailModal({
                     accessibilityRole="button"
                     accessibilityLabel={`Bloquer ${profile.display_name}`}
                   >
-                    <Text style={styles.safetyAction}>
-                      BLOQUER {profile.display_name?.toUpperCase()}
-                    </Text>
+                    <Text style={styles.safetyAction}>BLOQUER</Text>
                     <Text style={styles.safetyHint}>
-                      Tu ne verras plus son profil et il/elle ne verra plus le tien.
+                      {"Tu ne verras plus son profil et il/elle ne verra plus le tien."}
                     </Text>
                   </Pressable>
                 </View>
@@ -445,19 +462,16 @@ export function ProfileDetailModal({
               <GlassSurface intensity={55} style={styles.actions}>
                 <View style={styles.actionsRow}>
                   {onDislike && (
-                    <PressableScale style={styles.actionBtn} onPress={onDislike}>
+                    <PressableScale style={styles.dislikeBtn} onPress={onDislike}>
                       <View style={styles.actionInner}>
-                        <Ionicons name="close" size={30} color={colors.danger} />
+                        <Ionicons name="close" size={30} color={onLight.ink} />
                       </View>
                     </PressableScale>
                   )}
                   {onMessage && (
-                    <PressableScale
-                      style={[styles.actionBtn, styles.msgBtn]}
-                      onPress={onMessage}
-                    >
+                    <PressableScale style={styles.msgBtn} onPress={onMessage}>
                       <View style={styles.actionInner}>
-                        <Ionicons name="chatbubble" size={24} color={colors.textOnPrimary} />
+                        <Ionicons name="chatbubble" size={24} color="#ffffff" />
                         <View style={styles.msgCoin}>
                           <CoinIcon size={10} color={COIN_ON_GOLD} />
                         </View>
@@ -465,12 +479,9 @@ export function ProfileDetailModal({
                     </PressableScale>
                   )}
                   {onLike && (
-                    <PressableScale style={[styles.actionBtn, styles.likeBtn]} onPress={onLike}>
+                    <PressableScale style={styles.likeBtn} onPress={onLike}>
                       <View style={styles.actionInner}>
-                        {/* Encre sur fond accent : `primary` et `accent` sont
-                            la même couleur en thème sombre, le cœur devenait
-                            invisible sur son propre bouton. */}
-                        <Ionicons name="heart" size={28} color={colors.textOnAccent} />
+                        <Ionicons name="heart" size={28} color="#ffffff" />
                         {!!likeCost && (
                           <View style={styles.costBadge}>
                             <CoinIcon size={10} color={COIN_ON_GOLD} />
@@ -542,11 +553,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingTop: spacing.sm,
   },
+  // Petite poignée grise centrée, langage bottom sheet.
   sheetHandle: {
     alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 3,
+    width: 36,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: colors.border,
     marginBottom: spacing.sm,
   },
@@ -558,49 +570,56 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: colors.success,
   },
+  // Titres de section discrets : gris, la valeur porte le contraste.
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.primaryDeep,
-    marginTop: spacing.md,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  bio: { fontSize: 15, color: colors.text, lineHeight: 22 },
+  bio: { fontSize: 17, color: colors.text, lineHeight: 24 },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: 10,
   },
+  // Pilules opaques à liseré fin : emoji + libellé.
   chip: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.cardSolid,
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  factsRow: {
+  chipText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  // Bande de stats pleine largeur : compense le padding horizontal de la
+  // feuille pour toucher les deux bords de l'écran.
+  statsBand: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    marginHorizontal: -spacing.md,
+    marginTop: spacing.lg,
+    paddingVertical: 20,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.washTo,
   },
-  fact: {
+  stat: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
+    gap: 6,
   },
-  factIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.card,
+  statCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: STAT_CIRCLE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  factLabel: { fontSize: 12, color: colors.textMuted },
-  factValue: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  statLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
+  statValue: { fontSize: 14, fontWeight: '600', color: colors.accent },
+  countryValue: { fontSize: 16, color: colors.text },
   // Tirets de progression des photos, posés en haut de la grande photo,
   // même langage que le deck Rencontres.
   coverDashes: {
@@ -618,20 +637,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,.4)',
   },
   coverDashActive: { backgroundColor: '#ffffff' },
-  detailCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm,
+  detailCard: { gap: spacing.sm + 2 },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4 },
+  // Cercle à liseré rose, fond transparent : l'icône accent respire dedans.
+  detailIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  detailLabel: { fontSize: 14, color: colors.textMuted, flex: 1 },
+  detailLabel: { fontSize: 15, color: colors.textMuted, flex: 1 },
   detailValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
     flexShrink: 1,
     textAlign: 'right',
+    maxWidth: '55%',
   },
   closeBtn: {
     position: 'absolute',
@@ -691,26 +717,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xl,
   },
-  actionBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-  },
   actionInner: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  msgBtn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  // X : cercle blanc quel que soit le thème, croix en encre sombre fixe.
+  dislikeBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  // Bulle : violet foncé, hors palette rose, pour marquer le message payant.
+  msgBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.purpleDark,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
   // Pastilles or : les coûts en pièces gardent la couleur de la monnaie,
   // jamais le rose de la marque.
   msgCoin: {
@@ -724,7 +760,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  likeBtn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  // Coeur : cercle accent plein, coeur blanc.
+  likeBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.accent,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
   costBadge: {
     position: 'absolute',
     top: -6,

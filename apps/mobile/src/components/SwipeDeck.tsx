@@ -214,7 +214,7 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
           {/* Tampons posés sur une pastille blanche : couleurs fixes, les
               variantes claires du thème sombre s'y délavaient. */}
           <Animated.View style={[styles.stamp, styles.likeStamp, likeStyle]}>
-            <Text style={[styles.stampText, { color: onLight.success }]}>J'AIME</Text>
+            <Text style={[styles.stampText, { color: onLight.success }]}>{"J'AIME"}</Text>
           </Animated.View>
           <Animated.View style={[styles.stamp, styles.nopeStamp, nopeStyle]}>
             <Text style={[styles.stampText, { color: onLight.danger }]}>NON</Text>
