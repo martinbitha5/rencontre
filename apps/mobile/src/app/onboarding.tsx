@@ -15,6 +15,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  FadeInDown,
+  FadeInLeft,
+  FadeInRight,
+  ReduceMotion,
+  ZoomIn,
+} from 'react-native-reanimated';
 import {
   deletePhoto,
   getCities,
@@ -23,7 +30,19 @@ import {
   updateMyProfile,
   uploadPhoto,
 } from '../api';
-import { Button, ErrorText, StepTitle, WizardHeader } from '../components/ui';
+import {
+  AmbientBackground,
+  BounceChip,
+  ChoiceTile,
+  FocusLine,
+  GradientButton,
+  HeightSlider,
+  OnboardingHeader,
+  OptionCard,
+  SegmentPills,
+  StepBadge,
+} from '../components/onboarding-kit';
+import { OnboardingWelcome } from '../components/OnboardingWelcome';
 import { useAuth } from '../lib/auth';
 import { detectCity } from '../lib/cityGeo';
 import { haptic } from '../lib/haptics';
@@ -62,71 +81,97 @@ const STEPS = [
 type Step = (typeof STEPS)[number];
 
 // Étapes que l'on peut sauter : elles enrichissent le profil sans être
-// nécessaires au fonctionnement de l'app.
-const OPTIONAL_STEPS: Step[] = [
-  'about',
-  'lifestyle',
-  'children',
-  'background',
-  'interests',
-  'bio',
-];
+// nécessaires au fonctionnement de l'app. Les centres d'intérêt n'en font
+// PAS partie : ce sont eux qui lancent les conversations, un profil sans
+// aucun centre d'intérêt n'accroche personne.
+const OPTIONAL_STEPS: Step[] = ['about', 'lifestyle', 'children', 'background', 'bio'];
 
-const STEP_META: Record<Step, { title: string; subtitle: string }> = {
+// Nombre minimum de centres d'intérêt à choisir pour continuer.
+const MIN_INTERESTS = 5;
+
+// Chaque étape a sa personnalité : une icône, un titre, un sous-titre. C'est
+// la pastille d'icône qui change d'une question à l'autre et donne le rythme.
+const STEP_META: Record<
+  Step,
+  { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string }
+> = {
   name: {
+    icon: 'person',
     title: "Comment tu t'appelles ?",
     subtitle: "C'est le prénom que les autres verront.",
   },
   birthdate: {
+    icon: 'calendar',
     title: 'Ta date de naissance',
     subtitle: 'Seul ton âge sera affiché sur ton profil.',
   },
   gender: {
+    icon: 'male-female',
     title: 'Toi, et qui tu cherches',
     subtitle: 'Ces réponses déterminent les profils qui te seront proposés.',
   },
   goal: {
+    icon: 'heart',
     title: 'Ce que tu recherches',
     subtitle: 'Affiché sur ton profil, pour croiser des personnes du même avis.',
   },
   city: {
+    icon: 'location',
     title: 'Où vis-tu ?',
     subtitle: 'Ta ville est vérifiée avec ta position.',
   },
   photos: {
+    icon: 'camera',
     title: 'Tes photos',
     subtitle: "Au moins une, jusqu'à six. La première est ta photo principale.",
   },
   about: {
+    icon: 'briefcase',
     title: 'Ton profil',
     subtitle: 'Ces informations apparaissent sur ta fiche, sous tes photos.',
   },
   lifestyle: {
+    icon: 'wine',
     title: 'Ton mode de vie',
     subtitle: 'Tabac et alcool : deux réponses qui évitent bien des malentendus.',
   },
   children: {
+    icon: 'people',
     title: 'Les enfants',
     subtitle: 'Un sujet qui compte pour beaucoup de monde, autant être clair.',
   },
   background: {
+    icon: 'earth',
     title: 'Religion et langues',
     subtitle: 'Ce qui aide à se comprendre dès le premier message.',
   },
   interests: {
+    icon: 'color-palette',
     title: "Tes centres d'intérêt",
     subtitle: 'Choisis ce qui te ressemble : ce sont souvent eux qui lancent la conversation.',
   },
   bio: {
+    icon: 'create',
     title: 'Quelques mots sur toi',
     subtitle: 'La touche personnelle qui donne envie de répondre.',
   },
+};
+
+// Icône de chaque intention : la carte porte son caractère.
+const GOAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  relation_serieuse: 'heart',
+  mariage: 'diamond',
+  amitie: 'people',
+  rien_de_serieux: 'happy',
+  je_me_laisse_surprendre: 'sparkles',
 };
 
 const BIO_MAX = 500;
 const MAX_PHOTOS = 6;
 const MIN_AGE = 18;
 const MAX_AGE = 100;
+const HEIGHT_MIN = 100;
+const HEIGHT_MAX = 250;
 
 // Bornes de la roue de date : on ne peut pas choisir une date qui donnerait
 // moins de 18 ans, la règle est portée par le sélecteur lui-même.
@@ -166,74 +211,15 @@ function profileSaveError(e: unknown): string {
   return msg ? `Enregistrement refusé : ${msg}` : "Impossible d'enregistrer le profil. Réessaie.";
 }
 
-// Groupe de pastilles à choix multiple (langues, centres d'intérêt).
-function ChipGroup({
-  options,
-  values,
-  onToggle,
-}: {
-  options: string[];
-  values: string[];
-  onToggle: (v: string) => void;
-}) {
+// Libellé de section à l'intérieur d'une étape (Je suis / Tabac / Religion...).
+function SectionLabel({ children, delay = 0 }: { children: string; delay?: number }) {
   return (
-    <View style={styles.chipWrap}>
-      {options.map((o) => {
-        const on = values.includes(o);
-        return (
-          <Pressable
-            key={o}
-            onPress={() => {
-              haptic.select();
-              onToggle(o);
-            }}
-            style={({ pressed }) => [
-              styles.chip,
-              on && styles.chipOn,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={[styles.chipText, on && styles.chipTextOn]}>{o}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-// Rangée de liste iOS : libellé à gauche, coche à droite quand sélectionnée.
-// Les rangées vivent dans un groupe arrondi, séparées par un filet.
-function SelectRow({
-  label,
-  hint,
-  selected,
-  first,
-  onPress,
-}: {
-  label: string;
-  hint?: string;
-  selected?: boolean;
-  first?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={() => {
-        haptic.select();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.row,
-        !first && styles.rowDivider,
-        pressed && { backgroundColor: colors.surface },
-      ]}
+    <Animated.Text
+      entering={FadeInDown.duration(240).delay(delay).reduceMotion(ReduceMotion.System)}
+      style={styles.sectionLabel}
     >
-      <View style={styles.rowBody}>
-        <Text style={[styles.rowLabel, selected && styles.rowLabelOn]}>{label}</Text>
-        {!!hint && <Text style={styles.rowHint}>{hint}</Text>}
-      </View>
-      {selected && <Ionicons name="checkmark" size={21} color={colors.accent} />}
-    </Pressable>
+      {children}
+    </Animated.Text>
   );
 }
 
@@ -242,6 +228,10 @@ export default function Onboarding() {
   const [stepIndex, setStepIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 'form' : le parcours. 'done' : profil enregistré, place à la célébration.
+  // La bascule vers l'app ne part que du bouton « Découvrir » de la page de
+  // bienvenue : c'est refreshProfile qui fait naviguer la garde de _layout.
+  const [phase, setPhase] = useState<'form' | 'done'>('form');
 
   const [name, setName] = useState('');
   const [birthDate, setBirthDate] = useState<Date | null>(null);
@@ -270,6 +260,10 @@ export default function Onboarding() {
   const [detectedCity, setDetectedCity] = useState<City | null>(null);
   const detectionStarted = useRef(false);
   const cityConfirmed = useRef(false);
+  // Sens de navigation : le contenu de l'étape entre par la droite en avançant,
+  // par la gauche en revenant.
+  const direction = useRef<1 | -1>(1);
+  const scrollRef = useRef<ScrollView>(null);
 
   const step: Step = STEPS[stepIndex];
   const meta = STEP_META[step];
@@ -348,14 +342,26 @@ export default function Onboarding() {
       case 'about': {
         if (height === '') return null;
         const h = Number(height);
-        return Number.isFinite(h) && h >= 100 && h <= 250
+        return Number.isFinite(h) && h >= HEIGHT_MIN && h <= HEIGHT_MAX
           ? null
           : 'Indique ta taille en centimètres (100 à 250).';
+      }
+      case 'interests': {
+        const left = MIN_INTERESTS - interests.length;
+        return left <= 0
+          ? null
+          : `Choisis encore ${left} centre${left > 1 ? 's' : ''} d'intérêt.`;
       }
       default:
         // Étapes de complétion : rien n'est exigé.
         return null;
     }
+  };
+
+  const goTo = (index: number, dir: 1 | -1) => {
+    direction.current = dir;
+    setStepIndex(index);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
 
   const next = async () => {
@@ -376,14 +382,14 @@ export default function Onboarding() {
             text: `Utiliser ${detectedCity.name}`,
             onPress: () => {
               setCityId(detectedCity.id);
-              setStepIndex(stepIndex + 1);
+              goTo(stepIndex + 1, 1);
             },
           },
           {
             text: `Garder ${chosenCity?.name ?? 'mon choix'}`,
             onPress: () => {
               cityConfirmed.current = true;
-              setStepIndex(stepIndex + 1);
+              goTo(stepIndex + 1, 1);
             },
           },
         ],
@@ -393,7 +399,7 @@ export default function Onboarding() {
 
     if (stepIndex < STEPS.length - 1) {
       haptic.tap();
-      setStepIndex(stepIndex + 1);
+      goTo(stepIndex + 1, 1);
       return;
     }
 
@@ -421,8 +427,10 @@ export default function Onboarding() {
         interests,
         is_onboarded: true,
       });
-      haptic.success();
-      await refreshProfile();
+      // Le profil est enregistré : place à la célébration. refreshProfile ne
+      // part qu'au « Découvrir » de la page de bienvenue, sinon la garde de
+      // navigation nous arracherait l'écran des mains.
+      setPhase('done');
     } catch (e) {
       setError(profileSaveError(e));
     } finally {
@@ -433,7 +441,7 @@ export default function Onboarding() {
   const back = () => {
     if (stepIndex > 0) {
       setError(null);
-      setStepIndex(stepIndex - 1);
+      goTo(stepIndex - 1, -1);
     }
   };
 
@@ -481,444 +489,602 @@ export default function Onboarding() {
 
   const isLast = stepIndex === STEPS.length - 1;
 
+  // ------------------------------------------------------------------
+  // Profil enregistré : la page de bienvenue prend tout l'écran.
+  // ------------------------------------------------------------------
+  if (phase === 'done') {
+    return <OnboardingWelcome name={name.trim()} onEnter={refreshProfile} />;
+  }
+
+  const stepEntering = (direction.current === 1 ? FadeInRight : FadeInLeft)
+    .duration(260)
+    .reduceMotion(ReduceMotion.System);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <AmbientBackground />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
-        <WizardHeader step={stepIndex + 1} total={STEPS.length} onBack={back} />
+        <OnboardingHeader step={stepIndex + 1} total={STEPS.length} onBack={back} />
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <StepTitle title={meta.title} subtitle={meta.subtitle} />
+          {/* Le contenu entier de l'étape entre d'un seul mouvement, dans le
+              sens de la navigation ; à l'intérieur, pastille, titre et corps
+              se décalent de quelques dizaines de millisecondes. */}
+          <Animated.View key={step} entering={stepEntering}>
+            <View style={styles.titleBlock}>
+              <StepBadge icon={meta.icon} />
+              <Animated.Text
+                entering={FadeInDown.duration(260).delay(40).reduceMotion(ReduceMotion.System)}
+                style={styles.title}
+              >
+                {meta.title}
+              </Animated.Text>
+              <Animated.Text
+                entering={FadeInDown.duration(260).delay(90).reduceMotion(ReduceMotion.System)}
+                style={styles.subtitle}
+              >
+                {meta.subtitle}
+              </Animated.Text>
+            </View>
 
-          <View style={styles.body}>
-            {step === 'name' && (
-              <View style={styles.group}>
-                <TextInput
-                  style={styles.field}
-                  placeholder="Prénom"
-                  placeholderTextColor={colors.textMuted}
-                  value={name}
-                  onChangeText={setName}
-                  maxLength={50}
-                  autoFocus
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                />
-              </View>
-            )}
+            <View style={styles.body}>
+              {step === 'name' && (
+                <Animated.View
+                  entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                  style={styles.nameBlock}
+                >
+                  <TextInput
+                    style={styles.nameField}
+                    placeholder="Ton prénom"
+                    placeholderTextColor={colors.textMuted}
+                    value={name}
+                    onChangeText={setName}
+                    maxLength={50}
+                    autoFocus
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                  <FocusLine active={name.trim().length >= 2} />
+                  <Text style={styles.nameHint}>
+                    {name.trim().length >= 2
+                      ? 'Parfait, ça sonne bien.'
+                      : 'Au moins 2 caractères.'}
+                  </Text>
+                </Animated.View>
+              )}
 
-            {step === 'birthdate' && (
-              <>
-                {/* Roue de date native : on fait défiler jour, mois et année,
-                    et la borne des 18 ans est portée par le sélecteur. */}
-                {Platform.OS === 'ios' ? (
-                  <View style={styles.wheelCard}>
-                    <DateTimePicker
-                      value={birthDate ?? DEFAULT_DATE}
-                      mode="date"
-                      display="spinner"
-                      locale="fr-FR"
-                      maximumDate={MAX_DATE}
-                      minimumDate={MIN_DATE}
-                      textColor={colors.text}
-                      onChange={(_, d) => d && setBirthDate(d)}
-                      style={styles.wheel}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    <Pressable
-                      style={styles.group}
-                      onPress={() => {
-                        haptic.tap();
-                        setPickerOpen(true);
-                      }}
+              {step === 'birthdate' && (
+                <>
+                  {/* Roue de date native : on fait défiler jour, mois et année,
+                      et la borne des 18 ans est portée par le sélecteur. */}
+                  {Platform.OS === 'ios' ? (
+                    <Animated.View
+                      entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                      style={styles.wheelCard}
                     >
-                      <View style={styles.rowSingle}>
-                        <Text style={birthDate ? styles.rowValue : styles.rowPlaceholder}>
-                          {birthDate ? DATE_FMT.format(birthDate) : 'Choisir ma date'}
-                        </Text>
-                        <Ionicons name="calendar-outline" size={20} color={colors.textMuted} />
-                      </View>
-                    </Pressable>
-                    {pickerOpen && (
                       <DateTimePicker
                         value={birthDate ?? DEFAULT_DATE}
                         mode="date"
                         display="spinner"
+                        locale="fr-FR"
                         maximumDate={MAX_DATE}
                         minimumDate={MIN_DATE}
-                        onChange={(event, d) => {
-                          setPickerOpen(false);
-                          if (event.type === 'set' && d) setBirthDate(d);
-                        }}
+                        textColor={colors.text}
+                        onChange={(_, d) => d && setBirthDate(d)}
+                        style={styles.wheel}
                       />
-                    )}
-                  </>
-                )}
-
-                {birthDate && age !== null && (
-                  <Text style={styles.centerNote}>
-                    {DATE_FMT.format(birthDate)} · <Text style={styles.bold}>{age} ans</Text>
-                  </Text>
-                )}
-              </>
-            )}
-
-            {step === 'gender' && (
-              <>
-                <Text style={styles.groupLabel}>Je suis</Text>
-                <View style={styles.group}>
-                  <SelectRow
-                    first
-                    label="Un homme"
-                    selected={gender === 'homme'}
-                    onPress={() => setGender('homme')}
-                  />
-                  <SelectRow
-                    label="Une femme"
-                    selected={gender === 'femme'}
-                    onPress={() => setGender('femme')}
-                  />
-                </View>
-
-                <Text style={styles.groupLabel}>Je recherche</Text>
-                <View style={styles.group}>
-                  <SelectRow
-                    first
-                    label="Un homme"
-                    selected={lookingFor === 'homme'}
-                    onPress={() => setLookingFor('homme')}
-                  />
-                  <SelectRow
-                    label="Une femme"
-                    selected={lookingFor === 'femme'}
-                    onPress={() => setLookingFor('femme')}
-                  />
-                </View>
-              </>
-            )}
-
-            {step === 'goal' && (
-              <View style={styles.group}>
-                {GOAL_OPTIONS.map((o, i) => (
-                  <SelectRow
-                    key={o.value}
-                    first={i === 0}
-                    label={o.label}
-                    selected={goal === o.value}
-                    onPress={() => setGoal(o.value)}
-                  />
-                ))}
-              </View>
-            )}
-
-            {step === 'city' && (
-              <>
-                <View style={styles.searchField}>
-                  <Ionicons name="search" size={18} color={colors.textMuted} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Ta ville"
-                    placeholderTextColor={colors.textMuted}
-                    value={
-                      chosenCity
-                        ? `${chosenCity.name}, République démocratique du Congo`
-                        : cityQuery
-                    }
-                    onChangeText={(t) => {
-                      setCityId(null);
-                      setCityQuery(t);
-                    }}
-                    autoCorrect={false}
-                    autoCapitalize="words"
-                  />
-                  {(!!chosenCity || cityQuery.length > 0) && (
-                    <Pressable
-                      hitSlop={10}
-                      onPress={() => {
-                        setCityId(null);
-                        setCityQuery('');
-                      }}
-                    >
-                      <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                    </Pressable>
+                    </Animated.View>
+                  ) : (
+                    <>
+                      <Animated.View
+                        entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                      >
+                        <Pressable
+                          style={({ pressed }) => [styles.dateField, pressed && { opacity: 0.85 }]}
+                          onPress={() => {
+                            haptic.tap();
+                            setPickerOpen(true);
+                          }}
+                        >
+                          <Ionicons name="calendar-outline" size={20} color={colors.accent} />
+                          <Text style={birthDate ? styles.dateValue : styles.datePlaceholder}>
+                            {birthDate ? DATE_FMT.format(birthDate) : 'Choisir ma date'}
+                          </Text>
+                          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                        </Pressable>
+                      </Animated.View>
+                      {pickerOpen && (
+                        <DateTimePicker
+                          value={birthDate ?? DEFAULT_DATE}
+                          mode="date"
+                          display="spinner"
+                          maximumDate={MAX_DATE}
+                          minimumDate={MIN_DATE}
+                          onChange={(event, d) => {
+                            setPickerOpen(false);
+                            if (event.type === 'set' && d) setBirthDate(d);
+                          }}
+                        />
+                      )}
+                    </>
                   )}
-                </View>
 
-                {citySuggestions.length > 0 && (
-                  <View style={styles.group}>
-                    {citySuggestions.map((c, i) => (
+                  {birthDate && age !== null && (
+                    // La pastille d'âge sursaute à chaque nouvelle valeur : la
+                    // roue répond, on sait qu'on est entendu.
+                    <View style={styles.ageRow}>
+                      <Animated.View
+                        key={age}
+                        entering={ZoomIn.springify().damping(14).reduceMotion(ReduceMotion.System)}
+                        style={styles.agePill}
+                      >
+                        <Text style={styles.agePillText}>{age} ans</Text>
+                      </Animated.View>
+                      <Text style={styles.ageDate}>{DATE_FMT.format(birthDate)}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {step === 'gender' && (
+                <>
+                  <SectionLabel delay={120}>Je suis</SectionLabel>
+                  <View style={styles.tileRow}>
+                    <ChoiceTile
+                      icon="male"
+                      label="Un homme"
+                      selected={gender === 'homme'}
+                      onPress={() => setGender('homme')}
+                      index={0}
+                    />
+                    <ChoiceTile
+                      icon="female"
+                      label="Une femme"
+                      selected={gender === 'femme'}
+                      onPress={() => setGender('femme')}
+                      index={1}
+                    />
+                  </View>
+
+                  <SectionLabel delay={200}>Je recherche</SectionLabel>
+                  <View style={styles.tileRow}>
+                    <ChoiceTile
+                      icon="male"
+                      label="Un homme"
+                      selected={lookingFor === 'homme'}
+                      onPress={() => setLookingFor('homme')}
+                      index={2}
+                    />
+                    <ChoiceTile
+                      icon="female"
+                      label="Une femme"
+                      selected={lookingFor === 'femme'}
+                      onPress={() => setLookingFor('femme')}
+                      index={3}
+                    />
+                  </View>
+                </>
+              )}
+
+              {step === 'goal' && (
+                <View style={styles.cardStack}>
+                  {GOAL_OPTIONS.map((o, i) => (
+                    <OptionCard
+                      key={o.value}
+                      icon={GOAL_ICONS[o.value] ?? 'heart'}
+                      label={o.label}
+                      selected={goal === o.value}
+                      onPress={() => setGoal(o.value)}
+                      index={i}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {step === 'city' && (
+                <>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                    style={styles.searchField}
+                  >
+                    <Ionicons name="search" size={18} color={colors.accent} />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Ta ville"
+                      placeholderTextColor={colors.textMuted}
+                      value={
+                        chosenCity
+                          ? `${chosenCity.name}, République démocratique du Congo`
+                          : cityQuery
+                      }
+                      onChangeText={(t) => {
+                        setCityId(null);
+                        setCityQuery(t);
+                      }}
+                      autoCorrect={false}
+                      autoCapitalize="words"
+                    />
+                    {(!!chosenCity || cityQuery.length > 0) && (
                       <Pressable
-                        key={c.id}
-                        style={({ pressed }) => [
-                          styles.row,
-                          i > 0 && styles.rowDivider,
-                          pressed && { backgroundColor: colors.surface },
-                        ]}
+                        hitSlop={10}
                         onPress={() => {
-                          haptic.select();
-                          setCityId(c.id);
-                          setCityQuery(c.name);
-                          Keyboard.dismiss();
+                          setCityId(null);
+                          setCityQuery('');
                         }}
                       >
-                        <Text style={styles.rowBody} numberOfLines={1}>
-                          <Text style={styles.rowLabel}>{c.name}</Text>
-                          <Text style={styles.rowHint}>, République démocratique du Congo</Text>
-                        </Text>
-                        {detectedCity?.id === c.id && (
-                          <Ionicons name="navigate" size={16} color={colors.primary} />
-                        )}
+                        <Ionicons name="close-circle" size={18} color={colors.textMuted} />
                       </Pressable>
-                    ))}
-                  </View>
-                )}
+                    )}
+                  </Animated.View>
 
-                {!chosenCity && cityQuery.trim().length >= 2 && citySuggestions.length === 0 && (
-                  <Text style={styles.note}>
-                    Aucune ville trouvée. Dowe couvre les grandes villes de la RDC.
-                  </Text>
-                )}
+                  {citySuggestions.length > 0 && (
+                    <View style={styles.cardStack}>
+                      {citySuggestions.map((c, i) => (
+                        <Animated.View
+                          key={c.id}
+                          entering={FadeInDown.duration(220)
+                            .delay(i * 40)
+                            .reduceMotion(ReduceMotion.System)}
+                        >
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.cityCard,
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={() => {
+                              haptic.select();
+                              setCityId(c.id);
+                              setCityQuery(c.name);
+                              Keyboard.dismiss();
+                            }}
+                          >
+                            <View style={styles.cityIcon}>
+                              <Ionicons
+                                name={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
+                                size={16}
+                                color={colors.accent}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.cityName}>{c.name}</Text>
+                              <Text style={styles.cityHint}>
+                                {c.province} · République démocratique du Congo
+                              </Text>
+                            </View>
+                            {detectedCity?.id === c.id && (
+                              <Text style={styles.cityDetected}>Position</Text>
+                            )}
+                          </Pressable>
+                        </Animated.View>
+                      ))}
+                    </View>
+                  )}
 
-                {!!chosenCity && (
-                  <View style={styles.noteRow}>
-                    <Ionicons
-                      name={
-                        detectedCity?.id === chosenCity.id
-                          ? 'shield-checkmark'
-                          : 'information-circle-outline'
-                      }
-                      size={17}
-                      color={detectedCity?.id === chosenCity.id ? colors.success : colors.textMuted}
-                    />
+                  {!chosenCity && cityQuery.trim().length >= 2 && citySuggestions.length === 0 && (
                     <Text style={styles.note}>
-                      {detectedCity?.id === chosenCity.id
-                        ? 'Ville confirmée par ta position.'
-                        : `${chosenCity.name} · ${chosenCity.province}`}
+                      Aucune ville trouvée. Dowe couvre les grandes villes de la RDC.
+                    </Text>
+                  )}
+
+                  {!!chosenCity && (
+                    <Animated.View
+                      entering={FadeInDown.duration(240).reduceMotion(ReduceMotion.System)}
+                      style={styles.noteRow}
+                    >
+                      <Ionicons
+                        name={
+                          detectedCity?.id === chosenCity.id
+                            ? 'shield-checkmark'
+                            : 'information-circle-outline'
+                        }
+                        size={17}
+                        color={
+                          detectedCity?.id === chosenCity.id ? colors.success : colors.textMuted
+                        }
+                      />
+                      <Text style={styles.note}>
+                        {detectedCity?.id === chosenCity.id
+                          ? 'Ville confirmée par ta position.'
+                          : `${chosenCity.name} · ${chosenCity.province}`}
+                      </Text>
+                    </Animated.View>
+                  )}
+                </>
+              )}
+
+              {step === 'photos' && (
+                <>
+                  <View style={styles.photoGrid}>
+                    {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
+                      const photo = photos[i];
+                      if (photo) {
+                        return (
+                          <Animated.View
+                            key={photo.id}
+                            entering={ZoomIn.springify()
+                              .damping(15)
+                              .reduceMotion(ReduceMotion.System)}
+                            style={styles.photoCell}
+                          >
+                            <Image
+                              source={{ uri: photoUrl(photo.storage_path) }}
+                              style={styles.photoImg}
+                              contentFit="cover"
+                            />
+                            {i === 0 && (
+                              <View style={styles.mainTag}>
+                                <Ionicons name="star" size={9} color="#ffffff" />
+                                <Text style={styles.mainTagText}>Principale</Text>
+                              </View>
+                            )}
+                            <Pressable
+                              style={styles.photoRemove}
+                              onPress={() => removePhoto(photo)}
+                              hitSlop={8}
+                            >
+                              <Ionicons name="close" size={14} color="#ffffff" />
+                            </Pressable>
+                          </Animated.View>
+                        );
+                      }
+                      const isNext = i === photos.length;
+                      return (
+                        <Animated.View
+                          key={`empty-${i}`}
+                          entering={FadeInDown.duration(240)
+                            .delay(i * 40)
+                            .reduceMotion(ReduceMotion.System)}
+                          style={[styles.photoCell, styles.photoEmpty, isNext && styles.photoNext]}
+                        >
+                          <Pressable
+                            style={styles.photoEmptyPress}
+                            onPress={addPhoto}
+                            disabled={!isNext || uploading}
+                          >
+                            {isNext && uploading ? (
+                              <Text style={styles.photoUploading}>…</Text>
+                            ) : (
+                              <Ionicons
+                                name="add"
+                                size={26}
+                                color={isNext ? colors.accent : colors.border}
+                              />
+                            )}
+                          </Pressable>
+                        </Animated.View>
+                      );
+                    })}
+                  </View>
+                  <View style={styles.photoDots}>
+                    {Array.from({ length: MAX_PHOTOS }).map((_, i) => (
+                      <View
+                        key={i}
+                        style={[styles.photoDot, i < photos.length && styles.photoDotOn]}
+                      />
+                    ))}
+                    <Text style={styles.note}>
+                      {uploading
+                        ? '  Envoi en cours…'
+                        : `  ${photos.length} photo${photos.length > 1 ? 's' : ''} sur ${MAX_PHOTOS}`}
                     </Text>
                   </View>
-                )}
-              </>
-            )}
+                </>
+              )}
 
-            {step === 'photos' && (
-              <>
-                <View style={styles.photoGrid}>
-                  {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
-                    const photo = photos[i];
-                    if (photo) {
-                      return (
-                        <View key={photo.id} style={styles.photoCell}>
-                          <Image
-                            source={{ uri: photoUrl(photo.storage_path) }}
-                            style={styles.photoImg}
-                            contentFit="cover"
-                          />
-                          {i === 0 && (
-                            <View style={styles.mainTag}>
-                              <Text style={styles.mainTagText}>Principale</Text>
-                            </View>
-                          )}
-                          <Pressable
-                            style={styles.photoRemove}
-                            onPress={() => removePhoto(photo)}
-                            hitSlop={8}
-                          >
-                            <Ionicons name="close" size={14} color="#ffffff" />
-                          </Pressable>
-                        </View>
-                      );
-                    }
-                    const isNext = i === photos.length;
-                    return (
-                      <Pressable
-                        key={`empty-${i}`}
-                        style={[styles.photoCell, styles.photoEmpty, isNext && styles.photoNext]}
-                        onPress={addPhoto}
-                        disabled={!isNext || uploading}
-                      >
-                        <Ionicons
-                          name="add"
-                          size={26}
-                          color={isNext ? colors.accent : colors.border}
-                        />
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <Text style={styles.note}>
-                  {uploading
-                    ? 'Envoi en cours…'
-                    : `${photos.length} photo${photos.length > 1 ? 's' : ''} sur ${MAX_PHOTOS}`}
-                </Text>
-              </>
-            )}
-
-            {step === 'about' && (
-              <>
-                <View style={styles.group}>
-                  <View style={styles.rowSingle}>
-                    <Text style={styles.rowLabel}>Taille</Text>
-                    <View style={styles.inlineField}>
-                      <TextInput
-                        style={styles.inlineInput}
-                        placeholder="175"
-                        placeholderTextColor={colors.textMuted}
-                        keyboardType="number-pad"
-                        maxLength={3}
-                        value={height}
-                        onChangeText={setHeight}
-                      />
-                      <Text style={styles.unit}>cm</Text>
+              {step === 'about' && (
+                <>
+                  <SectionLabel delay={120}>Taille</SectionLabel>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(150).reduceMotion(ReduceMotion.System)}
+                    style={styles.heightCard}
+                  >
+                    <View style={styles.heightReadout}>
+                      <Text style={styles.heightValue}>{height === '' ? '—' : height}</Text>
+                      <Text style={styles.heightUnit}> cm</Text>
+                      {height !== '' && (
+                        <Pressable
+                          hitSlop={10}
+                          onPress={() => {
+                            haptic.tap();
+                            setHeight('');
+                          }}
+                          style={styles.heightClear}
+                        >
+                          <Text style={styles.heightClearText}>Effacer</Text>
+                        </Pressable>
+                      )}
                     </View>
-                  </View>
-                  <View style={[styles.rowSingle, styles.rowDivider]}>
-                    <Text style={styles.rowLabel}>Profession</Text>
+                    <HeightSlider
+                      min={HEIGHT_MIN}
+                      max={HEIGHT_MAX}
+                      value={height === '' ? null : Number(height)}
+                      onChange={(v) => setHeight(String(v))}
+                    />
+                    <View style={styles.heightBounds}>
+                      <Text style={styles.heightBound}>{HEIGHT_MIN} cm</Text>
+                      <Text style={styles.heightBound}>{HEIGHT_MAX} cm</Text>
+                    </View>
+                  </Animated.View>
+
+                  <SectionLabel delay={200}>Profession</SectionLabel>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(230).reduceMotion(ReduceMotion.System)}
+                    style={styles.inputCard}
+                  >
+                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
                     <TextInput
-                      style={styles.inlineInputWide}
+                      style={styles.inputCardField}
                       placeholder="Ton métier"
                       placeholderTextColor={colors.textMuted}
                       value={job}
                       onChangeText={setJob}
                       maxLength={80}
                     />
+                  </Animated.View>
+
+                  <SectionLabel delay={280}>Études</SectionLabel>
+                  <View style={styles.chipWrap}>
+                    {EDUCATION_OPTIONS.map((o, i) => (
+                      <BounceChip
+                        key={o.value}
+                        label={o.label}
+                        active={education === o.value}
+                        onPress={() => setEducation(education === o.value ? null : o.value)}
+                        index={i}
+                      />
+                    ))}
                   </View>
-                </View>
+                </>
+              )}
 
-                <Text style={styles.groupLabel}>Études</Text>
-                <View style={styles.group}>
-                  {EDUCATION_OPTIONS.map((o, i) => (
-                    <SelectRow
-                      key={o.value}
-                      first={i === 0}
-                      label={o.label}
-                      selected={education === o.value}
-                      onPress={() => setEducation(education === o.value ? null : o.value)}
+              {step === 'lifestyle' && (
+                <>
+                  <SectionLabel delay={120}>Tabac</SectionLabel>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(150).reduceMotion(ReduceMotion.System)}
+                  >
+                    <SegmentPills
+                      options={FREQUENCY_OPTIONS}
+                      value={smoking}
+                      onChange={(v) => setSmoking(smoking === v ? null : v)}
                     />
-                  ))}
-                </View>
-              </>
-            )}
+                  </Animated.View>
 
-            {step === 'lifestyle' && (
-              <>
-                <Text style={styles.groupLabel}>Tabac</Text>
-                <View style={styles.group}>
-                  {FREQUENCY_OPTIONS.map((o, i) => (
-                    <SelectRow
-                      key={o.value}
-                      first={i === 0}
-                      label={o.label}
-                      selected={smoking === o.value}
-                      onPress={() => setSmoking(smoking === o.value ? null : o.value)}
+                  <SectionLabel delay={220}>Alcool</SectionLabel>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(250).reduceMotion(ReduceMotion.System)}
+                  >
+                    <SegmentPills
+                      options={FREQUENCY_OPTIONS}
+                      value={drinking}
+                      onChange={(v) => setDrinking(drinking === v ? null : v)}
                     />
-                  ))}
-                </View>
+                  </Animated.View>
+                </>
+              )}
 
-                <Text style={styles.groupLabel}>Alcool</Text>
-                <View style={styles.group}>
-                  {FREQUENCY_OPTIONS.map((o, i) => (
-                    <SelectRow
-                      key={o.value}
-                      first={i === 0}
-                      label={o.label}
-                      selected={drinking === o.value}
-                      onPress={() => setDrinking(drinking === o.value ? null : o.value)}
+              {step === 'children' && (
+                <>
+                  <SectionLabel delay={120}>J'ai des enfants</SectionLabel>
+                  <View style={styles.tileRow}>
+                    {HAS_CHILDREN_OPTIONS.map((o, i) => (
+                      <ChoiceTile
+                        key={o.value}
+                        icon={o.value === 'oui' ? 'people' : 'person'}
+                        label={o.label}
+                        selected={hasChildren === o.value}
+                        onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
+                        index={i}
+                      />
+                    ))}
+                  </View>
+
+                  <SectionLabel delay={220}>Je veux des enfants</SectionLabel>
+                  <Animated.View
+                    entering={FadeInDown.duration(260).delay(250).reduceMotion(ReduceMotion.System)}
+                  >
+                    <SegmentPills
+                      options={WANTS_CHILDREN_OPTIONS}
+                      value={wantsChildren}
+                      onChange={(v) => setWantsChildren(wantsChildren === v ? null : v)}
                     />
-                  ))}
-                </View>
-              </>
-            )}
+                  </Animated.View>
+                </>
+              )}
 
-            {step === 'children' && (
-              <>
-                <Text style={styles.groupLabel}>J'ai des enfants</Text>
-                <View style={styles.group}>
-                  {HAS_CHILDREN_OPTIONS.map((o, i) => (
-                    <SelectRow
-                      key={o.value}
-                      first={i === 0}
-                      label={o.label}
-                      selected={hasChildren === o.value}
-                      onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
-                    />
-                  ))}
-                </View>
+              {step === 'background' && (
+                <>
+                  <SectionLabel delay={120}>Religion</SectionLabel>
+                  <View style={styles.chipWrap}>
+                    {RELIGION_OPTIONS.map((r, i) => (
+                      <BounceChip
+                        key={r}
+                        label={r}
+                        active={religion === r}
+                        onPress={() => setReligion(religion === r ? null : r)}
+                        index={i}
+                      />
+                    ))}
+                  </View>
 
-                <Text style={styles.groupLabel}>Je veux des enfants</Text>
-                <View style={styles.group}>
-                  {WANTS_CHILDREN_OPTIONS.map((o, i) => (
-                    <SelectRow
-                      key={o.value}
-                      first={i === 0}
-                      label={o.label}
-                      selected={wantsChildren === o.value}
-                      onPress={() =>
-                        setWantsChildren(wantsChildren === o.value ? null : o.value)
-                      }
-                    />
-                  ))}
-                </View>
-              </>
-            )}
+                  <SectionLabel delay={260}>Langues parlées</SectionLabel>
+                  <View style={styles.chipWrap}>
+                    {LANGUAGE_OPTIONS.map((l, i) => (
+                      <BounceChip
+                        key={l}
+                        label={l}
+                        active={languages.includes(l)}
+                        onPress={() =>
+                          setLanguages((prev) =>
+                            prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l],
+                          )
+                        }
+                        index={i + 6}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
-            {step === 'background' && (
-              <>
-                <Text style={styles.groupLabel}>Religion</Text>
-                <View style={styles.group}>
-                  {RELIGION_OPTIONS.map((r, i) => (
-                    <SelectRow
-                      key={r}
-                      first={i === 0}
-                      label={r}
-                      selected={religion === r}
-                      onPress={() => setReligion(religion === r ? null : r)}
-                    />
-                  ))}
-                </View>
+              {step === 'interests' && (
+                <>
+                  {/* Compteur vivant : il sursaute à chaque choix, et passe au
+                      vert quand le minimum est atteint. */}
+                  <View style={styles.interestHead}>
+                    {interests.length >= MIN_INTERESTS ? (
+                      <Animated.View
+                        key="done"
+                        entering={ZoomIn.springify().damping(13).reduceMotion(ReduceMotion.System)}
+                        style={[styles.countPill, styles.countPillDone]}
+                      >
+                        <Ionicons name="checkmark" size={14} color="#ffffff" />
+                        <Text style={styles.countPillDoneText}>
+                          {interests.length} choisis, c'est parfait
+                        </Text>
+                      </Animated.View>
+                    ) : (
+                      <Animated.View
+                        key={interests.length}
+                        entering={ZoomIn.duration(160).reduceMotion(ReduceMotion.System)}
+                        style={styles.countPill}
+                      >
+                        <Text style={styles.countPillText}>
+                          {interests.length}/{MIN_INTERESTS} minimum
+                        </Text>
+                      </Animated.View>
+                    )}
+                  </View>
+                  <View style={styles.chipWrap}>
+                    {INTEREST_OPTIONS.map((o, i) => (
+                      <BounceChip
+                        key={o}
+                        label={o}
+                        active={interests.includes(o)}
+                        onPress={() =>
+                          setInterests((prev) =>
+                            prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
+                          )
+                        }
+                        index={i}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
-                <Text style={styles.groupLabel}>Langues parlées</Text>
-                <ChipGroup
-                  options={LANGUAGE_OPTIONS}
-                  values={languages}
-                  onToggle={(v) =>
-                    setLanguages((prev) =>
-                      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
-                    )
-                  }
-                />
-              </>
-            )}
-
-            {step === 'interests' && (
-              <>
-                <ChipGroup
-                  options={INTEREST_OPTIONS}
-                  values={interests}
-                  onToggle={(v) =>
-                    setInterests((prev) =>
-                      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
-                    )
-                  }
-                />
-                <Text style={styles.note}>
-                  {interests.length === 0
-                    ? 'Aucun choisi pour le moment.'
-                    : `${interests.length} sélectionné${interests.length > 1 ? 's' : ''}.`}
-                </Text>
-              </>
-            )}
-
-            {step === 'bio' && (
-              <>
-                <View style={styles.group}>
+              {step === 'bio' && (
+                <Animated.View
+                  entering={FadeInDown.duration(260).delay(130).reduceMotion(ReduceMotion.System)}
+                  style={styles.bioCard}
+                >
                   <TextInput
                     style={styles.bioField}
                     placeholder="Ce qui te fait vibrer, ce que tu cherches…"
@@ -929,19 +1095,35 @@ export default function Onboarding() {
                     multiline
                     textAlignVertical="top"
                   />
-                </View>
-                <Text style={[styles.note, styles.noteRight]}>
-                  {bio.length}/{BIO_MAX}
-                </Text>
-              </>
-            )}
-          </View>
+                  <View style={styles.bioFoot}>
+                    <View style={styles.bioTrack}>
+                      <View
+                        style={[styles.bioFill, { width: `${(bio.length / BIO_MAX) * 100}%` }]}
+                      />
+                    </View>
+                    <Text style={styles.bioCount}>
+                      {bio.length}/{BIO_MAX}
+                    </Text>
+                  </View>
+                </Animated.View>
+              )}
+            </View>
+          </Animated.View>
         </ScrollView>
 
         <View style={styles.footer}>
-          <ErrorText>{error}</ErrorText>
-          <Button
+          {!!error && (
+            <Animated.Text
+              key={error}
+              entering={FadeInDown.duration(200).reduceMotion(ReduceMotion.System)}
+              style={styles.error}
+            >
+              {error}
+            </Animated.Text>
+          )}
+          <GradientButton
             title={isLast ? 'Terminer' : 'Continuer'}
+            icon={isLast ? 'checkmark' : 'arrow-forward'}
             onPress={next}
             loading={saving}
             disabled={validateStep() !== null}
@@ -952,7 +1134,7 @@ export default function Onboarding() {
             <Pressable
               onPress={() => {
                 setError(null);
-                setStepIndex(stepIndex + 1);
+                goTo(stepIndex + 1, 1);
               }}
               hitSlop={8}
               style={styles.skipBtn}
@@ -970,51 +1152,42 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1 },
   content: { paddingBottom: spacing.xl },
-  body: { paddingHorizontal: spacing.md, marginTop: spacing.lg, gap: spacing.sm },
 
-  // Groupe de liste à la iOS : carte blanche arrondie, rangées séparées par
-  // un filet, rien d'autre. C'est la sobriété qui fait le sérieux.
-  group: {
-    backgroundColor: colors.cardSolid,
-    borderRadius: radius.md,
-    overflow: 'hidden',
+  titleBlock: { paddingHorizontal: spacing.md, marginTop: spacing.md, gap: spacing.sm },
+  title: {
+    fontSize: 31,
+    fontWeight: '800',
+    color: colors.text,
+    lineHeight: 38,
+    letterSpacing: -0.5,
+    marginTop: spacing.xs,
   },
-  groupLabel: {
+  subtitle: { fontSize: 15, color: colors.textMuted, lineHeight: 22 },
+
+  body: { paddingHorizontal: spacing.md, marginTop: spacing.lg, gap: spacing.sm },
+  sectionLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textMuted,
     marginTop: spacing.md,
     marginLeft: 4,
     marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    minHeight: 54,
-  },
-  rowSingle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    minHeight: 54,
-  },
-  rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowBody: { flex: 1 },
-  rowLabel: { fontSize: 17, color: colors.text },
-  rowLabelOn: { fontWeight: '600', color: colors.accent },
-  rowHint: { fontSize: 15, color: colors.textMuted },
-  rowValue: { fontSize: 17, color: colors.text },
-  rowPlaceholder: { fontSize: 17, color: colors.textMuted },
+  cardStack: { gap: spacing.sm },
+  tileRow: { flexDirection: 'row', gap: spacing.sm },
 
-  field: {
-    paddingHorizontal: spacing.md,
-    minHeight: 54,
-    fontSize: 17,
+  // Prénom : un grand champ nu, le trait dit la validité.
+  nameBlock: { marginTop: spacing.md, gap: spacing.sm },
+  nameField: {
+    fontSize: 32,
+    fontWeight: '700',
     color: colors.text,
+    paddingVertical: spacing.sm,
+    letterSpacing: -0.4,
   },
+  nameHint: { fontSize: 13, color: colors.textMuted },
 
   // La roue occupe une carte à elle seule, sans bord ni ombre : le mouvement
   // suffit à la désigner.
@@ -1025,63 +1198,69 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   wheel: { alignSelf: 'stretch' },
-  centerNote: {
-    textAlign: 'center',
-    fontSize: 15,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 56,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
-  bold: { fontWeight: '700', color: colors.text },
+  dateValue: { flex: 1, fontSize: 17, color: colors.text, fontWeight: '600' },
+  datePlaceholder: { flex: 1, fontSize: 17, color: colors.textMuted },
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  agePill: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  agePillText: { fontSize: 15, fontWeight: '800', color: colors.textOnAccent },
+  ageDate: { fontSize: 15, color: colors.textMuted },
 
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 54,
-    backgroundColor: colors.cardSolid,
+    minHeight: 56,
+    backgroundColor: colors.card,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-  },
-  searchInput: { flex: 1, fontSize: 17, color: colors.text },
-
-  note: { fontSize: 14, color: colors.textMuted, lineHeight: 20 },
-  noteRight: { textAlign: 'right' },
-
-  // Champ posé à droite d'une rangée de liste (taille, profession).
-  inlineField: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  inlineInput: {
-    minWidth: 56,
-    fontSize: 17,
-    color: colors.text,
-    textAlign: 'right',
-    paddingVertical: 8,
-  },
-  inlineInputWide: {
-    flex: 1,
-    fontSize: 17,
-    color: colors.text,
-    textAlign: 'right',
-    paddingVertical: 8,
-    marginLeft: spacing.md,
-  },
-  unit: { fontSize: 17, color: colors.textMuted },
-
-  // Pastilles à choix multiple : langues, centres d'intérêt.
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    borderRadius: radius.full,
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: colors.cardSolid,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
   },
-  chipOn: { borderColor: colors.accent, backgroundColor: colors.surface },
-  chipText: { fontSize: 15, color: colors.text },
-  chipTextOn: { color: colors.accent, fontWeight: '600' },
+  searchInput: { flex: 1, fontSize: 17, color: colors.text },
+  cityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+  cityIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cityName: { fontSize: 16, fontWeight: '600', color: colors.text },
+  cityHint: { fontSize: 13, color: colors.textMuted },
+  cityDetected: { fontSize: 12, fontWeight: '700', color: colors.accent },
 
-  skipBtn: { alignSelf: 'center', paddingVertical: 6 },
-  skipText: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
+  note: { fontSize: 14, color: colors.textMuted, lineHeight: 20 },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2 },
 
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -1090,15 +1269,20 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4,
     borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: colors.cardSolid,
+    backgroundColor: colors.card,
   },
   photoImg: { width: '100%', height: '100%' },
-  photoEmpty: { alignItems: 'center', justifyContent: 'center' },
-  photoNext: { borderWidth: 1.5, borderColor: colors.accent },
+  photoEmpty: { borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed' },
+  photoNext: { borderColor: colors.accent },
+  photoEmptyPress: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  photoUploading: { fontSize: 22, fontWeight: '800', color: colors.accent },
   mainTag: {
     position: 'absolute',
     left: 6,
     bottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     backgroundColor: 'rgba(0,0,0,.6)',
     borderRadius: radius.full,
     paddingHorizontal: 8,
@@ -1116,19 +1300,115 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  photoDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: spacing.xs,
+    paddingHorizontal: 2,
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  photoDotOn: { backgroundColor: colors.accent },
 
-  bioField: {
-    minHeight: 140,
+  heightCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     padding: spacing.md,
+    gap: spacing.xs,
+  },
+  heightReadout: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  heightValue: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+  },
+  heightUnit: { fontSize: 18, fontWeight: '600', color: colors.textMuted },
+  heightClear: { marginLeft: spacing.md },
+  heightClearText: { fontSize: 13, fontWeight: '700', color: colors.accent },
+  heightBounds: { flexDirection: 'row', justifyContent: 'space-between' },
+  heightBound: { fontSize: 12, color: colors.textMuted },
+
+  inputCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 56,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  inputCardField: { flex: 1, fontSize: 16, color: colors.text },
+
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+
+  interestHead: { flexDirection: 'row', marginBottom: spacing.xs },
+  countPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  countPillDone: { backgroundColor: colors.success, borderColor: 'transparent' },
+  countPillText: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
+  countPillDoneText: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
+
+  bioCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  bioField: {
+    minHeight: 150,
     fontSize: 17,
     lineHeight: 24,
     color: colors.text,
   },
+  bioFoot: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bioTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    overflow: 'hidden',
+  },
+  bioFill: { height: '100%', borderRadius: 2, backgroundColor: colors.accent },
+  bioCount: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
 
+  error: { color: colors.danger, fontSize: 14, textAlign: 'center' },
   footer: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
+  skipBtn: { alignSelf: 'center', paddingVertical: 6 },
+  skipText: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
 });
