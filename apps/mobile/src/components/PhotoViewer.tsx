@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React, { useEffect } from 'react';
 import { Modal, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Gesture,
   GestureDetector,
@@ -20,6 +21,10 @@ const MAX_SCALE = 4;
 // déplacer, double-tap pour zoomer/réinitialiser, X ou tap simple pour fermer.
 export function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
   const { width, height } = useWindowDimensions();
+  // Le bouton se posait a 54 points du haut, une valeur ecrite en dur. Sur un
+  // ecran a Dynamic Island (inset haut de 59) il passait DESSOUS : visuellement
+  // avale, et hors de la zone tactile utile. On part donc de l'inset reel.
+  const insets = useSafeAreaInsets();
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const tx = useSharedValue(0);
@@ -113,7 +118,13 @@ export function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () 
             )}
           </Animated.View>
         </GestureDetector>
-        <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={10}>
+        <Pressable
+          style={[styles.closeBtn, { top: Math.max(insets.top, 12) + 8 }]}
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer la photo"
+        >
           <Ionicons name="close" size={26} color="#ffffff" />
         </Pressable>
       </GestureHandlerRootView>
@@ -132,11 +143,10 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   closeBtn: {
     position: 'absolute',
-    top: 54,
     right: 18,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,.18)',
     alignItems: 'center',
     justifyContent: 'center',

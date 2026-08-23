@@ -18,13 +18,13 @@ import {
 } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { blockUser, photoUrl, recordProfileView, reportUser } from '../api';
-import { COIN_COLOR, COIN_ON_GOLD } from '../config/economy';
-import { CoinIcon } from './coins';
-import { GlassSurface, PressableScale } from './motion';
-import { VerifiedBadge } from './ui';
-import { PhotoViewer } from './PhotoViewer';
-import { ReportModal } from './ReportModal';
+import { blockUser, photoUrl, recordProfileView, reportUser } from '@/services/api';
+import { COIN_COLOR, COIN_ON_GOLD } from '@/config/economy';
+import { CoinIcon } from '@/components/coins';
+import { GlassSurface, PressableScale } from '@/components/motion';
+import { VerifiedBadge } from '@/components/ui';
+import { PhotoViewer } from '@/components/PhotoViewer';
+import { ReportModal } from '@/components/ReportModal';
 import {
   EDUCATION_OPTIONS,
   FREQUENCY_OPTIONS,
@@ -33,9 +33,9 @@ import {
   WANTS_CHILDREN_OPTIONS,
   interestEmoji,
   labelFor,
-} from '../profileOptions';
-import { colors, isDark, onLight, radius, spacing } from '../theme';
-import { activeLabel, ageFromBirthDate, type ViewableProfile } from '../types';
+} from '@/profileOptions';
+import { colors, onLight, photoScrim, radius, shadows, sigCorner, spacing } from '@/theme';
+import { activeLabel, ageFromBirthDate, type ViewableProfile } from '@/types';
 
 interface Props {
   profile: ViewableProfile | null;
@@ -54,12 +54,8 @@ interface Props {
   isSelf?: boolean;
 }
 
-// Rose des cercles de stats en thème clair : plus clair que l'accent pour
-// rester doux sur la bande pâle ; en sombre, l'accent garde le contraste.
-const STAT_CIRCLE = isDark ? colors.accent : '#ee76d3';
-
-// Rangée d'infos style Heyama : cercle à liseré rose avec icône accent,
-// libellé gris à gauche, valeur alignée à droite sur une seule ligne.
+// Rangée d'infos Velours : cercle à liseré corail avec icône corail,
+// libellé gris à gauche, valeur encre alignée à droite sur une seule ligne.
 function DetailLine({
   icon,
   label,
@@ -83,8 +79,8 @@ function DetailLine({
   );
 }
 
-// Colonne de la bande de stats : grand cercle rose à icône blanche, libellé
-// puis valeur en accent. Une valeur absente fait disparaître la colonne.
+// Colonne de la bande de stats : grand cercle corail à icône blanche, libellé
+// encre puis valeur terracotta. Une valeur absente fait disparaître la colonne.
 function StatColumn({
   icon,
   label,
@@ -106,7 +102,7 @@ function StatColumn({
   );
 }
 
-// Vue profil complète, structure fiche Heyama : photo de couverture avec badge
+// Vue profil complète, structure fiche : photo de couverture avec badge
 // d'intention, feuille arrondie (à propos, intérêts, stats, infos), actions.
 export function ProfileDetailModal({
   profile,
@@ -207,6 +203,27 @@ export function ProfileDetailModal({
   const hasActions = !!(onLike || onDislike || onMessage);
   const age = ageFromBirthDate(profile.birth_date);
 
+  // Valeurs affichables des deux blocs de rangées, humanisées via labelFor :
+  // jamais une valeur brute type « peut_etre » à l'écran. Calculées ici pour
+  // masquer un bloc entier quand aucune de ses rangées n'a de valeur.
+  const jobValue = profile.job_title || null;
+  const educationValue = labelFor(EDUCATION_OPTIONS, profile.education);
+  const religionValue = profile.religion || null;
+  const languagesValue = (profile.languages ?? []).length
+    ? profile.languages.join(', ')
+    : null;
+  const placeValue = place || null;
+  const hasEssentials = !!(
+    jobValue || educationValue || religionValue || languagesValue || placeValue
+  );
+  const smokingValue = labelFor(FREQUENCY_OPTIONS, profile.smoking);
+  const drinkingValue = labelFor(FREQUENCY_OPTIONS, profile.drinking);
+  const hasChildrenValue = labelFor(HAS_CHILDREN_OPTIONS, profile.has_children);
+  const wantsChildrenValue = labelFor(WANTS_CHILDREN_OPTIONS, profile.wants_children);
+  const hasLifestyle = !!(
+    smokingValue || drinkingValue || hasChildrenValue || wantsChildrenValue
+  );
+
   // Glissement depuis le bord gauche pour fermer, comme un retour système.
   // Partout ailleurs le geste horizontal appartient aux photos.
   const swipeToClose = Gesture.Pan()
@@ -279,16 +296,12 @@ export function ProfileDetailModal({
                     </Text>
                   </View>
                 )}
+                {/* Identité posée sur la photo : prénom, âge, badge, ville.
+                    La fiche en dessous ne répète rien de tout ça. */}
                 <LinearGradient
-                  colors={['transparent', 'rgba(14,15,12,0.5)', 'rgba(14,15,12,0.85)']}
+                  colors={photoScrim}
                   style={styles.coverInfo}
                 >
-                  {!!goal && (
-                    <View style={styles.goalBadge}>
-                      <Ionicons name="heart" size={13} color={colors.textOnAccent} />
-                      <Text style={styles.goalBadgeText}>{goal}</Text>
-                    </View>
-                  )}
                   <View style={styles.nameRow}>
                     <Text style={styles.name}>
                       {profile.display_name}, {age}
@@ -304,10 +317,14 @@ export function ProfileDetailModal({
                 </LinearGradient>
               </View>
 
-              {/* Feuille arrondie qui recouvre le bas de la photo */}
+              {/* Feuille arrondie qui recouvre le bas de la photo. Ordre de
+                  lecture : présence, intention, à propos, stats, l'essentiel,
+                  mode de vie, centres d'intérêt, pays d'origine, sécurité. */}
               <View style={styles.sheet}>
                 <View style={styles.sheetHandle} />
 
+                {/* 1. Ce qui reste de l'identité : la présence. Le prénom,
+                    l'âge, le badge et la ville vivent déjà sur la photo. */}
                 {!!online && (
                   <View style={styles.metaRow}>
                     <View
@@ -320,6 +337,16 @@ export function ProfileDetailModal({
                   </View>
                 )}
 
+                {/* 2. L'intention, affirmée d'entrée : pilule corail pleine,
+                    la promesse de la fiche avant tout le reste. */}
+                {!!goal && (
+                  <View style={styles.goalPill}>
+                    <Ionicons name="heart" size={14} color={colors.textOnAccent} />
+                    <Text style={styles.goalPillText}>{goal}</Text>
+                  </View>
+                )}
+
+                {/* 3. À propos */}
                 {!!profile.bio && (
                   <>
                     <Text style={styles.sectionTitle}>{"À propos"}</Text>
@@ -327,6 +354,70 @@ export function ProfileDetailModal({
                   </>
                 )}
 
+                {/* 4. Bande de stats pleine largeur : Sexe / Âge / Taille sur
+                    voile sable dégradé, la feuille compense son propre padding. */}
+                <LinearGradient
+                  colors={[colors.washFrom, colors.washTo]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.statsBand}
+                >
+                  <StatColumn
+                    icon="person"
+                    label="Sexe"
+                    value={
+                      profile.gender ? (profile.gender === 'homme' ? 'Homme' : 'Femme') : null
+                    }
+                  />
+                  <StatColumn icon="calendar" label="Âge" value={age ? `${age} ans` : null} />
+                  <StatColumn
+                    icon="shirt-outline"
+                    label="Taille"
+                    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null}
+                  />
+                </LinearGradient>
+
+                {/* 5. L'essentiel : qui est cette personne dans la vie. Le bloc
+                    disparaît en entier si aucune rangée n'a de valeur. */}
+                {hasEssentials && (
+                  <>
+                    <Text style={styles.sectionTitle}>{"L'essentiel"}</Text>
+                    <View style={styles.detailCard}>
+                      <DetailLine icon="briefcase-outline" label="Profession" value={jobValue} />
+                      <DetailLine icon="school-outline" label="Études" value={educationValue} />
+                      <DetailLine icon="book-outline" label="Religion" value={religionValue} />
+                      <DetailLine
+                        icon="globe-outline"
+                        label="Langues parlées"
+                        value={languagesValue}
+                      />
+                      <DetailLine icon="location" label="Localisation" value={placeValue} />
+                    </View>
+                  </>
+                )}
+
+                {/* 6. Mode de vie : les habitudes, séparées de l'essentiel. */}
+                {hasLifestyle && (
+                  <>
+                    <Text style={styles.sectionTitle}>{"Mode de vie"}</Text>
+                    <View style={styles.detailCard}>
+                      <DetailLine icon="flame-outline" label="Tabac" value={smokingValue} />
+                      <DetailLine icon="wine-outline" label="Alcool" value={drinkingValue} />
+                      <DetailLine
+                        icon="people-outline"
+                        label="A des enfants"
+                        value={hasChildrenValue}
+                      />
+                      <DetailLine
+                        icon="heart-circle-outline"
+                        label="Veut des enfants"
+                        value={wantsChildrenValue}
+                      />
+                    </View>
+                  </>
+                )}
+
+                {/* 7. Centres d'intérêt */}
                 {(profile.interests ?? []).length > 0 && (
                   <>
                     <Text style={styles.sectionTitle}>{"Centres d'intérêt"}</Text>
@@ -342,72 +433,11 @@ export function ProfileDetailModal({
                   </>
                 )}
 
-                {/* Bande de stats pleine largeur : Sexe / Âge / Taille sur
-                    fond rose pâle, la feuille compense son propre padding. */}
-                <View style={styles.statsBand}>
-                  <StatColumn
-                    icon="person"
-                    label="Sexe"
-                    value={
-                      profile.gender ? (profile.gender === 'homme' ? 'Homme' : 'Femme') : null
-                    }
-                  />
-                  <StatColumn icon="calendar" label="Âge" value={age ? `${age} ans` : null} />
-                  <StatColumn
-                    icon="shirt-outline"
-                    label="Taille"
-                    value={profile.height_cm ? `${(profile.height_cm / 100).toFixed(2)} m` : null}
-                  />
-                </View>
-
+                {/* 8. Pays d'origine */}
                 <Text style={styles.sectionTitle}>{"Pays d'origine"}</Text>
                 <Text style={styles.countryValue}>
                   {"République démocratique du Congo 🇨🇩"}
                 </Text>
-
-                <Text style={styles.sectionTitle}>
-                  {"Plus d'infos sur "}
-                  {profile.display_name}
-                </Text>
-                <View style={styles.detailCard}>
-                  <DetailLine icon="location" label="Localisation" value={place || null} />
-                  <DetailLine
-                    icon="globe-outline"
-                    label="Langues parlées"
-                    value={(profile.languages ?? []).length ? profile.languages.join(', ') : null}
-                  />
-                  <DetailLine
-                    icon="briefcase-outline"
-                    label="Profession"
-                    value={profile.job_title}
-                  />
-                  <DetailLine
-                    icon="school-outline"
-                    label="Études"
-                    value={labelFor(EDUCATION_OPTIONS, profile.education)}
-                  />
-                  <DetailLine icon="book-outline" label="Religion" value={profile.religion} />
-                  <DetailLine
-                    icon="people-outline"
-                    label="A des enfants"
-                    value={labelFor(HAS_CHILDREN_OPTIONS, profile.has_children)}
-                  />
-                  <DetailLine
-                    icon="heart-circle-outline"
-                    label="Veut des enfants"
-                    value={labelFor(WANTS_CHILDREN_OPTIONS, profile.wants_children)}
-                  />
-                  <DetailLine
-                    icon="flame-outline"
-                    label="Tabac"
-                    value={labelFor(FREQUENCY_OPTIONS, profile.smoking)}
-                  />
-                  <DetailLine
-                    icon="wine-outline"
-                    label="Alcool"
-                    value={labelFor(FREQUENCY_OPTIONS, profile.drinking)}
-                  />
-                </View>
 
                 {/* Sécurité : accessible depuis n'importe quel profil, y compris
                     sans match. Discret en bas de fiche — présent quand on en a
@@ -464,7 +494,9 @@ export function ProfileDetailModal({
                   {onDislike && (
                     <PressableScale style={styles.dislikeBtn} onPress={onDislike}>
                       <View style={styles.actionInner}>
-                        <Ionicons name="close" size={30} color={onLight.ink} />
+                        {/* Posé sur la barre de verre, pas sur la photo : le X
+                            suit l'encre du thème. */}
+                        <Ionicons name="close" size={30} color={colors.text} />
                       </View>
                     </PressableScale>
                   )}
@@ -529,18 +561,21 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg + spacing.sm,
     paddingTop: spacing.xl,
   },
-  goalBadge: {
+  // Pilule d'intention dans la feuille : corail plein, coin signature en bas
+  // à droite, assez généreuse pour se lire d'un coup d'oeil.
+  goalPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     backgroundColor: colors.accent,
     borderRadius: radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: spacing.xs,
+    borderBottomRightRadius: sigCorner,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: spacing.md,
   },
-  goalBadgeText: { fontSize: 12, fontWeight: '800', color: colors.textOnAccent },
+  goalPillText: { fontSize: 13, fontWeight: '800', color: colors.textOnAccent },
   name: { fontSize: 28, fontWeight: '800', color: '#fff' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   coverMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
@@ -570,11 +605,14 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: colors.success,
   },
-  // Titres de section discrets : gris, la valeur porte le contraste.
+  // Titres de section en petites capitales éditoriales : discrets, espacés,
+  // la valeur porte le contraste.
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '800',
     color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -584,10 +622,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
-  // Pilules opaques à liseré fin : emoji + libellé.
+  // Chips crème à liseré fin : emoji + libellé encre, coin signature en bas
+  // à droite.
   chip: {
     backgroundColor: colors.cardSolid,
-    borderRadius: radius.full,
+    borderRadius: 16,
+    borderBottomRightRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     paddingHorizontal: 16,
@@ -602,7 +642,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     paddingVertical: 20,
     paddingHorizontal: spacing.md,
-    backgroundColor: colors.washTo,
+    borderBottomRightRadius: sigCorner,
   },
   stat: {
     flex: 1,
@@ -613,12 +653,12 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: STAT_CIRCLE,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   statLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
-  statValue: { fontSize: 14, fontWeight: '600', color: colors.accent },
+  statValue: { fontSize: 14, fontWeight: '600', color: colors.primary },
   countryValue: { fontSize: 16, color: colors.text },
   // Tirets de progression des photos, posés en haut de la grande photo,
   // même langage que le deck Rencontres.
@@ -639,7 +679,7 @@ const styles = StyleSheet.create({
   coverDashActive: { backgroundColor: '#ffffff' },
   detailCard: { gap: spacing.sm + 2 },
   detailRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4 },
-  // Cercle à liseré rose, fond transparent : l'icône accent respire dedans.
+  // Cercle à liseré corail, fond transparent : l'icône corail respire dedans.
   detailIcon: {
     width: 34,
     height: 34,
@@ -723,29 +763,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // X : cercle blanc quel que soit le thème, croix en encre sombre fixe.
+  // X : cercle crème, croix en encre du thème.
   dislikeBtn: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#ffffff',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    backgroundColor: colors.cardSolid,
+    ...shadows.floating,
   },
-  // Bulle : violet foncé, hors palette rose, pour marquer le message payant.
+  // Bulle : ambre (clé historique « purple »), la couleur de l'économie de
+  // pièces, pour marquer le message payant.
   msgBtn: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.purpleDark,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    backgroundColor: colors.purple,
+    ...shadows.floating,
   },
   // Pastilles or : les coûts en pièces gardent la couleur de la monnaie,
   // jamais le rose de la marque.
@@ -760,17 +793,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Coeur : cercle accent plein, coeur blanc.
+  // Coeur : cercle corail plein, coeur blanc.
   likeBtn: {
     width: 60,
     height: 60,
     borderRadius: 30,
     backgroundColor: colors.accent,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    ...shadows.floating,
   },
   costBadge: {
     position: 'absolute',

@@ -19,3 +19,7 @@ web-build/
 # Outillage local
 .claude/
 *.log
+supabase/.temp/
+
+# Fichiers temporaires bureautiques
+~$*

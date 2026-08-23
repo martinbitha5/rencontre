@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppLock } from '../lib/applock';
-import { colors, radius, spacing } from '../theme';
+import { useAppLock } from '@/providers/applock';
+import { colors, radius, spacing } from '@/theme';
 
 export const CODE_LENGTH = 4;
 

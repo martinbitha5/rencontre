@@ -17,7 +17,7 @@
     "android": {
       "package": "com.dowe.app",
       "adaptiveIcon": {
-        "backgroundColor": "#db2777",
+        "backgroundColor": "#481A46",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -33,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#db2777",
+          "backgroundColor": "#481A46",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -47,7 +47,7 @@
       [
         "expo-notifications",
         {
-          "color": "#db2777",
+          "color": "#481A46",
           "defaultChannel": "default"
         }
       ],

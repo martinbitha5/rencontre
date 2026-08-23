@@ -19,7 +19,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { colors, glass, isDark, isIOS, m3, radius } from '../theme';
+import { colors, glass, isDark, isIOS, m3, radius } from '@/theme';
 
 // Primitives de mouvement et de matière, partagées par tous les écrans pour
 // que l'app ait un seul rythme. Durées 150-300 ms, ressort à l'appui,

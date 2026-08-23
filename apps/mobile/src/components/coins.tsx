@@ -2,10 +2,10 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { COIN_COLOR, COIN_NAME_PLURAL, formatCoins } from '../config/economy';
-import { useWallet } from '../lib/wallet';
-import { colors, radius, spacing } from '../theme';
-import { Button } from './ui';
+import { COIN_COLOR, COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
+import { useWallet } from '@/providers/wallet';
+import { colors, radius, spacing } from '@/theme';
+import { Button } from '@/components/ui';
 
 // Icône de la monnaie interne : des pièces en or.
 export function CoinIcon({ size = 16, color = COIN_COLOR }: { size?: number; color?: string }) {
@@ -78,12 +78,12 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 14, fontWeight: '800', color: colors.textOnAccent },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(14,15,12,.6)',
+    backgroundColor: 'rgba(23,18,23,.6)',
     justifyContent: 'center',
     padding: spacing.lg,
   },
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.cardSolid,
     borderRadius: radius.lg,
     padding: spacing.lg,
     gap: spacing.sm,

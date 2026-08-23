@@ -84,7 +84,7 @@ export const INTEREST_OPTIONS: string[] = [
   'Nature',
 ];
 
-// Emoji de chaque centre d'intérêt : les chips de la référence Heyama en
+// Emoji de chaque centre d'intérêt : les chips du deck et de la fiche en
 // portent tous un, sur la carte du deck comme dans la fiche détaillée.
 export const INTEREST_EMOJI: Record<string, string> = {
   Musique: '🎵',

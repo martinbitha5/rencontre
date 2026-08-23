@@ -11,8 +11,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { colors, radius, spacing } from '../theme';
-import { Button } from './ui';
+import { colors, radius, spacing } from '@/theme';
+import { Button } from '@/components/ui';
 
 // Doit correspondre à la contrainte check de la table reports.
 const REPORT_REASONS: { key: string; label: string; hint: string }[] = [
@@ -119,11 +119,11 @@ export function ReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(14,15,12,.6)',
+    backgroundColor: 'rgba(23,18,23,.6)',
     justifyContent: 'flex-end',
   },
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.cardSolid,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     padding: spacing.lg,

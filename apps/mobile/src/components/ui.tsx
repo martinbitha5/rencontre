@@ -13,17 +13,23 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
-import { haptic } from '../lib/haptics';
-import { colors, isIOS, m3, radius, shadows, spacing } from '../theme';
+import { haptic } from '@/utils/haptics';
+import { colors, isIOS, m3, radius, shadows, spacing } from '@/theme';
 
 // Chaque composant parle la langue de sa plateforme : Liquid Glass sur iOS
 // (translucides, pilules, enfoncement au ressort), Material 3 sur Android
 // (surfaces toniques, ripple natif, échelle de formes M3). Même palette, même
 // hiérarchie, deux grammaires — l'app doit sembler née sur chaque système.
 
-// Bleu des badges de certification : volontairement hors palette, le même
-// que celui des grandes plateformes, pour être reconnu au premier regard.
-export const VERIFIED_BLUE = '#1d9bf0';
+// Bleu des badges de certification : volontairement hors palette. La marque
+// est prune et magenta partout ailleurs ; ici la couleur ne parle pas de Dowe,
+// elle parle de confiance, et c'est un code que le monde entier lit déjà sans
+// explication. La teinte est fixe dans les deux thèmes — un badge qui change
+// de couleur selon le mode ne serait plus un repère.
+//
+// Elle avait été passée en prune pour rentrer dans l'identité : c'était une
+// erreur, le badge n'est pas un élément de marque.
+export const VERIFIED_BLUE = '#1D9BF0';
 
 // Badge « profil certifié », posé à côté du nom partout où il apparaît :
 // carte Rencontres, fiche détaillée, listes d'activité, mon profil.
@@ -188,20 +194,41 @@ export function Centered({ children }: { children: React.ReactNode }) {
   return <View style={styles.centered}>{children}</View>;
 }
 
-// En-tête des sous-écrans (profil, recharge, historique) : titre seul, le
-// retour se fait au geste (swipe depuis le bord sur iOS, retour système sur
-// Android). iOS : titre centré, à la manière des barres de navigation
-// natives. Android : titre aligné à gauche, comme une top app bar M3.
+// Pastille de retour des sous-écrans, à poser dans le `left` de ScreenHeader.
+// Un seul dessin partout : cercle de verre, chevron encre café.
+export function HeaderBackButton({ onPress }: { onPress?: () => void }) {
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={onPress ?? (() => router.back())}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel="Retour"
+      style={({ pressed }) => [styles.headerBackBtn, pressed && { opacity: 0.7 }]}
+    >
+      <Ionicons name="chevron-back" size={22} color={colors.primaryDeep} />
+    </Pressable>
+  );
+}
+
+// En-tête des sous-écrans (portefeuille, transactions, paramètres, boutique).
+// UN SEUL en-tête pour tous : le titre se lit au même endroit d'un écran à
+// l'autre. iOS : titre centré, à la manière des barres de navigation natives.
+// Android : titre aligné à gauche, comme une top app bar M3. Le retour reste
+// possible au geste ; `left` ajoute la pastille quand l'écran la mérite.
 export function ScreenHeader({
   title,
+  left,
   right,
 }: {
   title: string;
+  left?: React.ReactNode;
   right?: React.ReactNode;
 }) {
   if (!isIOS) {
     return (
       <View style={styles.screenHeaderAndroid}>
+        {!!left && <View style={styles.screenHeaderSide}>{left}</View>}
         <Text style={styles.screenHeaderTitleAndroid} numberOfLines={1}>
           {title}
         </Text>
@@ -212,11 +239,12 @@ export function ScreenHeader({
   return (
     <View style={styles.screenHeader}>
       {/* Le titre est posé en absolu et centré sur la largeur totale : il reste
-          au milieu de l'écran qu'il y ait un élément à droite ou non. Le
-          centrer par flex le décalerait dès qu'une pastille apparaît. */}
+          au milieu de l'écran qu'il y ait une pastille à gauche, à droite, ou
+          aucune. Le centrer par flex le décalerait au premier bouton posé. */}
       <Text style={styles.screenHeaderTitle} numberOfLines={1}>
         {title}
       </Text>
+      <View style={styles.screenHeaderSide}>{left}</View>
       <View style={styles.screenHeaderRight}>{right}</View>
     </View>
   );
@@ -410,7 +438,7 @@ export function SelectableCard({
   );
 }
 
-// Bandeau d'en-tête prune avec titre blanc centré, à la Heyama.
+// Bandeau d'en-tête couleur primaire avec titre blanc centré.
 // Léger dégradé du haut vers le bas : le bandeau a de la matière au lieu
 // d'être un aplat, sans changer l'identité de couleur.
 export function HeaderBand({
@@ -435,7 +463,7 @@ export function HeaderBand({
           courbe, et l'ombre du calque parent n'est pas rognée. */}
       <View style={styles.headerBandClip}>
         <LinearGradient
-          colors={isIOS ? [colors.primary, '#be185d'] : [colors.primary, colors.primary]}
+          colors={isIOS ? [colors.primary, colors.primaryDark] : [colors.primary, colors.primary]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.4, y: 1 }}
           style={styles.headerBand}
@@ -453,7 +481,7 @@ export function HeaderBand({
             largeur, assez épais pour se voir, dans la palette pour rester
             élégant. */}
         <LinearGradient
-          colors={[colors.accent, '#f472b6', colors.accent]}
+          colors={[colors.accent, colors.accentPressed, colors.accent]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.headerBandEdge}
@@ -498,8 +526,17 @@ export function MenuRow({
           <Ionicons name={icon} size={20} color={destructive ? colors.danger : colors.primary} />
         </View>
       )}
-      <Text style={[styles.menuRowLabel, destructive && { color: colors.danger }]}>{label}</Text>
-      {!!detail && <Text style={styles.menuRowDetail}>{detail}</Text>}
+      <Text
+        style={[styles.menuRowLabel, destructive && { color: colors.danger }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+      {!!detail && (
+        <Text style={styles.menuRowDetail} numberOfLines={1}>
+          {detail}
+        </Text>
+      )}
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
   );
@@ -598,7 +635,9 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: isIOS ? colors.card : m3.secondaryContainer,
   },
-  optionRowText: { fontSize: 16, fontWeight: '600', color: colors.text },
+  // flexShrink : un libellé long passe à la ligne au lieu de pousser la coche
+  // hors de la pilule sur les petits écrans.
+  optionRowText: { fontSize: 16, fontWeight: '600', color: colors.text, flexShrink: 1 },
   optionCheck: {
     width: 22,
     height: 22,
@@ -620,7 +659,8 @@ const styles = StyleSheet.create({
     ? { borderColor: colors.primary, backgroundColor: colors.card, ...shadows.card }
     : { borderColor: colors.primary, backgroundColor: m3.surfaceContainerHigh },
   selectCardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  selectCardTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  // flexShrink : le badge reste visible même si le titre est long.
+  selectCardTitle: { fontSize: 17, fontWeight: '800', color: colors.text, flexShrink: 1 },
   selectCardBadge: {
     backgroundColor: colors.accent,
     borderRadius: radius.full,
@@ -700,8 +740,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuRowLabel: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text },
-  menuRowDetail: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
+  menuRowLabel: { flex: 1, minWidth: 0, fontSize: 16, fontWeight: '600', color: colors.text },
+  menuRowDetail: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+    flexShrink: 1,
+    maxWidth: '45%',
+  },
   button: {
     height: 54,
     borderRadius: radius.full,
@@ -786,10 +832,20 @@ const styles = StyleSheet.create({
   screenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    // Pastille gauche à gauche, pastille droite à droite : le titre, posé en
+    // absolu, reste centré quoi qu'il arrive.
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 52,
+  },
+  headerBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   screenHeaderTitle: {
     ...StyleSheet.absoluteFillObject,
@@ -803,6 +859,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.primaryDeep,
   },
+  screenHeaderSide: { flexDirection: 'row', alignItems: 'center' },
   screenHeaderRight: { flexDirection: 'row', alignItems: 'center' },
   // Variante Android : top app bar M3, titre à gauche, actions à droite.
   screenHeaderAndroid: {

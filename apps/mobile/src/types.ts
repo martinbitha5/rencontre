@@ -209,7 +209,11 @@ export type DirectMessageResult =
       // parti dedans au lieu de créer une invitation DM en attente.
       already_matched?: boolean;
     }
-  | { status: 'insufficient_coins'; cost: number; balance: number };
+  | { status: 'insufficient_coins'; cost: number; balance: number }
+  // Un DM initial est déjà parti vers cette personne et attend sa réponse. Le
+  // droit acheté est consommé : le serveur refuse le second message au lieu de
+  // l'offrir (migration 050). Rien n'est débité, rien n'est inséré.
+  | { status: 'already_sent'; match_id: string; balance: number };
 
 export type HistoryLikeResult =
   | { status: 'ok' }

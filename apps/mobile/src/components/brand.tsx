@@ -2,7 +2,7 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { radius } from '../theme';
+import { radius } from '@/theme';
 
 // Éléments d'identité visuelle. Le drapeau et les icônes de packs sont
 // dessinés dans l'app (pas de perte de netteté selon la densité d'écran) ;
@@ -121,12 +121,12 @@ export function OperatorLogo({ id, size = 40 }: { id: OperatorBrandId; size?: nu
 // plus généreux. La clé vit dans config/economy.ts (CoinPack.icon).
 // ---------------------------------------------------------------------------
 const PACK_ICONS = {
-  compass: { glyph: 'compass', color: '#c87941' },
-  bolt: { glyph: 'bolt', color: '#8f9aa8' },
-  rocket: { glyph: 'rocket', color: '#e0a93b' },
-  crown: { glyph: 'crown', color: '#3f8fd4' },
-  incognito: { glyph: 'user-secret', color: '#5b4b8a' },
-  event: { glyph: 'ticket-alt', color: '#2f8f7a' },
+  compass: { glyph: 'compass', color: '#B0798F' },
+  bolt: { glyph: 'bolt', color: '#C2568C' },
+  rocket: { glyph: 'rocket', color: '#C7963C' },
+  crown: { glyph: 'crown', color: '#481A46' },
+  incognito: { glyph: 'user-secret', color: '#6A4A86' },
+  event: { glyph: 'ticket-alt', color: '#3B7D75' },
 } as const;
 
 export type PackIconId = keyof typeof PACK_ICONS;

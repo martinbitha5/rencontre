@@ -6,7 +6,7 @@
 // (les RPC la relisent à chaque opération) ; les valeurs ci-dessous ne
 // servent que d'affichage par défaut tant que get_wallet() n'a pas répondu.
 
-import type { PackIconId } from '../components/brand';
+import type { PackIconId } from '@/components/brand';
 
 export const COIN_NAME = 'pièce';
 export const COIN_NAME_PLURAL = 'pièces';
@@ -25,9 +25,9 @@ export function formatCdf(value: number): string {
 // Or : couleur de l'icône de pièces (composant CoinIcon dans components/coins)
 // et des pastilles de coût. La monnaie interne est toujours or, jamais rose :
 // c'est ce qui la distingue du reste de l'interface.
-export const COIN_COLOR = '#F4B400';
+export const COIN_COLOR = '#D4AF37';
 // Encre posée sur un fond or : assez sombre pour rester lisible dessus.
-export const COIN_ON_GOLD = '#5C4400';
+export const COIN_ON_GOLD = '#4A3708';
 
 // Échelle de la pièce : un DM coûte 200 pièces, comme sur le marché local.
 // Toute modification se fait dans economy_config côté serveur (migration 027),
@@ -58,7 +58,7 @@ export const DEFAULT_DAILY_LIKES = 30;
 // débité sera toujours celui calculé côté serveur (fonction multipay-checkout)
 // — garder les deux tables synchronisées.
 //
-// Grille de prix : mêmes quantités que le concurrent local (Heyama), à un
+// Grille de prix : mêmes quantités que le concurrent local, à un
 // prix inférieur d'environ 7 % sur chaque palier. À DM = 200 pièces, ça donne
 // 1 125 / 887 / 683 / 443 CDF le DM contre 1 195 / 956 / 735 / 478 chez eux.
 // Le prix par pièce reste dégressif (5,6 → 4,4 → 3,4 → 2,2 CDF) pour pousser
@@ -66,7 +66,7 @@ export const DEFAULT_DAILY_LIKES = 30;
 //
 // Ces montants intègrent les 3 % que MultiPay prélève sur chaque transaction :
 // ils sont calés pour qu'APRÈS commission il nous reste la grille d'origine
-// (4 300 / 12 900 / 21 500 / 42 900 CDF). L'écart avec Heyama passe donc de
+// (4 300 / 12 900 / 21 500 / 42 900 CDF). L'écart avec le concurrent passe donc de
 // 10 % à ~7 % : c'est la commission qui est répercutée, pas une hausse de
 // marge. Arrondi à la centaine SUPÉRIEURE — un montant Mobile Money doit
 // rester saisissable, et arrondir vers le bas remangerait la commission.

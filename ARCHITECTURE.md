@@ -57,34 +57,36 @@ meet/
 ├── README.md
 ├── apps/
 │   ├── mobile/                    # App Expo
-│   │   ├── app/                   # expo-router (écrans)
-│   │   │   ├── _layout.tsx        # Root : providers (auth, query)
-│   │   │   ├── (auth)/            # Non connecté
-│   │   │   │   ├── welcome.tsx    # Écran d'accueil + boutons connexion
-│   │   │   │   ├── sign-in.tsx
-│   │   │   │   └── sign-up.tsx
-│   │   │   ├── onboarding/        # Création du profil (multi-étapes)
-│   │   │   │   ├── _layout.tsx
-│   │   │   │   ├── name.tsx
-│   │   │   │   ├── birthdate.tsx
-│   │   │   │   ├── gender.tsx
-│   │   │   │   ├── city.tsx
-│   │   │   │   ├── photos.tsx
-│   │   │   │   └── bio.tsx
-│   │   │   └── (tabs)/            # Connecté + profil complet
-│   │   │       ├── _layout.tsx    # Tab bar
-│   │   │       ├── index.tsx      # Découverte (swipe)
-│   │   │       ├── likes.tsx      # Qui m'a liké (premium)
-│   │   │       ├── matches.tsx    # Matchs + conversations
-│   │   │       ├── chat/[matchId].tsx
-│   │   │       └── profile/       # Mon profil, réglages, premium, suppression compte
 │   │   ├── src/
-│   │   │   ├── lib/supabase.ts    # Client supabase
-│   │   │   ├── lib/purchases.ts   # RevenueCat
-│   │   │   ├── hooks/             # useAuth, useProfile, useFeed, useMatches, useChat
-│   │   │   ├── components/        # SwipeCard, PhotoPicker, MessageBubble...
-│   │   │   ├── api/               # Fonctions d'accès données (RPC + queries)
-│   │   │   └── types/database.ts  # Types générés depuis Supabase
+│   │   │   ├── app/               # expo-router : carte des URL, uniquement
+│   │   │   │   │                  #   des re-exports d'une ligne vers screens/
+│   │   │   │   ├── _layout.tsx    # → navigation/RootLayout
+│   │   │   │   ├── (auth)/        # Non connecté
+│   │   │   │   ├── (tabs)/        # Connecté + profil complet
+│   │   │   │   ├── chat/[matchId].tsx
+│   │   │   │   └── onboarding.tsx, scan.tsx, recharge.tsx, ...
+│   │   │   ├── screens/           # UNE page = UN dossier. Point d'entrée du code.
+│   │   │   │   ├── Discover/      # Découverte (swipe)
+│   │   │   │   │   ├── Discover.tsx        # écran + logique de l'écran
+│   │   │   │   │   ├── Discover.styles.ts  # ses styles, et rien d'autre
+│   │   │   │   │   ├── SwipeDeck.tsx       # composants propres à cet écran
+│   │   │   │   │   └── ProfileCard.tsx
+│   │   │   │   ├── Chat/, Matches/, Activity/, ProfileHome/, Wallet/,
+│   │   │   │   ├── Transactions/, Settings/, SearchPreferences/, Scan/,
+│   │   │   │   ├── Onboarding/, Welcome/, SignIn/, Rewards/, ... (30 écrans)
+│   │   │   ├── navigation/        # RootLayout (providers + Stack), TabsLayout
+│   │   │   │                      #   (barre d'onglets), AuthLayout, ProfileLayout
+│   │   │   ├── services/          # api.ts (RPC + queries), supabase.ts,
+│   │   │   │                      #   payments.ts, notifications.ts, photoPicker.ts
+│   │   │   ├── providers/         # Contextes React : auth, wallet, applock
+│   │   │   ├── hooks/             # Hooks réutilisables (useKeyboardInset)
+│   │   │   ├── components/        # Partagés par PLUSIEURS écrans, uniquement :
+│   │   │   │                      #   ui, motion, coins, brand, mascot, DoweLogo,
+│   │   │   │                      #   ProfileDetailModal, DirectMessageModal...
+│   │   │   ├── utils/             # cache, cityGeo, haptics, preload, partySignal
+│   │   │   ├── config/            # economy.ts (prix, packs), support.ts
+│   │   │   ├── theme.ts           # Jetons Velours : couleurs, espacements, ombres
+│   │   │   └── types.ts           # Types partagés (profil, message, transaction)
 │   │   ├── app.json               # Config Expo (nom, icônes, bundle id)
 │   │   ├── eas.json               # Build/submit stores
 │   │   └── package.json
@@ -202,8 +204,16 @@ Supabase expose automatiquement l'API REST (PostgREST) filtrée par la RLS. Les 
 - **Vérification de profil** (migrations 024 et 031) : selfie reproduisant un geste **tiré au sort par le serveur** et assigné au compte (`verification_challenges`). Le geste est stable tant que la demande n'est pas tranchée, et retiré au sort après un refus. L'app ne le choisit pas et ne peut pas le rejouer : relancer l'application pour tomber sur un geste dont on possède déjà une photo ne marche pas. Huit gestes possibles, catalogue serveur dans `draw_gesture()`. Relance `VerifyPrompt` une fois par ouverture d'application tant que le compte n'est pas vérifié.
 - **Signalement et blocage** : accessibles depuis n'importe quelle fiche profil (`ProfileDetailModal`), y compris sans match — le paywall n'est jamais la sécurité. `block_user()` rend l'invisibilité mutuelle et ferme la conversation ; le signalement bloque aussi, et la personne signalée n'en est jamais informée. Le backoffice ne crée pas de signalements, il ne fait que les traiter.
 - **Matière et mouvement** (`components/motion.tsx`) : `Reveal` (entrée décalée 40 ms), `PressableScale` (ressort à l'appui), `CountUp` (compteur en courbe sortante), `GlassSurface` (flou réel). Le flou n'habille que les barres flottantes et les calques de modale, jamais les cartes statiques : sur Android il exige `experimentalBlurMethod` et reste expérimental côté performances.
-- **Code secret** (`lib/applock.tsx`) : verrou local à quatre chiffres, code rangé dans le trousseau système via expo-secure-store, jamais envoyé au serveur. Protège contre quelqu'un qui prend le téléphone en main, **ne chiffre rien** — c'est écrit tel quel dans l'écran de réglage. `entitlements.incognito_until` porte le droit ; le client ne peut plus écrire `profiles.incognito`, il passe par `set_incognito()` qui exige un abonnement en cours. Couper l'incognito reste toujours autorisé. Crédit par `credit_incognito()`, webhook uniquement, un rachat prolonge l'échéance.
+- **Code secret** (`providers/applock.tsx`) : verrou local à quatre chiffres, code rangé dans le trousseau système via expo-secure-store, jamais envoyé au serveur. Protège contre quelqu'un qui prend le téléphone en main, **ne chiffre rien** — c'est écrit tel quel dans l'écran de réglage. `entitlements.incognito_until` porte le droit ; le client ne peut plus écrire `profiles.incognito`, il passe par `set_incognito()` qui exige un abonnement en cours. Couper l'incognito reste toujours autorisé. Crédit par `credit_incognito()`, webhook uniquement, un rachat prolonge l'échéance.
 - **Parcours d'achat** : offre (`/recharge` ou `/incognito`) → moyens de paiement → numéro Mobile Money → **résumé de l'achat** (`/checkout`, dernier écran avant débit, avec accès au support WhatsApp) → MultiPay. Les écrans de paiement manipulent un `Purchase` normalisé et ne font pas la différence entre un pack de pièces et un abonnement. L'entrée en soirée ne passe pas par là : tout tient sur l'écran Scanner, où le prix, le choix de l'opérateur et la saisie du numéro sont réunis avant l'ouverture du portail. `apps/web/payer.html` omet `cust_mobile_no` plutôt que de l'envoyer vide.
+
+  **Deux rails de paiement, dans cet ordre.** L'app a déjà fait choisir l'opérateur et saisir le numéro : rouvrir une page web qui redemande « carte ou mobile money » est une étape morte. En LIVE, `multipay-checkout` appelle donc l'API Wallet Payments (`mobile-wallet/initialize`, authentifiée par OAuth `client_credentials` sur `passport.interswitchng.com`) et l'opérateur pousse la demande de confirmation directement sur le téléphone : **aucun navigateur ne s'ouvre**, l'app affiche « Confirme sur ton téléphone » et sonde `multipay-return`. Le rail navigateur (`/payer`) reste le repli si la poussée échoue, et l'unique rail du mode TEST — la simulation d'approbation y repose sur le marqueur `done=1` que seule cette page pose. Format du numéro : MultiPay attend le **national nu**, `0827241919` saisi devient `827241919` envoyé, sans indicatif ni zéro (constaté sur le compte marchand réel, la doc montre pourtant un exemple avec indicatif). Correspondance des opérateurs : `airtel`→`AIRTELMONEY`, `orange`→`ORANGE`, `vodacom`→`MPESA`.
+
+  **Notification serveur à serveur** (`multipay-webhook`, à déclarer dans le portail MultiPay, onglet Webhooks). Sans elle, une commande n'est réglée que si quelqu'un vient la réclamer : un client qui paie puis tue l'app laisse une commande `pending` que plus rien ne réveille, argent encaissé sans contrepartie. La fonction authentifie la notification (HmacSHA512 du corps **brut** — le re-sérialiser casse la signature — comparé à temps constant à l'en-tête `X-Interswitch-Signature`), en extrait la référence, puis frappe à la porte unique du crédit. Elle ne crédite jamais elle-même : dupliquer cette logique, c'est signer un double crédit le jour où l'une des deux copies dérive. L'appel vers `multipay-return` **doit** être un POST JSON — tout autre appel y passe pour une navigation du navigateur, et un retour sans `done=1` vaut abandon : une notification de paiement réussi annulerait la commande. Réponse 200 à corps vide, sinon Interswitch rejoue jusqu'à cinq fois ; un 404 (commande inconnue) est acquitté plutôt que rejoué.
+
+  **Où vivent les identifiants** (migration 051). Variables d'environnement des fonctions d'abord, puis à défaut le coffre **Vault** de la base, lu par `public.multipay_config()` (SECURITY DEFINER, réservée au `service_role`, filtrée sur le préfixe `MULTIPAY_`). Le coffre existe parce que les variables d'environnement ne se posent ni depuis une migration ni depuis l'API de gestion : elles exigent un passage à la main par le tableau de bord ou la CLI, et sur un rail de paiement qui se reconfigure plusieurs fois avant d'être juste, c'est l'étape qu'on oublie. La préséance garde la voie conventionnelle prioritaire. Clés attendues : `MULTIPAY_MODE`, `MERCHANT_CODE`, `PAY_ITEM_ID`, `CLIENT_ID`, `SECRET_KEY`, `WEBHOOK_SECRET`, `REQUERY_URL`. Le cache est à l'échelle de l'instance : changer une valeur prend effet après extinction des instances chaudes, ou tout de suite après un redéploiement.
+
+  **Endpoint de confirmation en LIVE.** `newwebpay.interswitchng.com` renvoie la page HTML du portail sur la route `gettransaction.json`, pas du JSON : c'est `webpay.interswitchng.com` qui répond, et sans authentification. D'où `MULTIPAY_REQUERY_URL` posé explicitement plutôt que laissé à la liste de repli, qui gaspillait un aller-retour en erreur à chaque sondage — jusqu'à trente par paiement.
 
   **Plafond par transaction de l'accepteur.** Interswitch refuse au-delà d'un certain montant, et son refus s'affiche « Incorrect Transaction : some of the payment details entered appear to be incorrect », un message qui accuse les coordonnées bancaires alors que seul le montant est en cause. Mesuré le 2026-07-31 en rejouant `POST /collections/w/pay` sur le marchand sandbox `MX228251`, montant seul variable : 490 000 CDF passe, 500 000 CDF renvoie `responseCode Z1`, bascule vers 496 000 CDF. Sans garde-fou, un prix trop élevé ne se découvre qu'à l'entrée, par le client, devant la porte. Le backoffice avertit donc au moment de la saisie (`MAX_ENTRY_CDF` dans `apps/web/admin.js`) et laisse trancher plutôt que de bloquer : ce plafond est une mesure sur un marchand de démonstration, pas une règle du produit, et il est **à reconfirmer auprès de MultiPay le jour où les identifiants marchand LIVE sont posés**.
 - **Il n'y a pas d'abonnement « Dowe+ »**. Les deux seules choses qui se vendent sont les pièces et l'Incognito. `entitlements.is_premium` subsiste en base mais plus rien ne l'écrit ni ne le lit : rebrancher une fonctionnalité dessus sans lui redonner une source d'écriture donnerait un droit que personne ne peut obtenir.
@@ -211,7 +221,7 @@ Supabase expose automatiquement l'API REST (PostgREST) filtrée par la RLS. Les 
 
 ## 7. Backoffice (apps/web/admin.html)
 
-Page statique servie par Vercel, protégée par le géoblocage RDC et `noindex`. Elle ne
+Page statique servie par Vercel, protégée par `noindex`. Elle ne
 contient aucun secret : la clé publique Supabase et un compte présent dans `admin_users`,
 rien d'autre.
 

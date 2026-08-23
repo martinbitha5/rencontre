@@ -1,0 +1,92 @@
+import { StyleSheet } from 'react-native';
+import { colors, radius, spacing } from '@/theme';
+
+export const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md, paddingBottom: spacing.lg },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  // La licorne porte son propre halo : pas de pastille de fond en plus.
+  heroIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginLeft: 'auto',
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+  },
+  title: {
+    fontSize: 25,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: spacing.lg,
+  },
+  perksCard: { borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
+  perksTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.primaryDeep,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  perkRow: { flexDirection: 'row', gap: spacing.sm },
+  perkBody: { flex: 1, gap: 2 },
+  perkTitle: { fontSize: 15, fontWeight: '700', color: colors.primaryDeep },
+  perkText: { fontSize: 13, color: colors.primaryDeep, opacity: 0.8, lineHeight: 18 },
+  plansTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  plansRow: { flexDirection: 'row', gap: spacing.sm },
+  // La répartition dans la rangée vit sur l'enveloppe animée, l'habillage sur
+  // la zone tactile.
+  planOuter: { flex: 1 },
+  plan: {
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  planActive: { borderColor: colors.primary, borderWidth: 2 },
+  planBadge: {
+    backgroundColor: colors.primary,
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  planBadgeEmpty: { backgroundColor: colors.surface },
+  planBadgeText: { fontSize: 11, fontWeight: '800', color: colors.textOnPrimary },
+  planBody: { alignItems: 'center', paddingVertical: spacing.md, gap: 2 },
+  planMonths: { fontSize: 26, fontWeight: '800', color: colors.text },
+  planMonthsUnit: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
+  planPrice: { fontSize: 13, fontWeight: '800', color: colors.primary, textAlign: 'center' },
+  planPriceUsd: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
+  noCommit: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
+  },
+  footer: { borderRadius: 0 },
+  footerInner: { padding: spacing.md },
+});

@@ -35,32 +35,93 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
+// --- Configuration MultiPay ------------------------------------------------
+//
+// DEUX SOURCES, dans cet ordre : les variables d'environnement de la fonction
+// (`supabase secrets set`), puis à défaut le coffre Vault de la base
+// (migration 051, fonction public.multipay_config réservée au service_role).
+//
+// La préséance est délibérée. Les variables d'environnement restent la voie
+// conventionnelle, celle qu'un développeur qui reprend le projet cherchera en
+// premier ; le coffre n'est là que parce qu'elles ne se posent ni depuis une
+// migration ni depuis l'API de gestion, et qu'une étape manuelle sur un rail
+// de paiement finit toujours par être celle qu'on oublie. Les poser un jour à
+// la CLI reprend la main sans qu'il faille vider le coffre.
+//
+// Ces vingt lignes sont répétées dans les quatre fonctions multipay-*, et
+// c'est voulu : un module partagé ne survit pas au bundler, qui range le point
+// d'entrée sous source/ et casse l'import relatif. Sur le chemin de l'argent,
+// une dépendance de déploiement fragile coûte plus cher qu'une duplication.
+//
+// Le cache vaut pour l'instance : une fonction chaude ne relit pas la base à
+// chaque paiement. Corollaire — changer une valeur dans le coffre prend effet
+// après extinction des instances (quelques minutes), ou tout de suite après un
+// redéploiement.
+type MultipayConfig = Record<string, string>;
+
+let configCache: MultipayConfig | null = null;
+
+async function loadConfig(admin: SupabaseClient): Promise<MultipayConfig> {
+  if (configCache) return configCache;
+  const { data, error } = await admin.rpc('multipay_config');
+  if (error) {
+    console.error('multipay_config injoignable', error);
+    configCache = {};
+  } else {
+    configCache = (data ?? {}) as MultipayConfig;
+  }
+  return configCache;
+}
+
+function setting(config: MultipayConfig, key: string, fallback = ''): string {
+  return Deno.env.get(key) ?? config[key] ?? fallback;
+}
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-const MODE = (Deno.env.get('MULTIPAY_MODE') ?? 'TEST').toUpperCase();
-const MERCHANT_CODE =
-  Deno.env.get('MULTIPAY_MERCHANT_CODE') ?? (MODE === 'TEST' ? 'MX228251' : '');
+// Ce dont cette fonction a besoin pour trancher une transaction, résolu une
+// fois par requete depuis l'environnement puis le coffre (voir ci-dessus).
+interface Settings {
+  mode: string;
+  merchantCode: string;
+  requeryUrls: string[];
+  webBase: string;
+}
 
-// Endpoint de confirmation (requery). La doc générale donne
-// sandbox.interswitchng.com / webpay.interswitchng.com ; l'environnement
-// sandbox RDC vit sur newwebpay-sandbox : on essaie dans l'ordre et on
-// retient la première réponse exploitable. Surchargable par secret.
-const REQUERY_URLS = Deno.env.get('MULTIPAY_REQUERY_URL')
-  ? [Deno.env.get('MULTIPAY_REQUERY_URL')!]
-  : MODE === 'LIVE'
-    ? [
-        'https://newwebpay.interswitchng.com/collections/api/v1/gettransaction.json',
-        'https://webpay.interswitchng.com/collections/api/v1/gettransaction.json',
-      ]
-    : [
-        'https://newwebpay-sandbox.interswitchng.com/collections/api/v1/gettransaction.json',
-        'https://sandbox.interswitchng.com/collections/api/v1/gettransaction.json',
-        'https://qa.interswitchng.com/collections/api/v1/gettransaction.json',
-      ];
+function resolveSettings(config: MultipayConfig): Settings {
+  const mode = setting(config, 'MULTIPAY_MODE', 'TEST').toUpperCase();
+  const override = setting(config, 'MULTIPAY_REQUERY_URL');
+
+  // Endpoint de confirmation (requery). La doc générale donne
+  // sandbox.interswitchng.com / webpay.interswitchng.com ; l'environnement
+  // sandbox RDC vit sur newwebpay-sandbox : on essaie dans l'ordre et on
+  // retient la première réponse exploitable. Surchargeable par secret — et en
+  // LIVE il l'est : newwebpay répond du HTML sur cette route, pas du JSON.
+  const requeryUrls = override
+    ? [override]
+    : mode === 'LIVE'
+      ? [
+          'https://webpay.interswitchng.com/collections/api/v1/gettransaction.json',
+          'https://newwebpay.interswitchng.com/collections/api/v1/gettransaction.json',
+        ]
+      : [
+          'https://newwebpay-sandbox.interswitchng.com/collections/api/v1/gettransaction.json',
+          'https://sandbox.interswitchng.com/collections/api/v1/gettransaction.json',
+          'https://qa.interswitchng.com/collections/api/v1/gettransaction.json',
+        ];
+
+  return {
+    mode,
+    merchantCode: setting(config, 'MULTIPAY_MERCHANT_CODE', mode === 'TEST' ? 'MX228251' : ''),
+    requeryUrls,
+    // Page de résultat hébergée sur le site Dowe (Vercel).
+    webBase: setting(config, 'MULTIPAY_WEB_BASE', 'https://dowe-eight.vercel.app'),
+  };
+}
 
 // Codes Interswitch (doc « Payment Response Codes ») :
 // 00 approuvé, 10 partiellement approuvé, 11 approuvé VIP.
@@ -74,9 +135,6 @@ const CANCEL_CODES = new Set(['Z6', 'Z0']);
 // dans la même session. Marquer failed trop tôt ferait perdre un paiement
 // encaissé après coup. Marge de 5 min sur les horloges.
 const FINALITY_WINDOW_MS = 35 * 60 * 1000;
-
-// Page de résultat hébergée sur le site Dowe (Vercel).
-const WEB_BASE = Deno.env.get('MULTIPAY_WEB_BASE') ?? 'https://dowe-eight.vercel.app';
 
 type OrderStatus = 'pending' | 'success' | 'failed' | 'cancelled';
 
@@ -112,13 +170,17 @@ interface Requery {
   payload?: unknown;
 }
 
-async function requeryTransaction(ref: string, amountMinor: number): Promise<Requery> {
+async function requeryTransaction(
+  settings: Settings,
+  ref: string,
+  amountMinor: number,
+): Promise<Requery> {
   const params = new URLSearchParams({
-    merchantcode: MERCHANT_CODE,
+    merchantcode: settings.merchantCode,
     transactionreference: ref,
     amount: String(amountMinor),
   });
-  for (const base of REQUERY_URLS) {
+  for (const base of settings.requeryUrls) {
     try {
       const res = await fetch(`${base}?${params}`, {
         headers: { 'Content-Type': 'application/json' },
@@ -228,6 +290,7 @@ async function approveAndCredit(
 // pour le bon montant. Idempotent : rejouable sans double crédit.
 async function settleOrder(
   admin: SupabaseClient,
+  settings: Settings,
   order: OrderRow,
   signal: Signal,
 ): Promise<OrderRow> {
@@ -256,7 +319,7 @@ async function settleOrder(
 
   const amountMinor = order.amount_cdf * 100;
   const ageMs = Date.now() - new Date(order.created_at).getTime();
-  const result = await requeryTransaction(order.txn_ref, amountMinor);
+  const result = await requeryTransaction(settings, order.txn_ref, amountMinor);
 
   if (result.ok && result.code && SUCCESS_CODES.has(result.code)) {
     // Garde-fou de la doc : le montant confirmé DOIT être celui de la
@@ -284,7 +347,7 @@ async function settleOrder(
   // Sandbox : la vérification réelle ne peut pas aboutir (marchand de démo).
   // On approuve UNIQUEMENT si le tunnel est allé à son terme — jamais sur le
   // simple écoulement du temps, sinon un paiement abandonné serait crédité.
-  if (MODE === 'TEST' && signal.completed) {
+  if (settings.mode === 'TEST' && signal.completed) {
     return approveAndCredit(
       admin,
       order,
@@ -370,16 +433,20 @@ Deno.serve(async (req: Request) => {
     reportedCode: url.searchParams.get('code') || null,
   };
 
-  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
-    return wantsJson
-      ? json({ status: 'unknown', error: 'invalid_ref' }, 400)
-      : redirectResult('failed', null);
-  }
-
+  // La configuration est résolue AVANT toute sortie : même le refus d'une
+  // référence invalide redirige vers le site, dont l'adresse en dépend.
   const admin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
+  const settings = resolveSettings(await loadConfig(admin));
+
+  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
+    return wantsJson
+      ? json({ status: 'unknown', error: 'invalid_ref' }, 400)
+      : redirectResult(settings, 'failed', null);
+  }
+
   const { data: order } = await admin
     .from('payment_orders')
     .select(
@@ -391,10 +458,10 @@ Deno.serve(async (req: Request) => {
   if (!order) {
     return wantsJson
       ? json({ status: 'unknown', error: 'order_not_found' }, 404)
-      : redirectResult('failed', null);
+      : redirectResult(settings, 'failed', null);
   }
 
-  const settled = await settleOrder(admin, order, signal);
+  const settled = await settleOrder(admin, settings, order, signal);
 
   if (wantsJson) {
     return json({
@@ -411,7 +478,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  return redirectResult(settled.status, settled.txn_ref);
+  return redirectResult(settings, settled.status, settled.txn_ref);
 });
 
 function json(data: unknown, status = 200): Response {
@@ -421,8 +488,12 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-function redirectResult(status: OrderStatus, ref: string | null): Response {
-  const target = `${WEB_BASE}/paiement-retour?status=${status}${ref ? `&ref=${ref}` : ''}`;
+function redirectResult(
+  settings: Settings,
+  status: OrderStatus,
+  ref: string | null,
+): Response {
+  const target = `${settings.webBase}/paiement-retour?status=${status}${ref ? `&ref=${ref}` : ''}`;
   return new Response(null, {
     status: 302,
     headers: { Location: target, 'Cache-Control': 'no-store' },

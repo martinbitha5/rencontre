@@ -15,12 +15,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { photoUrl, sendDirectMessage } from '../api';
-import { COIN_NAME_PLURAL, formatCoins } from '../config/economy';
-import { CoinIcon } from './coins';
-import { haptic } from '../lib/haptics';
-import { useWallet } from '../lib/wallet';
-import type { DirectMessageResult } from '../types';
+import { photoUrl, sendDirectMessage } from '@/services/api';
+import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
+import { CoinIcon } from '@/components/coins';
+import { haptic } from '@/utils/haptics';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { useWallet } from '@/providers/wallet';
+import { brandRamp, colors } from '@/theme';
+import type { DirectMessageResult } from '@/types';
 
 // Écran d'envoi du premier message : PLEIN ÉCRAN, pas une petite carte. La
 // photo du profil habille tout le fond (floutée), le portrait net trône au
@@ -77,6 +79,9 @@ export function DirectMessageModal({
   onResult: (result: DirectMessageResult, target: Target) => void;
 }) {
   const { wallet, costs } = useWallet();
+  // Android edge-to-edge : le champ et le bouton Envoyer doivent remonter
+  // au-dessus du clavier (iOS reste sur le KeyboardAvoidingView).
+  const keyboardInset = useKeyboardInset();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,21 +140,26 @@ export function DirectMessageModal({
           />
         ) : (
           <LinearGradient
-            colors={['#1c0b13', '#4a1030', '#9d174d']}
+            colors={brandRamp}
             start={{ x: 0.1, y: 0 }}
             end={{ x: 0.9, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
         )}
         <LinearGradient
-          colors={['rgba(28,11,19,0.55)', 'rgba(28,11,19,0.75)', 'rgba(28,11,19,0.92)']}
+          colors={['rgba(23,18,23,0.55)', 'rgba(23,18,23,0.75)', 'rgba(23,18,23,0.92)']}
           style={StyleSheet.absoluteFill}
         />
 
         <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.flex}
+            style={[
+              styles.flex,
+              Platform.OS === 'android' && keyboardInset > 0
+                ? { paddingBottom: keyboardInset }
+                : null,
+            ]}
           >
             <View style={styles.topBar}>
               <Pressable
@@ -172,7 +182,7 @@ export function DirectMessageModal({
               {/* Portrait net dans un anneau dégradé, posé sur le fond flouté. */}
               <View style={styles.avatarRing}>
                 <LinearGradient
-                  colors={['#ec4899', '#f472b6']}
+                  colors={['#9B3F7A', '#C7963C']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
@@ -259,7 +269,7 @@ export function DirectMessageModal({
                 ]}
               >
                 <LinearGradient
-                  colors={['#ec4899', '#be185d']}
+                  colors={[colors.accent, colors.accentPressed]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
@@ -282,7 +292,7 @@ export function DirectMessageModal({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#1c0b13' },
+  screen: { flex: 1, backgroundColor: '#171217' },
   safe: { flex: 1 },
   flex: { flex: 1 },
   topBar: {
@@ -368,7 +378,7 @@ const styles = StyleSheet.create({
   },
   ruleText: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
   error: {
-    color: '#fda4af',
+    color: '#F08078',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 12,
@@ -387,16 +397,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   freePill: {
-    backgroundColor: 'rgba(74,222,128,0.2)',
+    backgroundColor: 'rgba(95,201,138,0.2)',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  freePillText: { color: '#4ade80', fontSize: 12, fontWeight: '800' },
+  freePillText: { color: '#5FC98A', fontSize: 12, fontWeight: '800' },
   costText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' },
+  // Coin signature Velours : l'angle bas droit est plus petit que les autres.
   sendBtn: {
     height: 56,
-    borderRadius: 999,
+    borderRadius: 18,
+    borderBottomRightRadius: 8,
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',

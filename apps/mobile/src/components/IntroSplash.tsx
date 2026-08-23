@@ -11,9 +11,10 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { useAppLock } from '../lib/applock';
-import { useAuth } from '../lib/auth';
-import { FingerprintDraw, LOGO_FORMED_MS } from './DoweLogo';
+import { useAppLock } from '@/providers/applock';
+import { useAuth } from '@/providers/auth';
+import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/DoweLogo';
+import { brandRamp } from '@/theme';
 
 // Intro de démarrage : les lignes de l'empreinte (le logo Dowe) se dessinent
 // une à une, un éclat de lumière signe la reconnaissance, le wordmark
@@ -43,7 +44,6 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
   const [exiting, setExiting] = useState(false);
   const exitStarted = useRef(false);
 
-  const haloOpacity = useSharedValue(reduceMotion ? 0.16 : 0);
   const wordOpacity = useSharedValue(reduceMotion ? 1 : 0);
   const wordShift = useSharedValue(reduceMotion ? 0 : 10);
   const overlayOpacity = useSharedValue(1);
@@ -56,10 +56,6 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
       const t = setTimeout(() => setAnimDone(true), 800);
       return () => clearTimeout(t);
     }
-    haloOpacity.value = withDelay(
-      500,
-      withTiming(0.16, { duration: 600, easing: Easing.inOut(Easing.quad) }),
-    );
     wordOpacity.value = withDelay(WORD_AT, withTiming(1, { duration: 380 }));
     wordShift.value = withDelay(
       WORD_AT,
@@ -78,7 +74,7 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
       clearTimeout(haptic);
       clearTimeout(done);
     };
-  }, [reduceMotion, haloOpacity, wordOpacity, wordShift]);
+  }, [reduceMotion, wordOpacity, wordShift]);
 
   useEffect(() => {
     if (!animDone || !appReady || exitStarted.current) return;
@@ -101,7 +97,6 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
     opacity: overlayOpacity.value,
     transform: [{ scale: overlayScale.value }],
   }));
-  const haloStyle = useAnimatedStyle(() => ({ opacity: haloOpacity.value }));
   const wordStyle = useAnimatedStyle(() => ({
     opacity: wordOpacity.value,
     transform: [{ translateY: wordShift.value }],
@@ -113,13 +108,12 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
       pointerEvents={exiting ? 'none' : 'auto'}
     >
       <LinearGradient
-        colors={['#1c0b13', '#4a1030', '#9d174d']}
+        colors={brandRamp}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={styles.fill}
       >
-        <Animated.View style={[styles.halo, haloStyle]} />
-        <FingerprintDraw size={150} color="#ffffff" glowColor="#f472b6" strokeWidth={2} />
+        <FingerprintDraw size={150} color="#ffffff" glowColor="#f0704f" strokeWidth={2} />
         <Animated.View style={wordStyle}>
           <Text style={styles.wordmark}>DOWE</Text>
           <Text style={styles.tagline}>Des rencontres qui comptent</Text>
@@ -139,18 +133,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 18,
-  },
-  halo: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: '#ec4899',
-    // Adouci par une ombre portée de sa propre couleur : sans elle, le disque
-    // aurait un bord net et ferait pastille au lieu de lueur.
-    shadowColor: '#ec4899',
-    shadowOpacity: 1,
-    shadowRadius: 60,
   },
   wordmark: {
     color: '#ffffff',
