@@ -33,6 +33,7 @@ import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { ReplyModal } from './ReplyModal';
 import { Centered, VerifiedBadge } from '@/components/ui';
 import { formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { prefetchPhotos } from '@/utils/preload';
@@ -700,7 +701,13 @@ export default function Activity() {
                     hitSlop={6}
                   >
                     <Ionicons name="heart" size={16} color={colors.textOnAccent} />
-                    <Text style={styles.accentPillText}>{formatCoins(costs.like_back_cost)}</Text>
+                    {/* Le coût du like en retour n'a plus lieu d'être annoncé
+                        quand il ne coûte rien : reste le cœur. */}
+                    {PAYMENTS_ENABLED && (
+                      <Text style={styles.accentPillText}>
+                        {formatCoins(costs.like_back_cost)}
+                      </Text>
+                    )}
                   </Pressable>
                 </Pressable>
               )}
@@ -809,13 +816,14 @@ export default function Activity() {
         </ScrollView>
       </View>
 
-      {/* Détail d'un profil qui m'a liké : like retour payant */}
+      {/* Détail d'un profil qui m'a liké : like retour payant (gratuit tant
+          que PAYMENTS_ENABLED est false — la pastille de coût disparaît). */}
       <ProfileDetailModal
         profile={likerDetail}
         onClose={() => setLikerDetail(null)}
         onBlocked={dropBlocked}
         onLike={likerDetail ? () => doLikeBack(likerDetail) : undefined}
-        likeCost={costs.like_back_cost}
+        likeCost={PAYMENTS_ENABLED ? costs.like_back_cost : undefined}
       />
 
       {/* Détail d'un visiteur : consultation libre, l'action reste payante */}

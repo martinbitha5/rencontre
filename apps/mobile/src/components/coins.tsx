@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COIN_COLOR, COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { useWallet } from '@/providers/wallet';
 import { colors, radius, spacing } from '@/theme';
 import { Button } from '@/components/ui';
@@ -13,9 +14,12 @@ export function CoinIcon({ size = 16, color = COIN_COLOR }: { size?: number; col
 }
 
 // Pastille de solde : affichée dans les en-têtes, ouvre la recharge par défaut.
+// En mode gratuit elle ne s'affiche pas : il n'y a plus de solde à montrer ni
+// de recharge où aller.
 export function CoinPill({ onPress }: { onPress?: () => void }) {
   const router = useRouter();
   const { wallet } = useWallet();
+  if (!PAYMENTS_ENABLED) return null;
   return (
     <Pressable
       style={({ pressed }) => [styles.pill, pressed && { opacity: 0.8 }]}
@@ -29,6 +33,11 @@ export function CoinPill({ onPress }: { onPress?: () => void }) {
 }
 
 // Modale "solde insuffisant" : propose la recharge.
+//
+// En mode gratuit elle ne devrait jamais s'ouvrir — le serveur ne facture plus
+// rien (economy_config.free_mode). Elle reste néanmoins branchée en filet :
+// si le client tourne en gratuit alors que la base facture encore, mieux vaut
+// un message honnête qu'un renvoi vers une boutique fermée.
 export function InsufficientCoinsModal({
   cost,
   onClose,
@@ -45,20 +54,34 @@ export function InsufficientCoinsModal({
           <View style={styles.icon}>
             <CoinIcon size={28} />
           </View>
-          <Text style={styles.title}>Solde insuffisant</Text>
-          <Text style={styles.text}>
-            Il te faut {cost === null ? '' : formatCoins(cost)} {COIN_NAME_PLURAL} pour cette
-            action{wallet ? ` et il t'en reste ${formatCoins(wallet.balance)}` : ''}. Recharge
-            ton compte pour continuer.
+          <Text style={styles.title}>
+            {PAYMENTS_ENABLED ? 'Solde insuffisant' : 'Action indisponible'}
           </Text>
+          <Text style={styles.text}>
+            {PAYMENTS_ENABLED ? (
+              <>
+                Il te faut {cost === null ? '' : formatCoins(cost)} {COIN_NAME_PLURAL} pour cette
+                action{wallet ? ` et il t'en reste ${formatCoins(wallet.balance)}` : ''}. Recharge
+                ton compte pour continuer.
+              </>
+            ) : (
+              "Cette action n'a pas pu aboutir pour l'instant. Réessaie dans un moment."
+            )}
+          </Text>
+          {PAYMENTS_ENABLED && (
+            <Button
+              title="Recharger"
+              onPress={() => {
+                onClose();
+                router.push('/recharge');
+              }}
+            />
+          )}
           <Button
-            title="Recharger"
-            onPress={() => {
-              onClose();
-              router.push('/recharge');
-            }}
+            title={PAYMENTS_ENABLED ? 'Plus tard' : "J'ai compris"}
+            variant="ghost"
+            onPress={onClose}
           />
-          <Button title="Plus tard" variant="ghost" onPress={onClose} />
         </View>
       </View>
     </Modal>

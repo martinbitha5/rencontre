@@ -19,6 +19,7 @@ import {
 import { useAuth } from '@/providers/auth';
 import { CoinIcon, InsufficientCoinsModal } from '@/components/coins';
 import { formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { haptic } from '@/utils/haptics';
 import { onPartyAccessChanged } from '@/utils/partySignal';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
@@ -331,18 +332,21 @@ export default function Discover() {
             signature en bas à droite. Mêmes actions qu'avant, seul
             l'habillage change. */}
         <View style={styles.headerGroup}>
-          <Pressable
-            onPress={() => router.push('/recharge')}
-            hitSlop={8}
-            style={styles.balance}
-            accessibilityRole="button"
-            accessibilityLabel="Recharger mes pièces"
-          >
-            <Text style={styles.balanceText}>
-              {wallet ? formatCoins(wallet.balance) : '–'}
-            </Text>
-            <CoinIcon size={16} />
-          </Pressable>
+          {/* Solde et recharge : masqués tant que l'app est gratuite. */}
+          {PAYMENTS_ENABLED && (
+            <Pressable
+              onPress={() => router.push('/recharge')}
+              hitSlop={8}
+              style={styles.balance}
+              accessibilityRole="button"
+              accessibilityLabel="Recharger mes pièces"
+            >
+              <Text style={styles.balanceText}>
+                {wallet ? formatCoins(wallet.balance) : '–'}
+              </Text>
+              <CoinIcon size={16} />
+            </Pressable>
+          )}
           <Pressable
             onPress={() => router.push('/history')}
             hitSlop={4}
@@ -455,9 +459,12 @@ export default function Discover() {
             >
               <View style={styles.actionInner}>
                 <Ionicons name="chatbubble-ellipses" size={28} color={colors.textOnPrimary} />
-                <View style={styles.msgCostBadge}>
-                  <CoinIcon size={12} />
-                </View>
+                {/* Pastille de coût : rien à signaler quand écrire est libre. */}
+                {PAYMENTS_ENABLED && (
+                  <View style={styles.msgCostBadge}>
+                    <CoinIcon size={12} />
+                  </View>
+                )}
               </View>
             </PressableScale>
             <PressableScale

@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { photoUrl, sendDirectMessage } from '@/services/api';
 import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { CoinIcon } from '@/components/coins';
 import { haptic } from '@/utils/haptics';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -235,8 +236,18 @@ export function DirectMessageModal({
             </ScrollView>
 
             <View style={styles.footer}>
+              {/* En mode gratuit, écrire en premier ne coûte rien et ne
+                  consomme aucun quota : on l'annonce d'un mot, sans compteur
+                  ni pièce. */}
               <View style={styles.costRow}>
-                {freeLeft !== null && freeLeft > 0 ? (
+                {!PAYMENTS_ENABLED ? (
+                  <>
+                    <View style={styles.freePill}>
+                      <Text style={styles.freePillText}>Offert</Text>
+                    </View>
+                    <Text style={styles.costText}>Le premier message est gratuit</Text>
+                  </>
+                ) : freeLeft !== null && freeLeft > 0 ? (
                   <>
                     <View style={styles.freePill}>
                       <Text style={styles.freePillText}>Offert</Text>

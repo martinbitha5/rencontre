@@ -21,6 +21,7 @@ import { CountUp } from '@/components/motion';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { Centered, VerifiedBadge } from '@/components/ui';
 import { formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { haptic } from '@/utils/haptics';
@@ -128,14 +129,24 @@ export default function ProfileHome() {
   };
 
   // L'activation exige un abonnement en cours : c'est le serveur qui tranche,
-  // l'app se contente d'envoyer vers l'offre quand il refuse.
+  // l'app se contente d'envoyer vers l'offre quand il refuse. En mode gratuit
+  // il n'y a pas d'offre où envoyer : le serveur accorde l'incognito à tout le
+  // monde (economy_config.free_mode), et un refus ne peut plus venir que d'une
+  // base restée en mode payant.
   const toggleIncognito = async (value: boolean) => {
     if (togglingIncognito) return;
     setTogglingIncognito(true);
     try {
       const res = await setIncognito(value);
       if (res.status === 'subscription_required') {
-        router.push('/incognito');
+        if (PAYMENTS_ENABLED) {
+          router.push('/incognito');
+        } else {
+          Alert.alert(
+            'Incognito indisponible',
+            "Le mode incognito n'est pas activable pour l'instant. Réessaie plus tard.",
+          );
+        }
         return;
       }
       await refreshProfile();
@@ -147,8 +158,11 @@ export default function ProfileHome() {
   };
 
   // Nombre de cartes du carrousel : la carte vérification disparaît une fois
-  // le compte certifié.
-  const promoCount = profile.is_verified ? 2 : 3;
+  // le compte certifié, et la carte « Plus de pièces » tant que l'app est
+  // gratuite. Les points de pagination doivent suivre, sinon ils annoncent
+  // une carte qui n'existe pas.
+  const promoCount =
+    (PAYMENTS_ENABLED ? 1 : 0) + 1 + (profile.is_verified ? 0 : 1);
 
   const onPromoScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / (promoWidth + spacing.sm));
@@ -210,27 +224,30 @@ export default function ProfileHome() {
               {profile.is_verified && <VerifiedBadge size={24} />}
             </Pressable>
 
-            {/* Solde, en encre sur le voile sable : mène à la recharge. */}
-            <Pressable
-              style={({ pressed }) => [styles.balance, pressed && { opacity: 0.85 }]}
-              onPress={() => router.push('/recharge')}
-            >
-              {wallet ? (
-                animateBalance ? (
-                  <CountUp
-                    value={wallet.balance}
-                    duration={1100}
-                    format={(n) => formatCoins(n)}
-                    style={styles.balanceText}
-                  />
+            {/* Solde, en encre sur le voile sable : mène à la recharge.
+                Masqué tant que l'app est gratuite. */}
+            {PAYMENTS_ENABLED && (
+              <Pressable
+                style={({ pressed }) => [styles.balance, pressed && { opacity: 0.85 }]}
+                onPress={() => router.push('/recharge')}
+              >
+                {wallet ? (
+                  animateBalance ? (
+                    <CountUp
+                      value={wallet.balance}
+                      duration={1100}
+                      format={(n) => formatCoins(n)}
+                      style={styles.balanceText}
+                    />
+                  ) : (
+                    <Text style={styles.balanceText}>{formatCoins(wallet.balance)}</Text>
+                  )
                 ) : (
-                  <Text style={styles.balanceText}>{formatCoins(wallet.balance)}</Text>
-                )
-              ) : (
-                <Text style={styles.balanceText}>–</Text>
-              )}
-              <CoinIcon size={18} />
-            </Pressable>
+                  <Text style={styles.balanceText}>–</Text>
+                )}
+                <CoinIcon size={18} />
+              </Pressable>
+            )}
 
             <Pressable
               style={({ pressed }) => [styles.editPill, pressed && { opacity: 0.85 }]}
@@ -251,33 +268,35 @@ export default function ProfileHome() {
             scrollEventThrottle={16}
             contentContainerStyle={styles.carousel}
           >
-            <View style={[styles.promo, { width: promoWidth }]}>
-              <View style={styles.promoIconRow}>
-                <View style={styles.promoIconCircle}>
-                  <CoinIcon size={24} />
+            {PAYMENTS_ENABLED && (
+              <View style={[styles.promo, { width: promoWidth }]}>
+                <View style={styles.promoIconRow}>
+                  <View style={styles.promoIconCircle}>
+                    <CoinIcon size={24} />
+                  </View>
+                  <Text style={styles.promoTitle}>Plus de pièces</Text>
                 </View>
-                <Text style={styles.promoTitle}>Plus de pièces</Text>
-              </View>
-              <Text style={styles.promoText}>
-                Recharge ton solde pour liker en retour et écrire en premier.
-              </Text>
-              <Pressable
-                style={({ pressed }) => [styles.promoBtnWrap, pressed && { opacity: 0.85 }]}
-                onPress={() => {
-                  haptic.tap();
-                  router.push('/recharge');
-                }}
-              >
-                <LinearGradient
-                  colors={[colors.purple, colors.purpleDark]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.promoBtn}
+                <Text style={styles.promoText}>
+                  Recharge ton solde pour liker en retour et écrire en premier.
+                </Text>
+                <Pressable
+                  style={({ pressed }) => [styles.promoBtnWrap, pressed && { opacity: 0.85 }]}
+                  onPress={() => {
+                    haptic.tap();
+                    router.push('/recharge');
+                  }}
                 >
-                  <Text style={styles.promoBtnText}>{"J'en profite"}</Text>
-                </LinearGradient>
-              </Pressable>
-            </View>
+                  <LinearGradient
+                    colors={[colors.purple, colors.purpleDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.promoBtn}
+                  >
+                    <Text style={styles.promoBtnText}>{"J'en profite"}</Text>
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            )}
 
             <View style={[styles.promo, { width: promoWidth }]}>
               <View style={styles.promoIconRow}>
@@ -290,9 +309,11 @@ export default function ProfileHome() {
                 {profile.incognito
                   ? 'Activé : tu n’apparais plus dans Rencontres.'
                   : 'Reste discret : ton profil sort du deck Rencontres.'}
-                {incognitoUntil
-                  ? ` Abonnement valable jusqu’au ${incognitoUntil}.`
-                  : ' Sur abonnement.'}
+                {!PAYMENTS_ENABLED
+                  ? ' Offert.'
+                  : incognitoUntil
+                    ? ` Abonnement valable jusqu’au ${incognitoUntil}.`
+                    : ' Sur abonnement.'}
               </Text>
               <Pressable
                 disabled={togglingIncognito}
@@ -371,12 +392,17 @@ export default function ProfileHome() {
               label="Scanner"
               onPress={() => router.push('/scan')}
             />
-            <MenuCard
-              icon="wallet-outline"
-              label="Mon portefeuille"
-              detail={wallet ? formatCoins(wallet.balance) : undefined}
-              onPress={() => router.push('/(tabs)/profile/wallet')}
-            />
+            {/* Portefeuille : porte d'entrée de toute l'économie de pièces
+                (solde, récompenses, parrainage, transactions). Retirée du menu
+                tant que l'app est gratuite. */}
+            {PAYMENTS_ENABLED && (
+              <MenuCard
+                icon="wallet-outline"
+                label="Mon portefeuille"
+                detail={wallet ? formatCoins(wallet.balance) : undefined}
+                onPress={() => router.push('/(tabs)/profile/wallet')}
+              />
+            )}
             <MenuCard
               icon="settings-outline"
               label="Paramètres"

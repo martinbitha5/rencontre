@@ -19,6 +19,7 @@ import { scanEvent } from '@/services/api';
 import { OperatorLogo, PackIcon, type OperatorBrandId } from '@/components/brand';
 import { Button, ErrorText, HeaderBackButton, ScreenHeader, SectionLabel } from '@/components/ui';
 import { formatCdf, MOBILE_MONEY_OPERATORS, type MobileMoneyOperator } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { initiateMobileMoneyPayment, waitForPaymentSettlement } from '@/services/payments';
 import { notifyPartyAccessChanged } from '@/utils/partySignal';
 import { colors, onLight } from '@/theme';
@@ -92,6 +93,17 @@ export default function Scan() {
       }
       if (result.status === 'payment_required') {
         setPayError(null);
+        // Aucun tunnel de paiement n'est présenté tant que l'app est
+        // gratuite : une soirée encore tarifée au backoffice se règle alors
+        // auprès de l'organisateur, sur place. Mettre son prix à 0 rend
+        // l'entrée immédiate.
+        if (!PAYMENTS_ENABLED) {
+          setOutcome({
+            kind: 'denied',
+            message: `L'entrée de « ${result.name} » se règle directement auprès de l'organisateur. Re-scanne le code une fois sur la liste.`,
+          });
+          return;
+        }
         setOutcome({
           kind: 'payment',
           eventId: result.event_id,
@@ -256,7 +268,9 @@ export default function Scan() {
             <Ionicons name="ticket-outline" size={22} color={colors.accent} />
           </View>
           <Text style={styles.hintText}>
-            {"L'accès se paie une seule fois : ensuite tu peux sortir et revenir librement."}
+            {PAYMENTS_ENABLED
+              ? "L'accès se paie une seule fois : ensuite tu peux sortir et revenir librement."
+              : "L'accès se valide une seule fois : ensuite tu peux sortir et revenir librement."}
           </Text>
         </View>
       </View>

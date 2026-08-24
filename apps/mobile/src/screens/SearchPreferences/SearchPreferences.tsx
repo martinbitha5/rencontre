@@ -7,6 +7,7 @@ import { CoinIcon, InsufficientCoinsModal } from '@/components/coins';
 import { RangeSlider } from './RangeSlider';
 import { Button, ScreenHeader, Segmented, VerifiedBadge } from '@/components/ui';
 import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { useWallet } from '@/providers/wallet';
 import { GOAL_OPTIONS, RELIGION_OPTIONS } from '@/profileOptions';
@@ -29,8 +30,11 @@ const GOAL_ICONS: Record<string, { name: keyof typeof Ionicons.glyphMap; color: 
   je_me_laisse_surprendre: { name: 'sparkles', color: '#C7963C' },
 };
 
-// Badge de coût en pièces, posé sur le coin d'une carte premium.
+// Badge de coût en pièces, posé sur le coin d'une carte premium. Un seul
+// endroit à neutraliser pour que les trois filtres autrefois payants se
+// présentent comme les autres tant que l'app est gratuite.
 function CostBadge({ cost }: { cost: number }) {
+  if (!PAYMENTS_ENABLED) return null;
   return (
     <View style={styles.costBadge}>
       <Text style={styles.costBadgeText}>{formatCoins(cost)}</Text>
@@ -164,10 +168,13 @@ export default function SearchPreferences() {
   // Coût des options payantes en cours d'ACTIVATION (le serveur ne débite
   // que le passage de inactif à actif ; désactiver reste gratuit). Tant que
   // ce total est positif, le bouton du bas devient « Payer X pièces ».
-  const pendingCost =
-    (onlineOnly && !profile?.filter_online_only ? costs.filter_online_cost : 0) +
-    (goals !== null && (profile?.filter_goals ?? null) === null ? costs.filter_goals_cost : 0) +
-    (dmStrict && !profile?.filter_dm_strict ? costs.filter_dm_cost : 0);
+  // Gratuit : plus rien à annoncer, la barre « Payer X pièces » disparaît et
+  // le bouton d'enregistrement reprend son libellé normal.
+  const pendingCost = !PAYMENTS_ENABLED
+    ? 0
+    : (onlineOnly && !profile?.filter_online_only ? costs.filter_online_cost : 0) +
+      (goals !== null && (profile?.filter_goals ?? null) === null ? costs.filter_goals_cost : 0) +
+      (dmStrict && !profile?.filter_dm_strict ? costs.filter_dm_cost : 0);
 
   const dirty =
     lookingFor !== (profile?.looking_for ?? null) ||

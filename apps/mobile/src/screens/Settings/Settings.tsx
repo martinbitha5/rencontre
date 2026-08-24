@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteMyAccount, setIncognito } from '@/services/api';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAppLock } from '@/providers/applock';
 import { BottomSheet } from './BottomSheet';
 import { MenuRow, ScreenHeader, SectionLabel } from '@/components/ui';
@@ -66,11 +67,20 @@ export default function Settings() {
     THEME_OPTIONS.find((o) => o.key === themePref)?.label ?? 'Système';
 
   // Même règle qu'ailleurs : activer demande un abonnement, couper est libre.
+  // En mode gratuit l'abonnement n'existe plus, il n'y a donc pas d'offre où
+  // renvoyer (voir ProfileHome, même traitement).
   const toggleIncognito = async (value: boolean) => {
     try {
       const res = await setIncognito(value);
       if (res.status === 'subscription_required') {
-        router.push('/incognito');
+        if (PAYMENTS_ENABLED) {
+          router.push('/incognito');
+        } else {
+          Alert.alert(
+            'Incognito indisponible',
+            "Le mode incognito n'est pas activable pour l'instant. Réessaie plus tard.",
+          );
+        }
         return;
       }
       await refreshProfile();

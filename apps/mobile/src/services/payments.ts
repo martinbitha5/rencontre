@@ -1,5 +1,12 @@
 import type { MobileMoneyOperator } from '@/config/economy';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { supabase } from '@/services/supabase';
+
+// Mode gratuit (PAYMENTS_ENABLED = false) : aucune de ces fonctions ne touche
+// le réseau. Les fonctions Edge restent déployées, elles ne sont simplement
+// plus sollicitées. Le corps de chaque fonction est conservé tel quel en
+// dessous du garde-fou — remettre l'interrupteur à true suffit à tout
+// rebrancher, il n'y a rien à réécrire.
 
 // Rail de paiement local (RDC) : MultiPay / Interswitch.
 //
@@ -47,6 +54,7 @@ export async function initiateMobileMoneyPayment(params: {
   operator?: MobileMoneyOperator;
   phone?: string;
 }): Promise<MobileMoneyResult> {
+  if (!PAYMENTS_ENABLED) return { status: 'unavailable' };
   try {
     const { data, error } = await supabase.functions.invoke('multipay-checkout', {
       body: params,
@@ -109,6 +117,7 @@ const FINAL_STATUSES: PaymentStatus[] = ['success', 'failed', 'cancelled'];
 // Interroge multipay-return en JSON : la fonction revérifie la transaction
 // chez Interswitch et crédite si elle vient d'être approuvée (idempotent).
 export async function getPaymentStatus(reference: string): Promise<PaymentStatus> {
+  if (!PAYMENTS_ENABLED) return 'unknown';
   try {
     const { data, error } = await supabase.functions.invoke('multipay-return', {
       body: { ref: reference },
@@ -139,6 +148,7 @@ export async function getPaymentStatus(reference: string): Promise<PaymentStatus
 // Ne l'utiliser que sur une annulation EXPLICITE de l'utilisateur, jamais sur
 // une simple fermeture de navigateur.
 export async function cancelPayment(reference: string): Promise<PaymentStatus> {
+  if (!PAYMENTS_ENABLED) return 'unknown';
   try {
     const { data, error } = await supabase.functions.invoke('multipay-return', {
       body: { ref: reference, cancel: true },
@@ -157,6 +167,8 @@ export async function waitForPaymentSettlement(
   tries = 30,
   delayMs = 4000,
 ): Promise<PaymentStatus> {
+  // Sans paiement, rien à attendre : on ne lance pas un sondage de 2 minutes.
+  if (!PAYMENTS_ENABLED) return 'unknown';
   let last: PaymentStatus = 'unknown';
   for (let i = 0; i < tries; i++) {
     last = await getPaymentStatus(reference);

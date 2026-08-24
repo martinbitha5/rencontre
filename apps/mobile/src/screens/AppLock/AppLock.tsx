@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CodePad } from '@/components/LockScreen';
+import { PAYMENTS_ENABLED } from '@/config/features';
 import { Button, ScreenHeader } from '@/components/ui';
 import { useAppLock } from '@/providers/applock';
 import { useWallet } from '@/providers/wallet';
@@ -20,8 +21,12 @@ export default function AppLock() {
   const [first, setFirst] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Le code secret est l'un des avantages vendus avec l'abonnement Incognito.
+  // Tant que l'app est gratuite, il est ouvert à tout le monde : le mur
+  // d'abonnement n'aurait plus de porte de sortie.
   const subscribed =
-    !!wallet?.incognito_until && new Date(wallet.incognito_until) > new Date();
+    !PAYMENTS_ENABLED ||
+    (!!wallet?.incognito_until && new Date(wallet.incognito_until) > new Date());
 
   const onChoose = (code: string) => {
     setFirst(code);
