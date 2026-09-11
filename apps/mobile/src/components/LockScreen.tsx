@@ -92,7 +92,7 @@ export function LockScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <CodePad
-        title="Dowe est verrouillé"
+        title="Zola est verrouillé"
         subtitle="Entre ton code secret pour continuer."
         error={error}
         onComplete={submit}

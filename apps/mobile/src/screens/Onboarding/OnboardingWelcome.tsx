@@ -17,7 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { haptic } from '@/utils/haptics';
-import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/DoweLogo';
+import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/ZolaLogo';
 import { brandRamp, onDark } from '@/theme';
 
 // Page de bienvenue : la célébration de fin d'inscription. L'empreinte se

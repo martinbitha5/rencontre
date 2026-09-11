@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Paiement | Dowe</title>
+<title>Paiement | Zola</title>
 <meta name="theme-color" content="#ffffff" />
 <link rel="stylesheet" href="theme.css" />
 <style>
@@ -29,7 +29,7 @@
 <body>
 <div class="card">
   <div class="spinner" id="spinner"></div>
-  <div class="hint label">Paiement sécurisé Dowe</div>
+  <div class="hint label">Paiement sécurisé Zola</div>
   <div class="amount" id="amount"></div>
   <div class="hint" id="status">Préparation du paiement…</div>
   <button class="btn" id="payBtn" style="display:none">Payer maintenant</button>
@@ -49,7 +49,7 @@
   }
 
   var ref = new URLSearchParams(window.location.search).get('ref') || '';
-  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
+  if (!/^ZOLA[A-Z0-9]{8,}$/.test(ref)) {
     fail('Cette page de paiement est introuvable.');
   } else {
     fetch(API_BASE + '/multipay-pay?ref=' + encodeURIComponent(ref))

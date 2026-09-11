@@ -1,4 +1,4 @@
-# Dowe — consignes de travail
+# Zola — consignes de travail
 
 Application de rencontre pour la RDC. Expo (React Native) + Supabase.
 L'architecture détaillée vit dans [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -197,7 +197,7 @@ Edge n'a été supprimé ni modifié dans sa logique.
 ### 14. Dépendances à conserver
 
 `expo-web-browser` (ouverture du tunnel de paiement), `expo-linking` (retour
-`dowe://checkout-return`), `@supabase/supabase-js` (`functions.invoke`).
+`zola://checkout-return`), `@supabase/supabase-js` (`functions.invoke`).
 Aucune n'est exclusive au paiement, aucune n'a été retirée du `package.json`.
 
 Le SDK RevenueCat n'est pas encore installé : ne pas l'ajouter tant que le
@@ -243,7 +243,7 @@ Client :
 6. Les badges de coût reviennent : bouton DM, filtres de recherche, like en
    retour.
 7. Achat d'un pack en `MULTIPAY_MODE=TEST` de bout en bout : commande créée,
-   page de paiement, retour `dowe://checkout-return`, solde crédité **une
+   page de paiement, retour `zola://checkout-return`, solde crédité **une
    seule fois** (idempotence).
 8. Fermeture du navigateur en cours de paiement : la commande **reste
    `pending`**, elle n'est pas annulée (régression connue, voir le commentaire

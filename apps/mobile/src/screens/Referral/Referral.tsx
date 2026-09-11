@@ -13,7 +13,7 @@ import { colors } from '@/theme';
 import type { RewardsState } from '@/types';
 import { styles } from './Referral.styles';
 
-const SITE = 'https://dowe-eight.vercel.app';
+const SITE = 'https://zola-rdc.com';
 
 // Écran Parrainage, structure : grand titre avec le montant,
 // section « Tu obtiens », section « Avantage pour tes amis », le code avec
@@ -45,7 +45,7 @@ export default function Referral() {
     try {
       await Share.share({
         message:
-          `Rejoins-moi sur Dowe, l'application de rencontre de la RDC. ` +
+          `Rejoins-moi sur Zola, l'application de rencontre de la RDC. ` +
           `Inscris-toi avec mon code de parrainage ${state.referral_code} : ` +
           `tu recevras ${formatCoins(friendBonus)} pièces bonus à la vérification de ton compte. ${SITE}`,
       });

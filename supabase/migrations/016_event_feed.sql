@@ -1,4 +1,4 @@
--- Dowe : le deck Rencontres en mode soirée (appliqué le 2026-07-26)
+-- Zola : le deck Rencontres en mode soirée (appliqué le 2026-07-26)
 --
 -- Plus d'écran "participants" : quand on est entré dans une soirée, l'onglet
 -- Rencontres sert le deck habituel mais restreint aux personnes présentes.

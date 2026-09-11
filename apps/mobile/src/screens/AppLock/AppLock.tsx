@@ -42,7 +42,7 @@ export default function AppLock() {
     }
     await setCode(code);
     setStep('idle');
-    Alert.alert('Code enregistré', "Dowe demandera ce code à l'ouverture.");
+    Alert.alert('Code enregistré', "Zola demandera ce code à l'ouverture.");
   };
 
   const onRemove = async (code: string) => {
@@ -97,7 +97,7 @@ export default function AppLock() {
       <ScreenHeader title="Code secret" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.intro}>
-          Un code à quatre chiffres demandé à l'ouverture de Dowe et après une absence
+          Un code à quatre chiffres demandé à l'ouverture de Zola et après une absence
           prolongée.
         </Text>
 
@@ -106,7 +106,7 @@ export default function AppLock() {
         <View style={styles.note}>
           <Text style={styles.noteTitle}>Ce que ça protège</Text>
           <Text style={styles.noteText}>
-            Quelqu'un qui prend ton téléphone déverrouillé en main ne peut pas ouvrir Dowe. Le
+            Quelqu'un qui prend ton téléphone déverrouillé en main ne peut pas ouvrir Zola. Le
             code reste dans le coffre-fort du système, il ne quitte jamais l'appareil et n'est
             pas envoyé à nos serveurs.
           </Text>

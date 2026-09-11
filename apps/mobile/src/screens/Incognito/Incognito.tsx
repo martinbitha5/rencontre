@@ -28,7 +28,7 @@ const PERKS: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string
   {
     icon: 'lock-closed-outline',
     title: "Sécurise l'application",
-    text: "Verrouille Dowe avec un code secret à l'ouverture.",
+    text: "Verrouille Zola avec un code secret à l'ouverture.",
   },
   {
     icon: 'compass-outline',

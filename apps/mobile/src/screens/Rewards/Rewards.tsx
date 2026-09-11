@@ -14,7 +14,7 @@ import { colors } from '@/theme';
 import type { RewardKind, RewardsState } from '@/types';
 import { styles } from './Rewards.styles';
 
-const SITE = 'https://dowe-eight.vercel.app';
+const SITE = 'https://zola-rdc.com';
 
 // Libellés des primes. L'ordre d'affichage suit celui renvoyé par le serveur.
 const REWARD_COPY: Record<RewardKind, { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }> = {
@@ -26,7 +26,7 @@ const REWARD_COPY: Record<RewardKind, { icon: keyof typeof Ionicons.glyphMap; ti
   share_app: {
     icon: 'share-social-outline',
     title: "Partage l'application",
-    text: "Fais connaître Dowe autour de toi, une seule fois.",
+    text: "Fais connaître Zola autour de toi, une seule fois.",
   },
   verify_account: {
     icon: 'shield-checkmark-outline',
@@ -80,7 +80,7 @@ export default function Rewards() {
   const shareApp = async () => {
     try {
       const res = await Share.share({
-        message: `Rejoins-moi sur Dowe, l'application de rencontre en RDC. ${SITE}`,
+        message: `Rejoins-moi sur Zola, l'application de rencontre en RDC. ${SITE}`,
       });
       if (res.action === Share.sharedAction) await claim('share_app');
     } catch {

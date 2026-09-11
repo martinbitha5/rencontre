@@ -121,17 +121,17 @@ export default function Checkout() {
 
     // Navigateur refermé sans repasser par l'URL de retour. Ça ressemble à un
     // abandon, mais ça n'en est pas la preuve : en production, le retour vers
-    // dowe://checkout-return ne se fait pas toujours, même après un paiement
+    // zola://checkout-return ne se fait pas toujours, même après un paiement
     // mené à son terme.
     let dismissed = false;
 
     if (result.checkoutUrl) {
       // Rail navigateur : paiement sur la page sécurisée Interswitch, dans un
       // navigateur intégré. Elle se referme d'elle-même au retour vers
-      // dowe://checkout-return.
+      // zola://checkout-return.
       const browser = await WebBrowser.openAuthSessionAsync(
         result.checkoutUrl,
-        'dowe://checkout-return',
+        'zola://checkout-return',
       );
       dismissed = browser.type !== 'success';
     } else {

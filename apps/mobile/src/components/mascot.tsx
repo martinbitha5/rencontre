@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 
-// Mascotte Dowe : une licorne kawaii dans la palette Velours (crinière en
+// Mascotte Zola : une licorne kawaii dans la palette Velours (crinière en
 // dégradé du rose pâle au magenta, corne dorée, yeux noir prune). Chaque écran a sa pose : elle tient
 // un téléphone pour les DMs, un cœur pour les likes, une loupe pour les vues
 // et une étoile pour les favoris. Dessinée en vectoriel pour rester nette à

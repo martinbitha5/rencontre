@@ -4,11 +4,11 @@ import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { colors } from '@/theme';
 import { styles } from './Welcome.styles';
 
-const SITE = 'https://dowe-eight.vercel.app';
+const SITE = 'https://zola-rdc.com';
 const heroVideo = require('../../../assets/IMG_1770.mp4');
 
 // Accueil non connecté : deux entrées (Connexion / Créer un compte) qui
@@ -59,9 +59,9 @@ export default function Welcome() {
           {/* Marque posée directement sur la vidéo, sans pastille : la vidéo
               reste visible à travers les interstices de l'empreinte. */}
           <View style={styles.logo}>
-            <DoweMark size={72} color={colors.textOnAccent} strokeWidth={2} />
+            <ZolaMark size={72} color={colors.textOnAccent} strokeWidth={2} />
           </View>
-          <Text style={styles.title}>DOWE</Text>
+          <Text style={styles.title}>ZOLA</Text>
           <Text style={styles.tagline}>
             Rencontre des Congolais qui cherchent la même chose que toi.
           </Text>

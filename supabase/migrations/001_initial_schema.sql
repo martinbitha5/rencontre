@@ -1,4 +1,4 @@
--- Dowe : schéma initial (appliqué sur le projet sbsxgwdpdjxsrxcccwno le 2026-07-24)
+-- Zola : schéma initial (appliqué sur le projet sbsxgwdpdjxsrxcccwno le 2026-07-24)
 create type public.gender as enum ('homme', 'femme');
 
 create table public.cities (

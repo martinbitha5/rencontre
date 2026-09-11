@@ -1,4 +1,4 @@
--- Dowe : la limite de 10 favoris était contournable et l'app pouvait afficher
+-- Zola : la limite de 10 favoris était contournable et l'app pouvait afficher
 -- « 12/10 ». Deux causes : (1) deux ajouts simultanés lisaient chacun un
 -- compte à 9 et passaient tous les deux ; (2) les favoris de profils ensuite
 -- matchés restaient en base (le client et get_favorites les masquaient

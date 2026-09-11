@@ -93,7 +93,7 @@ export default function Recharge() {
         ))}
 
         <Text style={styles.explain}>
-          La {COIN_NAME} est la monnaie interne de Dowe : un simple solde rechargeable,
+          La {COIN_NAME} est la monnaie interne de Zola : un simple solde rechargeable,
           utilisable uniquement dans {"l'application"}.
         </Text>
 

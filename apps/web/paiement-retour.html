@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<title>Résultat du paiement | Dowe</title>
+<title>Résultat du paiement | Zola</title>
 <meta name="theme-color" content="#ffffff" />
 <link rel="stylesheet" href="theme.css" />
 <style>
@@ -23,7 +23,7 @@
   <div class="dot" id="dot"></div>
   <h1 id="title"></h1>
   <p id="message"></p>
-  <a class="btn" id="back" href="dowe://checkout-return">Revenir dans Dowe</a>
+  <a class="btn" id="back" href="zola://checkout-return">Revenir dans Zola</a>
 </div>
 <script>
   // Atterrissage après vérification serveur (multipay-return). Le statut de
@@ -63,11 +63,11 @@
   dot.style.background = content.color;
   dot.textContent = content.mark;
 
-  var deepLink = 'dowe://checkout-return?ref=' + encodeURIComponent(ref) +
+  var deepLink = 'zola://checkout-return?ref=' + encodeURIComponent(ref) +
     '&status=' + encodeURIComponent(status);
   document.getElementById('back').setAttribute('href', deepLink);
   // Retour automatique vers l'app : le navigateur intégré se referme dès que
-  // le scheme dowe:// est atteint.
+  // le scheme zola:// est atteint.
   setTimeout(function () { window.location.href = deepLink; }, 1200);
 </script>
 </body>

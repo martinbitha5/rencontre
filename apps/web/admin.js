@@ -1,4 +1,4 @@
-// Backoffice Dowe
+// Backoffice Zola
 //
 // Règle d'architecture : cette page ne fait AUCUNE écriture directe sur les
 // données sensibles. Tout passe par des RPC `admin_*` côté Postgres qui
@@ -128,7 +128,7 @@ const ERRORS = {
   cannot_disable_self: 'Vous ne pouvez pas désactiver votre propre accès.',
   cannot_remove_self: 'Vous ne pouvez pas vous retirer vous-même.',
   last_owner: 'Il doit rester au moins un propriétaire actif.',
-  account_not_found: "Aucun compte Dowe avec cette adresse. La personne doit d'abord créer un compte.",
+  account_not_found: "Aucun compte Zola avec cette adresse. La personne doit d'abord créer un compte.",
   invalid_role: 'Rôle inconnu.',
   invalid_status: 'Statut inconnu.',
 };
@@ -834,7 +834,7 @@ async function openReport(r) {
     body.push(h('div', { class: 'card' },
       h('h2', { text: 'Transmission aux autorités' }),
       h('p', { class: 'hint' },
-        "À faire dès qu'il existe un soupçon sérieux d'exploitation ou d'abus sexuel d'enfant. Notez la référence du dépôt (NCMEC, police, procureur) : elle prouve que Dowe a rempli son obligation."),
+        "À faire dès qu'il existe un soupçon sérieux d'exploitation ou d'abus sexuel d'enfant. Notez la référence du dépôt (NCMEC, police, procureur) : elle prouve que Zola a rempli son obligation."),
       r.csae_escalated_at
         ? h('div', { class: 'callout', style: { marginTop: '12px' } },
             h('b', {}, 'Déjà transmis '), `le ${fmtFull(r.csae_escalated_at)}.`)
@@ -1018,19 +1018,19 @@ async function pageSafety(root) {
 
   root.append(
     h('p', { class: 'page-intro' },
-      "Dowe est interdit aux moins de 18 ans. Cette file regroupe tout ce qui touche à la présence d'un mineur ou à l'exploitation d'un enfant. C'est la seule file avec un délai imposé : une heure."),
+      "Zola est interdit aux moins de 18 ans. Cette file regroupe tout ce qui touche à la présence d'un mineur ou à l'exploitation d'un enfant. C'est la seule file avec un délai imposé : une heure."),
     h('div', { class: 'callout red', style: { marginBottom: '16px' } },
       h('b', {}, 'Procédure. '),
       "1. Suspendre le compte visé dès qu'il y a doute sérieux, sans attendre la preuve. ",
       "2. Ne supprimer ni photos ni messages : ce sont les preuves. ",
       "3. Transmettre aux autorités et enregistrer la référence du dépôt. ",
       "4. Une fois la transmission faite, supprimer le compte. ",
-      h('a', { href: 'securite-enfants.html', target: '_blank', rel: 'noopener' }, 'Politique publique de Dowe')),
+      h('a', { href: 'securite-enfants.html', target: '_blank', rel: 'noopener' }, 'Politique publique de Zola')),
     h('div', { class: 'grid k4', style: { marginBottom: '16px' } },
       statCard('En attente de traitement', num(open.length), 'Délai cible : 1 heure', open.length ? 'alert' : 'good'),
       statCard('Transmis aux autorités', num(data.items.filter((r) => r.csae_escalated_at).length)),
       statCard('Total historique', num(data.total)),
-      statCard('Référent sécurité enfants', 'Martin Bitha', 'support@dowe.app')),
+      statCard('Référent sécurité enfants', 'Martin Bitha', 'support@zola-rdc.com')),
     h('div', { class: 'card' },
       h('h2', { text: 'À traiter' }),
       h('p', { class: 'hint' }, 'Priorité absolue sur toute autre tâche de modération.'),
@@ -1486,7 +1486,7 @@ async function pageTeam(root) {
     isOwner()
       ? h('div', { class: 'card' },
           h('h2', { text: 'Ajouter un membre' }),
-          h('p', { class: 'hint' }, "La personne doit déjà avoir un compte Dowe créé avec cette adresse e-mail."),
+          h('p', { class: 'hint' }, "La personne doit déjà avoir un compte Zola créé avec cette adresse e-mail."),
           h('div', { class: 'form-row', style: { marginTop: '12px', marginBottom: '0' } },
             h('div', {}, h('label', { class: 'field' }, 'Adresse e-mail'), h('input', { type: 'email', id: 'new-admin-email' })),
             h('div', { style: { maxWidth: '190px' } }, h('label', { class: 'field' }, 'Rôle'),
@@ -1572,7 +1572,7 @@ async function pageEvents(root) {
   const { data: attendees } = await supabase.from('event_attendees').select('event_id');
   for (const a of attendees ?? []) counts[a.event_id] = (counts[a.event_id] ?? 0) + 1;
 
-  const name = h('input', { type: 'text', maxlength: '80', placeholder: 'Soirée Dowe au Fleuve Congo' });
+  const name = h('input', { type: 'text', maxlength: '80', placeholder: 'Soirée Zola au Fleuve Congo' });
   const price = h('input', { type: 'number', min: '0', step: '100', placeholder: '10000' });
   const ends = h('input', { type: 'datetime-local' });
 
@@ -1625,7 +1625,7 @@ async function pageEvents(root) {
 async function openEventDetail(ev, count) {
   state.currentEvent = ev;
   const canvas = h('canvas', { style: { border: '1px solid #f3d8e6', borderRadius: '12px' } });
-  await QRCode.toCanvas(canvas, `dowe://event/${ev.qr_token}`, {
+  await QRCode.toCanvas(canvas, `zola://event/${ev.qr_token}`, {
     width: 240, margin: 2, color: { dark: '#18181b', light: '#ffffff' },
   });
 
@@ -1763,7 +1763,7 @@ async function pageBlog(root) {
     .order('updated_at', { ascending: false });
 
   root.append(
-    h('p', { class: 'page-intro' }, "Les articles publiés apparaissent sur dowe-eight.vercel.app/blog."),
+    h('p', { class: 'page-intro' }, "Les articles publiés apparaissent sur zola-rdc.com/blog."),
     h('div', { class: 'card' },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
         h('h2', { text: 'Articles', style: { flex: '1' } }),
@@ -1904,16 +1904,16 @@ function pageGuide(root) {
       h('ul', {},
         h('li', {}, "Ouvrir une conversation sans signalement en cours. Chaque lecture est tracée avec votre nom, et une consultation injustifiée est une faute."),
         h('li', {}, "Sanctionner sans motif écrit. Le motif est ce que vous pourrez relire dans six mois, ou montrer à un juge."),
-        h('li', {}, "Répondre à un utilisateur depuis votre compte personnel. Tout passe par support@dowe.app."),
+        h('li', {}, "Répondre à un utilisateur depuis votre compte personnel. Tout passe par support@zola-rdc.com."),
         h('li', {}, "Supprimer des photos ou des messages dans un dossier « mineur » avant transmission aux autorités.")),
 
       h('h3', {}, 'Protection des enfants, en détail'),
-      h('p', {}, "Dowe est interdit aux moins de 18 ans, la date de naissance est contrôlée à l'inscription. Un mineur qui passe malgré tout est une urgence, pas un dossier ordinaire."),
+      h('p', {}, "Zola est interdit aux moins de 18 ans, la date de naissance est contrôlée à l'inscription. Un mineur qui passe malgré tout est une urgence, pas un dossier ordinaire."),
       h('ol', {},
         h('li', {}, "Suspendez le compte visé dès le doute sérieux. Une suspension injuste se lève en trente secondes, un mineur laissé en ligne ne se rattrape pas."),
         h('li', {}, "Ne supprimez rien. Photos, messages et profil sont les éléments que les autorités demanderont."),
-        h('li', {}, "Transmettez : NCMEC pour les contenus d'exploitation sexuelle d'enfants, et les autorités congolaises compétentes. Notez la référence du dépôt dans le dossier, elle prouve que Dowe a rempli son obligation."),
-        h('li', {}, "Prévenez le référent, Martin Bitha, à support@dowe.app, le jour même."),
+        h('li', {}, "Transmettez : NCMEC pour les contenus d'exploitation sexuelle d'enfants, et les autorités congolaises compétentes. Notez la référence du dépôt dans le dossier, elle prouve que Zola a rempli son obligation."),
+        h('li', {}, "Prévenez le référent, Martin Bitha, à support@zola-rdc.com, le jour même."),
         h('li', {}, "Une fois la transmission enregistrée, supprimez le compte.")),
       h('p', {}, h('a', { href: 'securite-enfants.html', target: '_blank', rel: 'noopener' }, 'Politique publique de sécurité des enfants'), ' · ',
         h('a', { href: 'conditions.html', target: '_blank', rel: 'noopener' }, "Conditions d'utilisation")),

@@ -1,4 +1,4 @@
--- Dowe : notifications push (appliqué le 2026-07-25)
+-- Zola : notifications push (appliqué le 2026-07-25)
 -- À chaque nouveau message ou match, un trigger appelle l'Edge Function
 -- « send-push » (via pg_net, asynchrone) qui envoie les push Expo.
 -- La fonction est protégée par le secret partagé x-push-secret.

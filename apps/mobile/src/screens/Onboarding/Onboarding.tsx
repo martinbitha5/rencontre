@@ -193,7 +193,7 @@ function profileSaveError(e: unknown): string {
   if (/relationship_goal/.test(msg)) {
     return "Cette intention n'est pas acceptée par le serveur. Choisis-en une autre.";
   }
-  if (/birth_date/.test(msg)) return 'Dowe est réservé aux 18 ans et plus.';
+  if (/birth_date/.test(msg)) return 'Zola est réservé aux 18 ans et plus.';
   if (/display_name/.test(msg)) return 'Ce prénom ne convient pas (1 à 50 caractères).';
   if (/city_id|cities/.test(msg)) return 'Cette ville est introuvable. Choisis-la dans la liste.';
   if (/bio/.test(msg)) return 'Ta bio dépasse 500 caractères.';
@@ -311,7 +311,7 @@ export default function Onboarding() {
         return name.trim().length >= 2 ? null : 'Entre ton prénom (2 caractères minimum).';
       case 'birthdate':
         if (!birthDate) return 'Choisis ta date de naissance.';
-        if (age !== null && age < MIN_AGE) return 'Dowe est réservé aux 18 ans et plus.';
+        if (age !== null && age < MIN_AGE) return 'Zola est réservé aux 18 ans et plus.';
         return null;
       case 'gender':
         return gender && lookingFor ? null : 'Complète les deux réponses.';
@@ -703,7 +703,7 @@ export default function Onboarding() {
 
                   {!chosenCity && cityQuery.trim().length >= 2 && citySuggestions.length === 0 && (
                     <Text style={styles.note}>
-                      Aucune ville trouvée. Dowe couvre les grandes villes de la RDC.
+                      Aucune ville trouvée. Zola couvre les grandes villes de la RDC.
                     </Text>
                   )}
 

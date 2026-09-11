@@ -1,4 +1,4 @@
--- Dowe : durcissement des grants (appliqué le 2026-07-24, suite aux advisors Supabase)
+-- Zola : durcissement des grants (appliqué le 2026-07-24, suite aux advisors Supabase)
 revoke execute on all functions in schema public from public, anon, authenticated;
 
 grant execute on function public.get_discovery_feed(int) to authenticated;

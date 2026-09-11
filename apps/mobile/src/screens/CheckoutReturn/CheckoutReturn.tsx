@@ -10,7 +10,7 @@ import { useWallet } from '@/providers/wallet';
 import { colors } from '@/theme';
 import { styles } from './CheckoutReturn.styles';
 
-// Atterrissage du deep link dowe://checkout-return?ref=...&status=... posé par
+// Atterrissage du deep link zola://checkout-return?ref=...&status=... posé par
 // la page de résultat MultiPay. Sur iOS le navigateur intégré intercepte la
 // redirection et /checkout gère la suite ; sur Android le lien peut être routé
 // directement ici. Dans les deux cas le statut est REDEMANDÉ au serveur, qui

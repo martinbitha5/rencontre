@@ -27,7 +27,7 @@ import {
 } from '@/services/api';
 import { InsufficientCoinsModal } from '@/components/coins';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { UnicornMascot, type MascotVariant } from '@/components/mascot';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { ReplyModal } from './ReplyModal';
@@ -62,7 +62,7 @@ type Section = 'requests' | 'favorites' | 'likers' | 'views';
 // deux restent synchronisés par l'index de page.
 const SECTIONS: Section[] = ['requests', 'likers', 'views', 'favorites'];
 
-// État vide centré : la licorne mascotte de Dowe, avec le badge propre à
+// État vide centré : la licorne mascotte de Zola, avec le badge propre à
 // chaque page (bulle, cœur, œil, étoile), texte gris en dessous.
 function EmptyState({
   variant,
@@ -453,7 +453,7 @@ export default function Activity() {
           l'ivoire, filigrane d'empreinte qui déborde du coin haut droit. */}
       <View style={styles.header}>
         <View style={styles.watermark} pointerEvents="none">
-          <DoweMark size={84} color={colors.primaryDeep} />
+          <ZolaMark size={84} color={colors.primaryDeep} />
         </View>
         <Text style={styles.headerTitle}>Activité</Text>
         {/* Onglets texte sous le titre, posés sur l'ivoire : actif en encre

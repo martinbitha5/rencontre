@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   verifiedText: { color: onLight.ink, fontSize: 12, fontWeight: '700' },
-  // Corail de la marque : l'intention porte la couleur d'action de Dowe.
+  // Corail de la marque : l'intention porte la couleur d'action de Zola.
   // flexShrink + minWidth : sur 360 dp, badge certifié + intention + étoile
   // tiennent sur la rangée, le libellé d'intention s'abrège au besoin.
   goalPill: {

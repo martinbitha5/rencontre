@@ -25,7 +25,7 @@ import { notifyPartyAccessChanged } from '@/utils/partySignal';
 import { colors, onLight } from '@/theme';
 import { styles } from './Scan.styles';
 
-// Le QR contient dowe://event/{token} ; on tolère aussi le token brut.
+// Le QR contient zola://event/{token} ; on tolère aussi le token brut.
 function extractToken(data: string): string {
   const cleaned = data.trim();
   const parts = cleaned.split('/').filter(Boolean);
@@ -159,7 +159,7 @@ export default function Scan() {
       // Rail navigateur (mode TEST, ou repli si la poussée a échoué).
       const browser = await WebBrowser.openAuthSessionAsync(
         result.checkoutUrl,
-        'dowe://checkout-return',
+        'zola://checkout-return',
       );
       setPaying(false);
       dismissed = browser.type !== 'success';

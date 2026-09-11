@@ -1,4 +1,4 @@
--- Dowe : photos et vidéos dans le chat (appliqué le 2026-07-26)
+-- Zola : photos et vidéos dans le chat (appliqué le 2026-07-26)
 
 -- audio_path devient media_path : un seul chemin pour audio, image et vidéo.
 alter table public.messages rename column audio_path to media_path;

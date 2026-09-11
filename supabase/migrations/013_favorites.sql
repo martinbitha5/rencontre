@@ -1,4 +1,4 @@
--- Dowe : favoris (accès rapide à des profils, privé, max 10) — appliqué le 2026-07-26
+-- Zola : favoris (accès rapide à des profils, privé, max 10) — appliqué le 2026-07-26
 
 create table public.favorites (
   user_id uuid not null references public.profiles(user_id) on delete cascade,

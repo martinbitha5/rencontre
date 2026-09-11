@@ -1,7 +1,7 @@
 import { Appearance, Platform } from 'react-native';
 
 // Identité « Velours » : prune profond, magenta d'accent, rose pâle en voile,
-// blanc cassé et noir prune. C'est le langage propre de Dowe — aucune
+// blanc cassé et noir prune. C'est le langage propre de Zola — aucune
 // référence extérieure. Trois signatures traversent toute l'app : le coin
 // signature (un des quatre angles des cartes est plus petit, comme la courbe
 // d'une empreinte), le filigrane d'empreinte du logo, et le dégradé de marque
@@ -167,7 +167,7 @@ export const radius = isIOS
 
 // Coin signature : sur les cartes et boutons Velours, un des quatre angles
 // (en bas à droite) est nettement plus petit que les autres — la découpe qui
-// rend une carte Dowe reconnaissable entre mille. À poser via
+// rend une carte Zola reconnaissable entre mille. À poser via
 // borderBottomRightRadius sur un conteneur déjà arrondi.
 export const sigCorner = 10;
 

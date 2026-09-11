@@ -1,6 +1,6 @@
-# Dowe 💜
+# Zola 💜
 
-App de rencontre pour la RDC — « le Tinder de la RDC ». Nom provisoire : **Dowe**.
+App de rencontre pour la RDC — « le Tinder de la RDC ». Nom provisoire : **Zola**.
 
 ## Structure
 
@@ -56,11 +56,11 @@ select id from auth.users where email = 'ton-email@exemple.com';
 ## À configurer avant le lancement (dashboard Supabase)
 
 1. **Auth → Providers** : activer Google et Apple (fournir les identifiants OAuth).
-2. **Auth → URL Configuration** : ajouter `dowe://auth-callback` aux Redirect URLs.
+2. **Auth → URL Configuration** : ajouter `zola://auth-callback` aux Redirect URLs.
 3. **Auth → Email** : personnaliser les e-mails de confirmation (en français).
 
 ## Stores
 
-- Bundle ID iOS / package Android : `com.dowe.app`
+- Bundle ID iOS / package Android : `com.zola.app`
 - Build et soumission via EAS : `cd apps/mobile && npx eas build --platform all`
 - Politique de confidentialité (exigée par les stores) : page `/confidentialite` de la landing.

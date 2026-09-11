@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- Jeu de démonstration Dowe
+-- Jeu de démonstration Zola
 --
 -- Remplace les 20 anciens comptes de test par 10 000 profils complets, et
 -- met en place de quoi voir chaque fonctionnalité de l'app depuis le compte
@@ -7,9 +7,9 @@
 -- conversations, invitations en message direct, favoris, vues de profil,
 -- solde de pièces et une soirée.
 --
--- Les comptes créés portent tous une adresse en @mock.dowe et un identifiant
+-- Les comptes créés portent tous une adresse en @mock.zola et un identifiant
 -- commençant par d0c0d0c0, pour pouvoir être retirés d'un seul coup :
---   delete from auth.users where email like '%@mock.dowe';
+--   delete from auth.users where email like '%@mock.zola';
 --
 -- Ils n'ont pas de mot de passe : ils s'affichent dans l'app mais personne ne
 -- peut s'y connecter.
@@ -25,6 +25,9 @@ alter table public.messages disable trigger messages_activate_pending;
 
 -- 1. Table rase des anciens comptes de démonstration (cascade sur profils,
 --    photos, swipes, matchs et messages).
+delete from auth.users where email like '%@mock.zola';
+-- Ancien suffixe, d'avant le renommage Dowe -> Zola : une base déjà peuplée
+-- porte encore ces comptes, ils doivent partir avec les autres.
 delete from auth.users where email like '%@mock.dowe';
 
 -- 2. Comptes d'authentification, sans mot de passe.
@@ -37,7 +40,7 @@ select
   ('d0c0d0c0-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
   '00000000-0000-0000-0000-000000000000'::uuid,
   'authenticated', 'authenticated',
-  'demo' || i || '@mock.dowe',
+  'demo' || i || '@mock.zola',
   '',
   now() - ((i % 200) || ' days')::interval,
   now() - ((i % 200) || ' days')::interval,
@@ -275,7 +278,7 @@ on conflict do nothing;
 -- ---------------------------------------------------------------------------
 with e as (
   insert into public.events (name, price_cdf, ends_at, created_by, is_active)
-  values ('Soirée Dowe au Fleuve Congo', 10000,
+  values ('Soirée Zola au Fleuve Congo', 10000,
           now() + interval '7 days',
           '8b4dc426-5c80-4b0f-b645-68bc55aab6da'::uuid, true)
   returning id

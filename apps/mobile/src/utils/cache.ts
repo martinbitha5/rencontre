@@ -21,7 +21,7 @@ function openDb(): Promise<SQLiteDb | null> {
     dbPromise = (async () => {
       try {
         const SQLite = await import('expo-sqlite');
-        const db = (await SQLite.openDatabaseAsync('dowe-cache.db')) as unknown as SQLiteDb;
+        const db = (await SQLite.openDatabaseAsync('zola-cache.db')) as unknown as SQLiteDb;
         await db.runAsync(
           'CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL, updated_at INTEGER NOT NULL)',
         );

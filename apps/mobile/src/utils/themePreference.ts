@@ -16,8 +16,8 @@ import { isDark } from '@/theme';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
-const PREF_KEY = 'dowe-theme-pref';
-const BOOT_GUARD_KEY = 'dowe-theme-boot-guard';
+const PREF_KEY = 'zola-theme-pref';
+const BOOT_GUARD_KEY = 'zola-theme-boot-guard';
 const BOOT_GUARD_MS = 30_000;
 
 // Le schéma que l'interface AFFICHE réellement : celui que theme.ts a figé au

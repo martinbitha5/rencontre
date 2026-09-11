@@ -1,7 +1,7 @@
--- Dowe : soirées avec accès par QR code (appliqué le 2026-07-26)
+-- Zola : soirées avec accès par QR code (appliqué le 2026-07-26)
 --
 -- Le backoffice crée une soirée avec un coût en coins et obtient un QR
--- (contenu : dowe://event/{qr_token}). Dans l'app, scanner le QR débite le
+-- (contenu : zola://event/{qr_token}). Dans l'app, scanner le QR débite le
 -- coût UNE SEULE FOIS : sortir et re-scanner ne recoûte rien. Les personnes
 -- présentes se découvrent entre elles sur l'écran de la soirée.
 

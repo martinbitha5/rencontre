@@ -8,7 +8,7 @@ import { archiveMatch, getMessages, getMyMatches, photoUrl } from '@/services/ap
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { prefetchPhotos } from '@/utils/preload';
 import { Button, Centered, VerifiedBadge } from '@/components/ui';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { realtimeChannel, supabase } from '@/services/supabase';
 import { colors } from '@/theme';
 import { timeAgo, type MatchSummary } from '@/types';
@@ -159,7 +159,7 @@ export default function Matches() {
           l'ivoire, filigrane d'empreinte qui déborde du coin haut droit. */}
       <View style={styles.header}>
         <View style={styles.watermark} pointerEvents="none">
-          <DoweMark size={84} color={colors.primaryDeep} />
+          <ZolaMark size={84} color={colors.primaryDeep} />
         </View>
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>Discussions</Text>

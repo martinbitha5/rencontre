@@ -17,7 +17,7 @@ export const styles = StyleSheet.create({
     alignSelf: 'center',
     aspectRatio: 1,
     borderRadius: 28,
-    // Coin signature : la zone de scan est un objet Dowe, pas un cadre neutre.
+    // Coin signature : la zone de scan est un objet Zola, pas un cadre neutre.
     borderBottomRightRadius: sigCorner,
     overflow: 'hidden',
     backgroundColor: colors.surface,

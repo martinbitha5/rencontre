@@ -1,4 +1,4 @@
--- Dowe : filtre « Profils certifiés uniquement » (gratuit), pour la page
+-- Zola : filtre « Profils certifiés uniquement » (gratuit), pour la page
 -- Filtres redessinée. La vérification existe depuis la migration 024 ; il ne
 -- manquait que le filtre de recherche côté chercheur.
 

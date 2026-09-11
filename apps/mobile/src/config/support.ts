@@ -7,7 +7,7 @@
 // l'activer sans toucher au code.
 export const SUPPORT_WHATSAPP = process.env.EXPO_PUBLIC_SUPPORT_WHATSAPP ?? '';
 
-export const SITE = 'https://dowe-eight.vercel.app';
+export const SITE = 'https://zola-rdc.com';
 
 // wa.me plutôt que le schéma whatsapp:// : si l'application n'est pas
 // installée, le lien ouvre la page web au lieu d'échouer en silence.

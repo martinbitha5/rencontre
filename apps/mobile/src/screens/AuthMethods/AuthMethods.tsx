@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { ErrorText } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
 import { colors, onLight } from '@/theme';
@@ -41,12 +41,12 @@ export default function AuthMethods() {
           {/* Marque posée directement sur le fond prune, sans pastille : seule
               l'empreinte se dessine, le fond reste visible entre ses lignes. */}
           <View style={styles.logo}>
-            <DoweMark size={64} color={colors.textOnAccent} strokeWidth={2} />
+            <ZolaMark size={64} color={colors.textOnAccent} strokeWidth={2} />
           </View>
           <Text style={styles.title}>{isSignup ? 'Créer un compte' : 'Connexion'}</Text>
           <Text style={styles.tagline}>
             {isSignup
-              ? 'Choisis comment créer ton compte Dowe.'
+              ? 'Choisis comment créer ton compte Zola.'
               : 'Content de te revoir. Choisis comment te connecter.'}
           </Text>
         </View>

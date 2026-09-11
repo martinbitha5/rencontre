@@ -53,7 +53,7 @@ end;
 $$;
 
 -- Trace la transmission d'un dossier « mineur » aux autorités. La référence du
--- dépôt est la preuve que Dowe a rempli son obligation de signalement.
+-- dépôt est la preuve que Zola a rempli son obligation de signalement.
 create or replace function public.admin_escalate_csae(
   p_id  uuid,
   p_ref text default null

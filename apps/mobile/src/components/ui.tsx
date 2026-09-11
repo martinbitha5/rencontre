@@ -22,7 +22,7 @@ import { colors, isIOS, m3, radius, shadows, spacing } from '@/theme';
 // hiérarchie, deux grammaires — l'app doit sembler née sur chaque système.
 
 // Bleu des badges de certification : volontairement hors palette. La marque
-// est prune et magenta partout ailleurs ; ici la couleur ne parle pas de Dowe,
+// est prune et magenta partout ailleurs ; ici la couleur ne parle pas de Zola,
 // elle parle de confiance, et c'est un code que le monde entier lit déjà sans
 // explication. La teinte est fixe dans les deux thèmes — un badge qui change
 // de couleur selon le mode ne serait plus un repère.

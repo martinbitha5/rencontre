@@ -1,4 +1,4 @@
--- Dowe : verrouillage des grants après la migration 009 (appliqué le 2026-07-26)
+-- Zola : verrouillage des grants après la migration 009 (appliqué le 2026-07-26)
 --
 -- Les fonctions créées en 009 ont hérité du grant EXECUTE par défaut de
 -- Postgres (le "alter default privileges" de 005 ne couvrait pas le rôle

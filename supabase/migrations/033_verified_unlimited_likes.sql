@@ -2,7 +2,7 @@
 -- (Copie locale de la migration appliquée via MCP le 2026-07-31.)
 --
 -- Avant : l'exemption de quota reposait sur entitlements.is_premium, c'est-à-dire
--- l'abonnement « Dowe+ ». Cette offre n'existe plus. Concrètement, plus personne
+-- l'abonnement « Zola+ ». Cette offre n'existe plus. Concrètement, plus personne
 -- ne pouvait lever la limite, et l'écran de blocage renvoyait vers un produit
 -- introuvable.
 -- Maintenant : un compte VÉRIFIÉ like sans limite, un compte non vérifié garde un

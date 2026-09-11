@@ -82,7 +82,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const ref = new URL(req.url).searchParams.get('ref') ?? '';
-  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
+  // DOWE : préfixe d'avant le renommage. Les commandes émises alors restent
+  // consultables.
+  if (!/^(?:ZOLA|DOWE)[A-Z0-9]{8,}$/.test(ref)) {
     return json({ error: 'invalid_ref' }, 400);
   }
 
@@ -124,7 +126,7 @@ Deno.serve(async (req: Request) => {
     pay_item_id: payItemId,
     mode,
     checkout_js: checkoutJs,
-    cust_email: order.customer_email ?? 'client@dowe.app',
+    cust_email: order.customer_email ?? 'client@zola-rdc.com',
     cust_id: order.user_id,
     cust_mobile_no: order.phone ?? '',
     return_url: `${supabaseUrl}/functions/v1/multipay-return?ref=${order.txn_ref}`,

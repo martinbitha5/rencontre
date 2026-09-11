@@ -50,7 +50,7 @@ import {
   unmatch,
   voiceUrl,
 } from '@/services/api';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { ReportModal } from '@/components/ReportModal';
 import { Centered, VerifiedBadge } from '@/components/ui';
@@ -105,9 +105,9 @@ function sameDay(a: string, b: string): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-// Papier peint Velours : filigrane d'empreintes DoweMark, très discret,
+// Papier peint Velours : filigrane d'empreintes ZolaMark, très discret,
 // en positions déterministes derrière la liste. C'est le motif signature
-// de Dowe, à la place de tout motif emprunté.
+// de Zola, à la place de tout motif emprunté.
 const WALL_PRINTS: { top: `${number}%`; left: `${number}%`; size: number; rotate: number }[] = [
   { top: '3%', left: '6%', size: 110, rotate: -14 },
   { top: '10%', left: '62%', size: 90, rotate: 12 },
@@ -977,7 +977,7 @@ export default function Chat() {
           ),
         }}
       />
-      {/* Papier peint : filigrane d'empreintes Dowe, purement décoratif */}
+      {/* Papier peint : filigrane d'empreintes Zola, purement décoratif */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {WALL_PRINTS.map((p, i) => (
           <View
@@ -990,7 +990,7 @@ export default function Chat() {
               transform: [{ rotate: `${p.rotate}deg` }],
             }}
           >
-            <DoweMark size={p.size} color={colors.primaryDeep} strokeWidth={1.6} />
+            <ZolaMark size={p.size} color={colors.primaryDeep} strokeWidth={1.6} />
           </View>
         ))}
       </View>

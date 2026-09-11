@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
-// Le logo Dowe : l'empreinte digitale. C'est le glyphe du favicon du site et
+// Le logo Zola : l'empreinte digitale. C'est le glyphe du favicon du site et
 // de l'icône de l'app (Lucide « fingerprint », ISC). Il est défini ici en
 // tracés vectoriels centraux (stroke), ce qui permet à la fois un rendu net à
 // toutes les tailles et l'animation de dessin progressif du démarrage.
@@ -56,7 +56,7 @@ function drawDuration(len: number) {
 // ---------------------------------------------------------------------------
 // Logo statique, pour les badges et écrans où il n'y a rien à animer.
 // ---------------------------------------------------------------------------
-export function DoweMark({
+export function ZolaMark({
   size = 48,
   color = '#ffffff',
   strokeWidth = 2,

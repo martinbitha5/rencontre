@@ -23,7 +23,7 @@ import { PAYMENTS_ENABLED } from '@/config/features';
 import { haptic } from '@/utils/haptics';
 import { onPartyAccessChanged } from '@/utils/partySignal';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
-import { DoweMark, FingerprintDraw } from '@/components/DoweLogo';
+import { ZolaMark, FingerprintDraw } from '@/components/ZolaLogo';
 import { PressableScale } from '@/components/motion';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { SwipeDeck, type SwipeDeckHandle } from './SwipeDeck';
@@ -204,9 +204,9 @@ export default function Discover() {
       setProfiles((prev) => prev.filter((p) => p.user_id !== profile.user_id));
       // Première fois qu'on like : petite explication du fonctionnement du match.
       if (liked) {
-        AsyncStorage.getItem('dowe:like-explainer').then((seen) => {
+        AsyncStorage.getItem('zola:like-explainer').then((seen) => {
           if (!seen) {
-            AsyncStorage.setItem('dowe:like-explainer', '1').catch(() => {});
+            AsyncStorage.setItem('zola:like-explainer', '1').catch(() => {});
             setLikeExplainer(profile.display_name);
           }
         });
@@ -324,10 +324,10 @@ export default function Discover() {
       {/* Filigrane Velours : l'empreinte du logo, à peine visible, déborde du
           bord droit de l'écran. Décoratif uniquement, jamais interactif. */}
       <View style={styles.watermark} pointerEvents="none">
-        <DoweMark size={84} color={colors.primaryDeep} />
+        <ZolaMark size={84} color={colors.primaryDeep} />
       </View>
       <View style={styles.header}>
-        <Text style={styles.brand}>Dowe</Text>
+        <Text style={styles.brand}>Zola</Text>
         {/* Conteneur solde + boutons carrés : crème posé sur l'ivoire, coin
             signature en bas à droite. Mêmes actions qu'avant, seul
             l'habillage change. */}

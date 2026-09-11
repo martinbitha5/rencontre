@@ -1,4 +1,4 @@
--- Dowe : réactions emoji + suppression de ses messages (appliqué le 2026-07-26)
+-- Zola : réactions emoji + suppression de ses messages (appliqué le 2026-07-26)
 
 create table public.message_reactions (
   message_id bigint not null references public.messages(id) on delete cascade,

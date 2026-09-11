@@ -1,11 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text } from 'react-native';
-import { DoweMark } from '@/components/DoweLogo';
+import { ZolaMark } from '@/components/ZolaLogo';
 import { brandRamp } from '@/theme';
 
 // Écran de chargement du démarrage : dégradé cacao vers terracotta, logo empreinte
-// qui respire, wordmark DOWE. Il couvre l'attente de la session, du verrou et
+// qui respire, wordmark ZOLA. Il couvre l'attente de la session, du verrou et
 // l'éventuel rechargement de thème, pour que l'app n'ouvre jamais sur un
 // spinner nu. (L'intro animée du démarrage à froid vit dans IntroSplash ;
 // cet écran est le fond d'attente qu'elle recouvre.)
@@ -34,9 +34,9 @@ export function AppLoading() {
       style={styles.fill}
     >
       <Animated.View style={{ transform: [{ scale: breathe }] }}>
-        <DoweMark size={92} color="#ffffff" strokeWidth={2} />
+        <ZolaMark size={92} color="#ffffff" strokeWidth={2} />
       </Animated.View>
-      <Text style={styles.wordmark}>DOWE</Text>
+      <Text style={styles.wordmark}>ZOLA</Text>
       <Text style={styles.tagline}>Des rencontres qui comptent</Text>
     </LinearGradient>
   );

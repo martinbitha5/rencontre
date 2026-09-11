@@ -23,7 +23,7 @@ const KIND_META: Record<
   like_back: { label: 'Like en retour', detail: 'Match immédiat', icon: 'heart' },
   dm: { label: 'Message direct', detail: 'Premier pas envoyé', icon: 'chatbubble-ellipses' },
   event: { label: 'Entrée soirée', detail: 'Accès à une soirée', icon: 'ticket' },
-  admin: { label: 'Ajustement', detail: 'Opération Dowe', icon: 'construct' },
+  admin: { label: 'Ajustement', detail: 'Opération Zola', icon: 'construct' },
   filter: { label: 'Filtre de recherche', detail: 'Option premium activée', icon: 'options' },
   filter_online: {
     label: 'Filtre En ligne',

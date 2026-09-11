@@ -1,4 +1,4 @@
--- Dowe : blog + administrateurs (appliqué le 2026-07-25)
+-- Zola : blog + administrateurs (appliqué le 2026-07-25)
 create table public.admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()

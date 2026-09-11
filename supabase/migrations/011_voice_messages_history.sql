@@ -1,4 +1,4 @@
--- Dowe : notes vocales + historique complet des profils passés (appliqué le 2026-07-26)
+-- Zola : notes vocales + historique complet des profils passés (appliqué le 2026-07-26)
 
 -- ---------------------------------------------------------------------------
 -- 1. Messages audio : kind + chemin du fichier dans le bucket "voice"

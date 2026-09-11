@@ -28,8 +28,8 @@
 //
 // Réponses :
 //   - JSON (POST {ref}) : { status: 'pending'|'success'|'failed'|'cancelled', code, message }
-//   - navigateur : redirection 302 vers /paiement-retour sur le site Dowe
-//     (Vercel), qui affiche le résultat et renvoie vers l'app (dowe://).
+//   - navigateur : redirection 302 vers /paiement-retour sur le site Zola
+//     (Vercel), qui affiche le résultat et renvoie vers l'app (zola://).
 //     Supabase force en text/plain le HTML servi depuis *.supabase.co,
 //     cette fonction ne rend donc jamais de page elle-même.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
@@ -118,8 +118,8 @@ function resolveSettings(config: MultipayConfig): Settings {
     mode,
     merchantCode: setting(config, 'MULTIPAY_MERCHANT_CODE', mode === 'TEST' ? 'MX228251' : ''),
     requeryUrls,
-    // Page de résultat hébergée sur le site Dowe (Vercel).
-    webBase: setting(config, 'MULTIPAY_WEB_BASE', 'https://dowe-eight.vercel.app'),
+    // Page de résultat hébergée sur le site Zola (Vercel).
+    webBase: setting(config, 'MULTIPAY_WEB_BASE', 'https://zola-rdc.com'),
   };
 }
 
@@ -441,7 +441,9 @@ Deno.serve(async (req: Request) => {
   );
   const settings = resolveSettings(await loadConfig(admin));
 
-  if (!/^DOWE[A-Z0-9]{8,}$/.test(ref)) {
+  // DOWE : préfixe d'avant le renommage, encore porté par les commandes
+  // créées à l'époque.
+  if (!/^(?:ZOLA|DOWE)[A-Z0-9]{8,}$/.test(ref)) {
     return wantsJson
       ? json({ status: 'unknown', error: 'invalid_ref' }, 400)
       : redirectResult(settings, 'failed', null);

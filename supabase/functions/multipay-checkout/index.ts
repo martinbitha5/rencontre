@@ -11,7 +11,7 @@
 //    Doc : https://docs.interswitchgroup.com/docs/wallet-payments-api-drc
 //
 // 2. NAVIGATEUR (repli, et rail unique du mode TEST). Page /payer du site
-//    Dowe qui charge inline-checkout.js d'Interswitch. En TEST c'est le seul
+//    Zola qui charge inline-checkout.js d'Interswitch. En TEST c'est le seul
 //    rail possible : la simulation d'approbation de multipay-return repose
 //    sur le marqueur done=1 posé par cette page, une poussée directe ne
 //    saurait donc jamais être confirmée en sandbox.
@@ -114,7 +114,7 @@ interface Settings {
   secretKey: string;
   // Rail 1 (poussée wallet) autorisé ? Voir MULTIPAY_WALLET_PUSH en tête.
   walletPush: boolean;
-  // Site web Dowe (Vercel) : héberge la page /payer qui charge le checkout
+  // Site web Zola (Vercel) : héberge la page /payer qui charge le checkout
   // Interswitch. Une fonction Edge ne peut pas servir de HTML depuis
   // *.supabase.co (forcé en text/plain), d'où cette page externe.
   webBase: string;
@@ -135,7 +135,7 @@ function resolveSettings(config: MultipayConfig): Settings {
     clientId: setting(config, 'MULTIPAY_CLIENT_ID'),
     secretKey: setting(config, 'MULTIPAY_SECRET_KEY'),
     walletPush: setting(config, 'MULTIPAY_WALLET_PUSH', 'ON').toUpperCase() !== 'OFF',
-    webBase: setting(config, 'MULTIPAY_WEB_BASE', 'https://dowe-eight.vercel.app'),
+    webBase: setting(config, 'MULTIPAY_WEB_BASE', 'https://zola-rdc.com'),
   };
 }
 
@@ -428,7 +428,7 @@ Deno.serve(async (req: Request) => {
 
   // Référence de transaction : unique et non devinable (elle sert aussi de
   // clé de consultation du statut côté client).
-  const txnRef = 'DOWE' + crypto.randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase();
+  const txnRef = 'ZOLA' + crypto.randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase();
 
   const { error: insertError } = await admin.from('payment_orders').insert({
     user_id: user.id,
@@ -468,7 +468,7 @@ Deno.serve(async (req: Request) => {
     console.error('wallet push failed, falling back to browser checkout', txnRef);
   }
 
-  // Rail 2 : la page /payer du site Dowe (checkout web Interswitch).
+  // Rail 2 : la page /payer du site Zola (checkout web Interswitch).
   return json({
     reference: txnRef,
     checkoutUrl: `${settings.webBase}/payer?ref=${txnRef}`,

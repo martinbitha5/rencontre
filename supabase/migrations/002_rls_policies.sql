@@ -1,4 +1,4 @@
--- Dowe : RLS (appliqué le 2026-07-24)
+-- Zola : RLS (appliqué le 2026-07-24)
 alter table public.cities enable row level security;
 alter table public.profiles enable row level security;
 alter table public.photos enable row level security;

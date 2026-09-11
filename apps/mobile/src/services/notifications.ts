@@ -83,7 +83,7 @@ export async function registerForPushNotifications(): Promise<void> {
     // Canal Android obligatoire avant de demander un token.
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'Notifications Dowe',
+        name: 'Notifications Zola',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#9B3F7A',

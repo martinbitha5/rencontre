@@ -1,4 +1,4 @@
--- Dowe : champs de profil détaillés + RPC enrichies (appliqué le 2026-07-26)
+-- Zola : champs de profil détaillés + RPC enrichies (appliqué le 2026-07-26)
 
 alter table public.profiles
   add column if not exists height_cm smallint check (height_cm is null or height_cm between 100 and 250),

@@ -1,4 +1,4 @@
--- Dowe : fonctions métier (appliqué le 2026-07-24)
+-- Zola : fonctions métier (appliqué le 2026-07-24)
 
 create or replace function public.get_discovery_feed(p_limit int default 20)
 returns table (

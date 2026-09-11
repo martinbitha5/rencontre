@@ -1,4 +1,4 @@
--- Dowe : seed villes RDC + storage + realtime (appliqué le 2026-07-24)
+-- Zola : seed villes RDC + storage + realtime (appliqué le 2026-07-24)
 insert into public.cities (name, province) values
   ('Kinshasa', 'Kinshasa'),
   ('Lubumbashi', 'Haut-Katanga'),

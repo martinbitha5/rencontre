@@ -21,7 +21,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 // Le code vit dans le trousseau du système (Keychain iOS / Keystore Android)
 // via expo-secure-store, jamais dans AsyncStorage.
 
-const CODE_KEY = 'dowe.applock.code';
+const CODE_KEY = 'zola.applock.code';
 // Délai de grâce : revenir dans l'app après un aller-retour très court (ouvrir
 // l'appareil photo, une notification) ne redemande pas le code.
 const GRACE_MS = 30_000;

@@ -20,7 +20,7 @@ import {
 import { colors } from '@/theme';
 import { styles } from './Settings.styles';
 
-const SITE = 'https://dowe-eight.vercel.app';
+const SITE = 'https://zola-rdc.com';
 
 // Les trois modes d'apparence, présentés dans la feuille de choix.
 const THEME_OPTIONS: {
@@ -212,7 +212,7 @@ export default function Settings() {
             <Text style={styles.deleteLink}>Supprimer mon compte</Text>
           </Pressable>
           <Text style={styles.footer}>
-            © 2026 Dowe · version {Constants.expoConfig?.version ?? '1.0.0'}
+            © 2026 Zola · version {Constants.expoConfig?.version ?? '1.0.0'}
           </Text>
         </View>
       </ScrollView>

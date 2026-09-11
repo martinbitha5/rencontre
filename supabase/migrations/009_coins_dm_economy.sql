@@ -1,4 +1,4 @@
--- Dowe : économie de coins, messages directs, historique des passés (appliqué le 2026-07-26)
+-- Zola : économie de coins, messages directs, historique des passés (appliqué le 2026-07-26)
 --
 -- Règles métier :
 -- - Liker en retour depuis "J'aime" coûte des coins (like_back_cost).

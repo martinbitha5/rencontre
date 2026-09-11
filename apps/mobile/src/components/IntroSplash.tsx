@@ -13,10 +13,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAppLock } from '@/providers/applock';
 import { useAuth } from '@/providers/auth';
-import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/DoweLogo';
+import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/ZolaLogo';
 import { brandRamp } from '@/theme';
 
-// Intro de démarrage : les lignes de l'empreinte (le logo Dowe) se dessinent
+// Intro de démarrage : les lignes de l'empreinte (le logo Zola) se dessinent
 // une à une, un éclat de lumière signe la reconnaissance, le wordmark
 // apparaît, l'écran tient un court instant puis s'efface en fondu avec un
 // léger zoom sur l'app. Rapide (~2 s) : c'est une signature, pas un film.
@@ -25,7 +25,7 @@ import { brandRamp } from '@/theme';
 // lignes vit dans FingerprintDraw (composant partagé du logo).
 
 // Chronologie (ms depuis le montage). Le dessin lui-même suit la chronologie
-// exportée par DoweLogo (formé + éclat retombé à LOGO_FORMED_MS).
+// exportée par ZolaLogo (formé + éclat retombé à LOGO_FORMED_MS).
 const WORD_AT = 850; // apparition du wordmark, chevauche la fin du dessin
 const DONE_AT = LOGO_FORMED_MS + 550; // logo formé puis tenue d'environ 0,5 s
 const EXIT_MS = 420;
@@ -115,7 +115,7 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
       >
         <FingerprintDraw size={150} color="#ffffff" glowColor="#f0704f" strokeWidth={2} />
         <Animated.View style={wordStyle}>
-          <Text style={styles.wordmark}>DOWE</Text>
+          <Text style={styles.wordmark}>ZOLA</Text>
           <Text style={styles.tagline}>Des rencontres qui comptent</Text>
         </Animated.View>
       </LinearGradient>

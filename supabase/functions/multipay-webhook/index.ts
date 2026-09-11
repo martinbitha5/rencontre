@@ -89,8 +89,10 @@ const SIGNATURE_HEADER = 'x-interswitch-signature';
 
 // La référence de commande telle que nous l'avons émise dans
 // multipay-checkout. Le même motif garde la fonction de reconnaître une
-// référence qui ne vient pas de nous.
-const REF_RE = /^DOWE[A-Z0-9]{8,}$/;
+// référence qui ne vient pas de nous. DOWE est le préfixe d'avant le
+// renommage : une notification tardive sur une ancienne commande reste
+// reconnue.
+const REF_RE = /^(?:ZOLA|DOWE)[A-Z0-9]{8,}$/;
 
 // Champs susceptibles de porter notre txn_ref dans l'objet `data`. La doc
 // nomme `merchantReference` pour la référence du marchand et
@@ -207,7 +209,7 @@ Deno.serve(async (req: Request) => {
     // Notification qui ne concerne aucune de nos commandes (facture, lien de
     // paiement, virement). Elle est authentique, elle n'est simplement pas
     // pour nous.
-    console.log('notification sans référence Dowe', payload.event, payload.uuid);
+    console.log('notification sans référence Zola', payload.event, payload.uuid);
     return ack(200);
   }
 

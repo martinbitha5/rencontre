@@ -1,7 +1,7 @@
 -- 027 : recalibrage de la pièce sur le marché local + pièces périssables.
 --
 -- 1. Recalibrage (×40)
--- La pièce Dowe valait 40 pièces Heyama : un DM coûtait 5 pièces chez nous
+-- La pièce Zola valait 40 pièces Heyama : un DM coûtait 5 pièces chez nous
 -- contre 200 chez eux, pour des packs vendus au même prix en CDF. À prix de
 -- pack égal on livrait donc 5 fois trop de valeur. On aligne l'unité sur celle
 -- du marché (DM = 200 pièces) et on multiplie par 40 tous les coûts et tous

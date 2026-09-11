@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Dowe",
-    "slug": "dowe",
+    "name": "Zola",
+    "slug": "zola",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "dowe",
+    "scheme": "zola",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.dowe.app",
+      "bundleIdentifier": "com.zola.app",
       "supportsTablet": false,
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Dowe a besoin d'accéder à vos photos pour créer votre profil."
+        "NSPhotoLibraryUsageDescription": "Zola a besoin d'accéder à vos photos pour créer votre profil."
       }
     },
     "android": {
-      "package": "com.dowe.app",
+      "package": "com.zola.app",
       "adaptiveIcon": {
         "backgroundColor": "#481A46",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,7 +41,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Dowe a besoin d'accéder à vos photos pour créer votre profil."
+          "photosPermission": "Zola a besoin d'accéder à vos photos pour créer votre profil."
         }
       ],
       [
@@ -55,14 +55,14 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Dowe utilise le micro pour envoyer des notes vocales."
+          "microphonePermission": "Zola utilise le micro pour envoyer des notes vocales."
         }
       ],
       "expo-video",
       [
         "expo-camera",
         {
-          "cameraPermission": "Dowe utilise la caméra pour scanner les codes QR des soirées."
+          "cameraPermission": "Zola utilise la caméra pour scanner les codes QR des soirées."
         }
       ],
       "expo-sqlite",
@@ -70,7 +70,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Dowe utilise ta position uniquement pour vérifier ta ville. Ta position exacte n'est jamais partagée."
+          "locationWhenInUsePermission": "Zola utilise ta position uniquement pour vérifier ta ville. Ta position exacte n'est jamais partagée."
         }
       ],
       "expo-asset",
