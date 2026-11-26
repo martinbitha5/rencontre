@@ -183,10 +183,30 @@ export async function reorderPhotos(photos: MyPhoto[]): Promise<MyPhoto[]> {
 
 // ---------- Découverte / swipe ----------
 
+// Ajoute la date d'inscription aux profils du fil, pour la pastille « Vient
+// de s'inscrire ». Une seule lecture pour tout le paquet ; en cas d'échec, le
+// fil reste utilisable, simplement sans pastille.
+async function withJoinDates(list: FeedProfile[]): Promise<FeedProfile[]> {
+  if (!list.length) return list;
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('user_id, created_at')
+      .in(
+        'user_id',
+        list.map((p) => p.user_id),
+      );
+    const byId = new Map((data ?? []).map((r: { user_id: string; created_at: string }) => [r.user_id, r.created_at]));
+    return list.map((p) => ({ ...p, created_at: byId.get(p.user_id) ?? null }));
+  } catch {
+    return list;
+  }
+}
+
 export async function getDiscoveryFeed(limit = 20): Promise<FeedProfile[]> {
   const { data, error } = await supabase.rpc('get_discovery_feed', { p_limit: limit });
   if (error) throw error;
-  return (data ?? []) as FeedProfile[];
+  return withJoinDates((data ?? []) as FeedProfile[]);
 }
 
 export async function sendSwipe(targetId: string, liked: boolean): Promise<SwipeResult> {
@@ -248,7 +268,7 @@ export async function getEventFeed(eventId: string, limit = 20): Promise<FeedPro
     p_limit: limit,
   });
   if (error) throw error;
-  return (data ?? []) as FeedProfile[];
+  return withJoinDates((data ?? []) as FeedProfile[]);
 }
 
 // Décider dans la soirée (migration 056). Un recalage reste dans la soirée et

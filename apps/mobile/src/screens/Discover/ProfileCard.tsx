@@ -3,11 +3,12 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { photoUrl } from '@/services/api';
 import { VerifiedBadgeButton } from '@/components/ui';
 import { GOAL_OPTIONS, goalIcon, labelFor } from '@/profileOptions';
-import { colors, onLight, radius, spacing } from '@/theme';
-import { activeLabel, ageFromBirthDate, type FeedProfile } from '@/types';
+import { colors, flame, onLight, radius, spacing } from '@/theme';
+import { ageFromBirthDate, isNewMember, presenceOf, type FeedProfile } from '@/types';
 
 export function ProfileCard({
   profile,
@@ -15,29 +16,28 @@ export function ProfileCard({
   favorite,
   onToggleFavorite,
   photoIndex = 0,
-  onStepPhoto,
+  photoPos,
+  pageWidth = 0,
 }: {
   profile: FeedProfile;
   // Ouvre la vue profil complète (photos, bio, infos) avant de liker.
   onOpenDetail?: () => void;
   favorite?: boolean;
   onToggleFavorite?: () => void;
-  // Photo affichée, pilotée par le paquet.
+  // Photo affichée (repères et compteur), mise à jour au calage.
   photoIndex?: number;
-  // Toucher le bord gauche ou droit de la photo change de photo ; le centre
-  // ouvre le profil. Le glissement, lui, est réservé au like et au non.
-  onStepPhoto?: (dir: 1 | -1) => void;
+  // Carte du dessus : position continue du carrousel, pilotée par le doigt
+  // dans le paquet, et largeur d'une page. Les cartes en attente n'en ont pas
+  // et montrent simplement leur première photo.
+  photoPos?: SharedValue<number>;
+  pageWidth?: number;
 }) {
   const photos = profile.photos ?? [];
-  const canStep = !!onStepPhoto && photos.length > 1;
+  const carousel = !!photoPos && photos.length > 1 && pageWidth > 0;
   const current = photos[Math.min(photoIndex, Math.max(photos.length - 1, 0))];
 
   const goal = labelFor(GOAL_OPTIONS, profile.relationship_goal);
-  // Présence : « En ligne » dans les 15 dernières minutes, sinon « En ligne
-  // récemment » tant que la dernière activité reste dans la fenêtre servie
-  // par activeLabel. Au-delà, pas de pilule.
-  const active = activeLabel(profile.last_active_at);
-  const presence = active === 'En ligne' ? 'En ligne' : active ? 'En ligne récemment' : null;
+  const presence = presenceOf(profile.last_active_at);
   // La ville seule : la commune a été retirée du produit (déclaratif peu
   // fiable), la ville est vérifiée par la localisation à l'onboarding.
   const place = profile.city_name ?? '';
@@ -54,7 +54,9 @@ export function ProfileCard({
 
   return (
     <View style={styles.card}>
-      {current ? (
+      {carousel ? (
+        <PhotoStrip photos={photos} pos={photoPos} width={pageWidth} />
+      ) : current ? (
         <Image
           source={{ uri: photoUrl(current.path) }}
           style={styles.photo}
@@ -74,39 +76,47 @@ export function ProfileCard({
       <LinearGradient colors={TOP_SCRIM} style={styles.topScrim} pointerEvents="none" />
       <LinearGradient colors={BOTTOM_SCRIM} style={styles.bottomScrim} pointerEvents="none" />
 
-      {/* Bords : photo précédente ou suivante. Centre : le profil complet. */}
-      {/* Trois zones côte à côte plutôt qu'un calcul de position : même
-          comportement sur iOS, Android et le web. */}
-      {(onOpenDetail || canStep) && (
-        <View style={styles.tapZones}>
-          <Pressable
-            style={canStep ? styles.tapEdge : styles.tapNone}
-            onPress={() => onStepPhoto?.(-1)}
-            accessibilityLabel="Photo précédente"
-          />
-          <Pressable style={styles.tapCenter} onPress={onOpenDetail} accessibilityLabel="Voir le profil" />
-          <Pressable
-            style={canStep ? styles.tapEdge : styles.tapNone}
-            onPress={() => onStepPhoto?.(1)}
-            accessibilityLabel="Photo suivante"
-          />
-        </View>
+      {/* Toucher la photo, n'importe où, ouvre le profil complet. Le
+          glissement horizontal, lui, fait défiler les photos. */}
+      {onOpenDetail && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onOpenDetail}
+          accessibilityRole="button"
+          accessibilityLabel={`Voir le profil de ${profile.display_name}`}
+        />
       )}
 
       {/* En haut à gauche : prénom, âge, présence, puis les pastilles. */}
       <Pressable style={styles.info} onPress={onOpenDetail}>
+        {/* Ligne 1 : certification, prénom et âge, puis le statut en ligne. */}
         <View style={styles.nameRow}>
+          {profile.is_verified && <VerifiedBadgeButton size={20} />}
           <Text style={styles.name} numberOfLines={1}>
             {profile.display_name}, {ageFromBirthDate(profile.birth_date)}
           </Text>
-          {presence === 'En ligne' && <View style={styles.onlineDot} />}
-          {profile.is_verified && <VerifiedBadgeButton size={20} />}
+          {!!presence && (
+            <View style={styles.presence}>
+              <View
+                style={[styles.presenceDot, presence !== 'En ligne' && styles.presenceDotRecent]}
+              />
+              <Text style={styles.presenceText}>{presence}</Text>
+            </View>
+          )}
         </View>
+        {/* Ligne 2 : « Vient de s'inscrire » la première semaine, puis
+            l'intention. */}
         <View style={styles.pills}>
-          {presence === 'En ligne récemment' && (
-            <View style={styles.pill}>
-              <Ionicons name="time-outline" size={11} color={onLight.ink} />
-              <Text style={styles.pillText}>En ligne récemment</Text>
+          {isNewMember(profile.created_at) && (
+            <View style={styles.newPill}>
+              <LinearGradient
+                colors={flame}
+                start={{ x: 0, y: 1 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Ionicons name="sparkles" size={11} color="#ffffff" />
+              <Text style={styles.newPillText}>Vient de s’inscrire</Text>
             </View>
           )}
           {!!goal && (
@@ -164,6 +174,35 @@ export function ProfileCard({
   );
 }
 
+// Bande de photos côte à côte, décalée selon la position du carrousel : la
+// photo glisse sous le doigt et la suivante arrive déjà visible.
+function PhotoStrip({
+  photos,
+  pos,
+  width,
+}: {
+  photos: { id: string; path: string }[];
+  pos: SharedValue<number>;
+  width: number;
+}) {
+  const stripStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -pos.value * width }],
+  }));
+  return (
+    <Animated.View style={[styles.strip, { width: width * photos.length }, stripStyle]}>
+      {photos.map((p) => (
+        <Image
+          key={p.id}
+          source={{ uri: photoUrl(p.path) }}
+          style={{ width, height: '100%' }}
+          contentFit="cover"
+          transition={150}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
 const TOP_SCRIM = ['rgba(16, 17, 19, 0.6)', 'rgba(16, 17, 19, 0)'] as const;
 const BOTTOM_SCRIM = ['rgba(16, 17, 19, 0)', 'rgba(16, 17, 19, 0.45)'] as const;
 
@@ -183,17 +222,7 @@ const styles = StyleSheet.create({
   noPhotoText: { fontSize: 96, color: 'rgba(255,255,255,.6)', fontWeight: '700' },
   topScrim: { position: 'absolute', top: 0, left: 0, right: 0, height: 170 },
   bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 140 },
-  tapZones: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 110,
-    flexDirection: 'row',
-  },
-  tapEdge: { width: '30%' },
-  tapCenter: { flex: 1 },
-  tapNone: { width: 0 },
+  strip: { position: 'absolute', top: 0, bottom: 0, left: 0, flexDirection: 'row' },
   info: {
     position: 'absolute',
     top: spacing.md,
@@ -211,7 +240,37 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  onlineDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#3DD67C' },
+  // Statut en ligne : pastille sombre translucide, point vert (en ligne) ou
+  // orange (actif il y a peu). Lisible sur n'importe quelle photo.
+  presence: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(16, 17, 19, 0.45)',
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  presenceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3DD67C',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  presenceDotRecent: { backgroundColor: '#ffb020' },
+  presenceText: { color: '#ffffff', fontSize: 11, fontWeight: '700' },
+  newPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: radius.full,
+    overflow: 'hidden',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  newPillText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   pill: {
     flexDirection: 'row',

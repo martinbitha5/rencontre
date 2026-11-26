@@ -481,9 +481,9 @@ export default function Discover() {
               onToggleFavorite={toggleFavorite}
             />
           </Animated.View>
-          {/* Les trois décisions : Passer, DM, Like. Le glissement de la carte
-              fait aussi Passer (gauche) ou Like (droite) ; toucher ses bords
-              feuillette les photos. */}
+          {/* Les trois décisions : Passer, DM, Like, uniquement par ces
+              boutons. Glisser la carte fait défiler les photos, la toucher
+              ouvre le profil. */}
           <Animated.View entering={FadeIn.duration(350)} style={styles.actions}>
             <PressableScale
               style={styles.actionBtn}

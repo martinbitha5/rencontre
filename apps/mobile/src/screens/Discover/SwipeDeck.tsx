@@ -31,19 +31,20 @@ interface SwipeDeckProps {
   onToggleFavorite?: (profile: FeedProfile) => void;
 }
 
-// Commandes exposées à l'écran : les boutons Like et Passer lancent la même
-// sortie que le geste.
+// Commandes exposées à l'écran : Like et Passer partent des boutons, et c'est
+// le paquet qui joue l'envol de la carte.
 export interface SwipeDeckHandle {
   swipeOut: (liked: boolean) => void;
 }
 
-// Le glissement décide : vers la droite c'est un like, vers la gauche un non.
-// La carte suit le doigt et pivote, le tampon « J'AIME » ou « NON » apparaît
-// en route. Au relâchement, au-delà du seuil (ou d'un geste vif), la carte
-// s'envole ; en deçà, elle revient au centre avec un léger rebond.
-// Les photos se feuillettent en touchant le bord gauche ou droit de la carte.
-const DECIDE_RATIO = 0.28; // part de la largeur à franchir pour décider
-const FLING_VELOCITY = 900; // un geste vif décide même sur une courte course
+// Le glissement horizontal fait défiler les photos du profil, comme un
+// carrousel : la bande de photos suit le doigt et se cale sur la suivante ou
+// la précédente au relâchement. Il ne décide jamais d'un like ou d'un non :
+// ces décisions passent par les boutons. Toucher la photo, n'importe où,
+// ouvre le profil complet.
+const PAGE_RATIO = 0.18; // part de la largeur à franchir pour changer de photo
+const PAGE_VELOCITY = 450; // un geste vif change de photo même sur une courte course
+const EDGE_RESIST = 0.3; // résistance au-delà de la première ou dernière photo
 const STAMP_FROM = 0.06; // le tampon commence à paraître
 const STAMP_FULL = 0.26; // le tampon est entièrement visible
 
@@ -64,12 +65,13 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
 ) {
   const { width } = useWindowDimensions();
   const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  // Doigt posé sur la carte : elle se soulève légèrement.
-  const dragging = useSharedValue(false);
-  // Côté du seuil franchi pendant le geste (-1, 0, 1) : une vibration légère
-  // à chaque passage, pour sentir le moment où la décision est prise.
-  const armed = useSharedValue(0);
+  // Position du carrousel de photos, en nombre de photos (0 = la première).
+  // Elle suit le doigt en continu, l'index affiché se met à jour au calage.
+  const photoPos = useSharedValue(0);
+  const dragStart = useSharedValue(0);
+  // Largeur réelle de la carte, mesurée : une page du carrousel.
+  const [cardWidth, setCardWidth] = useState(width);
+  const pageW = useSharedValue(width);
   // Vrai pendant l'envol d'une carte : ignore les commandes en rafale et fige
   // le geste. Shared value : lue depuis les worklets du geste (thread UI).
   const leaving = useSharedValue(false);
@@ -100,25 +102,20 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
   const [photoIndex, setPhotoIndex] = useState(0);
   useEffect(() => {
     setPhotoIndex(0);
-  }, [top?.user_id]);
+    photoPos.set(0);
+  }, [top?.user_id, photoPos]);
 
   const finishSwipe = useCallback(
     (liked: boolean) => {
       leaving.set(false);
       translateX.set(0);
-      translateY.set(0);
       if (top) onSwipe(top, liked);
     },
-    [top, onSwipe, translateX, translateY, leaving],
+    [top, onSwipe, translateX, leaving],
   );
 
-  const decidedFeedback = useCallback((liked: boolean) => {
-    if (liked) haptic.success();
-    else haptic.tap();
-  }, []);
-
-  // Envol de la carte, depuis le geste ou les boutons : à droite pour un
-  // Like, à gauche pour un Passer, avec le tampon qui se révèle en route.
+  // Envol de la carte, lancé par les boutons : à droite pour un Like, à
+  // gauche pour un Passer, avec le tampon qui se révèle en route.
   const swipeOut = useCallback(
     (liked: boolean) => {
       if (!top || leaving.value) return;
@@ -135,75 +132,50 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
 
   useImperativeHandle(ref, () => ({ swipeOut }), [swipeOut]);
 
-  const tick = useCallback(() => haptic.select(), []);
-
-  // Bord droit : photo suivante ; bord gauche : précédente.
-  const shiftPhoto = useCallback(
-    (dir: 1 | -1) => {
-      setPhotoIndex((i) => {
-        const next = i + dir;
-        if (next < 0 || next > photoCount - 1) return i;
-        haptic.select();
-        return next;
-      });
-    },
-    [photoCount],
-  );
+  // Calage terminé sur une photo : l'index affiché (repères, compteur) suit.
+  const settlePhoto = useCallback((i: number) => {
+    setPhotoIndex((prev) => {
+      if (prev !== i) haptic.select();
+      return i;
+    });
+  }, []);
 
   const pan = Gesture.Pan()
     // Le geste ne prend la main qu'au-delà de dix points à l'horizontale : en
-    // deçà, l'appui reste un appui (photo suivante ou profil), et un geste
-    // vertical laisse défiler l'écran.
+    // deçà, l'appui reste un appui (il ouvre le profil), et un geste vertical
+    // laisse défiler l'écran.
     .activeOffsetX([-10, 10])
     .failOffsetY([-24, 24])
+    .enabled(photoCount > 1)
     .onBegin(() => {
-      if (leaving.value) return;
-      dragging.set(true);
+      dragStart.set(photoPos.value);
     })
     .onUpdate((e) => {
       if (leaving.value) return;
-      translateX.set(e.translationX);
-      // Un peu de jeu vertical : la carte se tient dans la main, pas sur un rail.
-      translateY.set(e.translationY * 0.2);
-      const side = e.translationX > width * DECIDE_RATIO ? 1
-        : e.translationX < -width * DECIDE_RATIO ? -1 : 0;
-      if (side !== armed.value) {
-        armed.set(side);
-        if (side !== 0) runOnJS(tick)();
-      }
+      const w = pageW.value || 1;
+      let pos = dragStart.value - e.translationX / w;
+      const last = photoCount - 1;
+      // Au-delà des bords, la bande résiste : on sent qu'il n'y a plus rien.
+      if (pos < 0) pos = pos * EDGE_RESIST;
+      else if (pos > last) pos = last + (pos - last) * EDGE_RESIST;
+      photoPos.set(pos);
     })
     .onEnd((e) => {
       if (leaving.value) return;
-      const dx = e.translationX;
-      const vx = e.velocityX;
-      const decided = Math.abs(dx) > width * DECIDE_RATIO
-        || (Math.abs(vx) > FLING_VELOCITY && Math.sign(vx) === Math.sign(dx));
-      if (decided && top) {
-        const liked = dx > 0;
-        leaving.set(true);
-        runOnJS(decidedFeedback)(liked);
-        // La carte part dans la direction du geste, à sa vitesse.
-        const duration = Math.max(160, Math.min(320, (width * 1.4 - Math.abs(dx)) / (Math.abs(vx) / 1000 || 1)));
-        translateX.set(withTiming((liked ? 1 : -1) * width * 1.5, { duration }, () =>
-          runOnJS(finishSwipe)(liked),
-        ));
-        translateY.set(withTiming(translateY.value + e.velocityY * 0.05, { duration }));
-      } else {
-        translateX.set(withSpring(0, { damping: 15, stiffness: 180 }));
-        translateY.set(withSpring(0, { damping: 15, stiffness: 180 }));
-      }
-    })
-    .onFinalize(() => {
-      dragging.set(false);
-      armed.set(0);
+      const w = pageW.value || 1;
+      const from = Math.round(dragStart.value);
+      let target = from;
+      if (e.translationX < -w * PAGE_RATIO || e.velocityX < -PAGE_VELOCITY) target = from + 1;
+      else if (e.translationX > w * PAGE_RATIO || e.velocityX > PAGE_VELOCITY) target = from - 1;
+      target = Math.max(0, Math.min(photoCount - 1, target));
+      photoPos.set(withSpring(target, { damping: 26, stiffness: 260, mass: 0.8 }));
+      runOnJS(settlePhoto)(target);
     });
 
   const topStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
-      { translateY: translateY.value },
       { rotate: `${interpolate(translateX.value, [-width, width], [-12, 12])}deg` },
-      { scale: withSpring(dragging.value ? 1.02 : 1, { damping: 18, stiffness: 220 }) },
     ],
   }));
 
@@ -255,7 +227,14 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
   if (!top) return null;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        setCardWidth(w);
+        pageW.set(w);
+      }}
+    >
       {third && (
         <Animated.View style={[styles.cardWrapper, thirdStyle]} pointerEvents="none">
           <ProfileCard profile={third} />
@@ -274,7 +253,8 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
             onOpenDetail={onOpenProfile ? () => onOpenProfile(top) : undefined}
             favorite={isFavorite?.(top)}
             onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(top) : undefined}
-            onStepPhoto={shiftPhoto}
+            photoPos={photoPos}
+            pageWidth={cardWidth}
           />
           <Animated.View
             pointerEvents="none"

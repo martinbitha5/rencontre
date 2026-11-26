@@ -66,6 +66,16 @@ export interface FeedProfile extends ProfileDetails {
   photos: PhotoRef[];
   last_active_at: string;
   is_verified: boolean;
+  // Date d'inscription, ajoutée par l'app après le fil (voir withJoinDates).
+  created_at?: string | null;
+}
+
+// Nouveau membre : inscrit depuis moins de 7 jours. La pastille « Vient de
+// s'inscrire » ne s'affiche que pendant cette semaine, puis disparaît seule.
+export const NEW_MEMBER_DAYS = 7;
+export function isNewMember(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  return Date.now() - new Date(createdAt).getTime() < NEW_MEMBER_DAYS * 86400000;
 }
 
 // Statut de ma demande de vérification (RPC get_my_verification).
@@ -313,6 +323,17 @@ export function activeLabel(iso: string | null): string | null {
   if (hours < 24) return `En ligne il y a ${hours} h`;
   const days = Math.floor(hours / 24);
   if (days <= 7) return `En ligne il y a ${days} j`;
+  return null;
+}
+
+// Statut court des cartes du deck : « En ligne » dans les 15 dernières
+// minutes, « Récemment » dans les 24 dernières heures, rien au-delà (un profil
+// absent depuis plusieurs jours ne doit pas paraître actif).
+export function presenceOf(iso: string | null | undefined): 'En ligne' | 'Récemment' | null {
+  if (!iso) return null;
+  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (mins < 15) return 'En ligne';
+  if (mins < 24 * 60) return 'Récemment';
   return null;
 }
 
