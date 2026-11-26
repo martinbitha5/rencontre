@@ -44,6 +44,7 @@ import {
   EDUCATION_OPTIONS,
   FREQUENCY_OPTIONS,
   GOAL_OPTIONS,
+  goalHint,
   goalIcon,
   HAS_CHILDREN_OPTIONS,
   INTEREST_OPTIONS,
@@ -200,14 +201,6 @@ const STEP_META: Record<
 };
 
 
-// Une phrase sous chaque intention, pour dire ce qu'elle veut dire.
-const GOAL_HINTS: Record<string, string> = {
-  relation_serieuse: "J'ai envie d'une histoire qui dure.",
-  mariage: 'Je cherche la personne avec qui construire un foyer.',
-  amitie: 'Je veux faire de nouvelles connaissances, on verra bien.',
-  rien_de_serieux: "J'ai envie de sortir et de passer de bons moments.",
-  je_me_laisse_surprendre: 'Pas de plan précis, je laisse venir.',
-};
 
 // Libellés des réponses fermées, à la première personne comme sur la fiche.
 const SMOKING_LABELS: Record<string, string> = {
@@ -708,7 +701,7 @@ export default function Onboarding() {
                       key={o.value}
                       icon={goalIcon(o.value)}
                       label={o.label}
-                      hint={GOAL_HINTS[o.value]}
+                      hint={goalHint(o.value)}
                       selected={goal === o.value}
                       onPress={() => setGoal(o.value)}
                     />

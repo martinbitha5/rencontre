@@ -15,8 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getMyPhotos, getMyVerification, photoUrl, setIncognito, updateMyProfile } from '@/services/api';
-import { OptionCard } from '@/screens/Onboarding/OnboardingKit';
-import { BottomSheet } from '@/screens/Settings/BottomSheet';
+import { GoalSheet } from '@/components/GoalSheet';
 import { CoinIcon } from '@/components/coins';
 import { IncognitoIntroModal } from '@/components/IncognitoIntroModal';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
@@ -488,25 +487,15 @@ export default function ProfileHome() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Intention : la même liste que dans Modifier le profil, enregistrée
-          dès qu'on touche une réponse. */}
-      <BottomSheet
+      {/* Intention : une carte par intention, enregistrée au bouton
+          « Ajouter à mon profil ». */}
+      <GoalSheet
         visible={goalOpen}
+        current={profile.relationship_goal ?? null}
+        saving={savingGoal}
         onClose={() => !savingGoal && setGoalOpen(false)}
-        title="Ce que je cherche"
-      >
-        <View style={styles.goalSheet}>
-          {GOAL_OPTIONS.map((o) => (
-            <OptionCard
-              key={o.value}
-              icon={goalIcon(o.value)}
-              label={o.label}
-              selected={profile.relationship_goal === o.value}
-              onPress={() => void saveGoal(o.value)}
-            />
-          ))}
-        </View>
-      </BottomSheet>
+        onSave={(value) => void saveGoal(value)}
+      />
 
       {/* Aperçu public : même composant que la fiche vue par les autres. */}
       <ProfileDetailModal

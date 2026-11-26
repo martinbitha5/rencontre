@@ -33,6 +33,19 @@ const GOAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   je_me_laisse_surprendre: 'sparkles',
 };
 
+// Une phrase par intention, à la première personne : ce qu'elle veut dire.
+const GOAL_HINTS: Record<string, string> = {
+  relation_serieuse: "J'ai envie d'une histoire qui dure.",
+  mariage: 'Je cherche la personne avec qui construire un foyer.',
+  amitie: 'Je veux faire de nouvelles connaissances, on verra bien.',
+  rien_de_serieux: "J'ai envie de sortir et de passer de bons moments.",
+  je_me_laisse_surprendre: 'Pas de plan précis, je laisse venir.',
+};
+
+export function goalHint(value: string): string | undefined {
+  return GOAL_HINTS[value];
+}
+
 export function goalIcon(value: string | null | undefined): keyof typeof Ionicons.glyphMap {
   return (value && GOAL_ICONS[value]) || 'heart';
 }

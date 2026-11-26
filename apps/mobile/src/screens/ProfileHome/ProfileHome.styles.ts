@@ -81,7 +81,6 @@ export const styles = StyleSheet.create({
   },
   goalText: { fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 },
   goalTextCompact: { fontSize: 14 },
-  goalSheet: { gap: spacing.sm, paddingBottom: spacing.md },
 
   // Question : la prochaine chose à faire.
   promptWrap: { paddingHorizontal: 20, paddingBottom: spacing.lg },
