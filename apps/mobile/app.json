@@ -15,7 +15,7 @@
       }
     },
     "android": {
-      "package": "com.zola.app",
+      "package": "com.zolardc.app",
       "adaptiveIcon": {
         "backgroundColor": "#fd267a",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

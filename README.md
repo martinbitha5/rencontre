@@ -96,6 +96,6 @@ select id from auth.users where email = 'ton-email@exemple.com';
 
 ## Stores
 
-- Bundle ID iOS / package Android : `com.zola.app`
+- Bundle ID iOS : `com.zola.app` ; package Android : `com.zolardc.app` (`com.zola.app` était déjà pris sur Google Play)
 - Build et soumission via EAS : `cd apps/mobile && npx eas build --platform all`
 - Politique de confidentialité (exigée par les stores) : page `/confidentialite` de la landing.

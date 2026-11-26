@@ -1,9 +1,13 @@
-import { Composition, Folder } from "remotion";
+import { Composition, Folder, Still } from "remotion";
 import "./index.css";
 import { ApercuAppStore } from "./ApercuAppStore";
 import { CarteMatch, carteMatchSchema } from "./CarteMatch";
 import { Montage } from "./Montage";
 import { Pub } from "./pub/Pub";
+import { Ecran, ecranSchema } from "./playstore/Ecran";
+import { ECRANS } from "./playstore/ecrans";
+import { Icone } from "./playstore/Icone";
+import { VisuelPrincipal } from "./playstore/VisuelPrincipal";
 import { Accroche } from "./pub/scenes/Accroche";
 import { Appel } from "./pub/scenes/Appel";
 import { Confiance } from "./pub/scenes/Confiance";
@@ -145,6 +149,24 @@ export const RemotionRoot: React.FC = () => {
           height={1920}
           defaultProps={{ appel: true }}
         />
+      </Folder>
+
+      {/* Fiche Play Store : images fixes, rendues par
+          scripts/rendre-play-store.mjs dans le dossier play-store/. */}
+      <Folder name="PlayStore">
+        {ECRANS.map((e, i) => (
+          <Still
+            key={e.capture}
+            id={`PlayStore-${i + 1}`}
+            component={Ecran}
+            schema={ecranSchema}
+            width={1080}
+            height={1920}
+            defaultProps={e}
+          />
+        ))}
+        <Still id="PlayStore-VisuelPrincipal" component={VisuelPrincipal} width={1024} height={500} />
+        <Still id="PlayStore-Icone" component={Icone} width={512} height={512} />
       </Folder>
     </>
   );

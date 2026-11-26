@@ -6,7 +6,7 @@
 // LE JOUR DE LA SORTIE : coller ici les deux liens publics, puis reconstruire
 // le site et redéposer l'archive.
 //   ios      https://apps.apple.com/app/zola/id<numéro donné par App Store Connect>
-//   android  https://play.google.com/store/apps/details?id=com.zola.app
+//   android  https://play.google.com/store/apps/details?id=com.zolardc.app
 export const STORES = {
   ios: null,
   android: null,

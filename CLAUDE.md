@@ -267,7 +267,9 @@ n'est pas créée.
    RevenueCat ou le token du webhook dans l'app.
 - Le bouton « Restaurer mes achats » est présent sur iOS. Tester les achats
    dans un build natif EAS; Expo Go ne fournit pas StoreKit/RevenueCat.
-- Pour Android, créer aussi l'app Play Store `com.zola.app` dans RevenueCat,
+- Pour Android, créer aussi l'app Play Store `com.zolardc.app` dans RevenueCat
+   (le package Android diffère du bundle iOS : `com.zola.app` était déjà pris
+   sur Google Play),
    configurer Google Play et sa clé publique, puis déclarer les mêmes produits
    et packages avant d'exposer le parcours.
 
