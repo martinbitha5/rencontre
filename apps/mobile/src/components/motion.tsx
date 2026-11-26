@@ -15,11 +15,14 @@ import {
 import Animated, {
   FadeInDown,
   ReduceMotion,
+  interpolateColor,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { colors, glass, isDark, isIOS, m3, radius } from '@/theme';
+import { colors, glass, isDark, isIOS, m3, motion, radius } from '@/theme';
 
 // Primitives de mouvement et de matière, partagées par tous les écrans pour
 // que l'app ait un seul rythme. Durées 150-300 ms, ressort à l'appui,
@@ -46,8 +49,8 @@ export function Reveal({
   return (
     <Animated.View
       style={style}
-      entering={FadeInDown.duration(260)
-        .delay(Math.min(index, 8) * 40)
+      entering={FadeInDown.duration(motion.duration.base)
+        .delay(motion.stagger(index))
         .reduceMotion(ReduceMotion.System)}
     >
       {children}
@@ -67,16 +70,23 @@ export function PressableScale({
   children,
   style,
   containerStyle,
-  scaleTo = 0.97,
+  scaleTo = motion.pressScale,
   ...props
 }: PressableProps & {
   children: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
+  // Accepte aussi la forme fonction ({ pressed }) du Pressable natif, pour
+  // garder une teinte d'appui en plus de l'échelle.
+  style?: PressableProps['style'];
   containerStyle?: StyleProp<ViewStyle>;
   scaleTo?: number;
 }) {
+  const reduced = useReducedMotion();
   const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const opacity = useSharedValue(1);
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
 
   return (
     <Animated.View style={[animated, containerStyle]}>
@@ -84,11 +94,15 @@ export function PressableScale({
         {...props}
         style={style}
         onPressIn={(e) => {
-          scale.value = withSpring(scaleTo, { damping: 18, stiffness: 320 });
+          // Réduire les animations : plus d'échelle, un simple voile. Le doigt
+          // reçoit toujours sa confirmation.
+          if (reduced) opacity.set(withTiming(0.7, { duration: motion.duration.instant }));
+          else scale.set(withSpring(scaleTo, motion.spring.snappy));
           props.onPressIn?.(e);
         }}
         onPressOut={(e) => {
-          scale.value = withSpring(1, { damping: 18, stiffness: 320 });
+          scale.set(withSpring(1, motion.spring.snappy));
+          opacity.set(withTiming(1, { duration: motion.duration.fast }));
           props.onPressOut?.(e);
         }}
       >
@@ -96,6 +110,33 @@ export function PressableScale({
       </Pressable>
     </Animated.View>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Valeur 0 -> 1 qui suit un booléen au ressort : sélection, coche, onglet.
+// Sert à fondre une couleur de fond ou à faire éclore une pastille au lieu de
+// la faire apparaître d'un coup.
+// ---------------------------------------------------------------------------
+export function useToggleProgress(on: boolean) {
+  const reduced = useReducedMotion();
+  const p = useSharedValue(on ? 1 : 0);
+  React.useEffect(() => {
+    const to = on ? 1 : 0;
+    p.set(
+      reduced
+        ? withTiming(to, { duration: motion.duration.fast })
+        : withSpring(to, motion.spring.base),
+    );
+  }, [on, reduced, p]);
+  return p;
+}
+
+// Fond qui fond d'une couleur à l'autre selon la sélection.
+export function useSelectedBackground(on: boolean, from: string, to: string) {
+  const p = useToggleProgress(on);
+  return useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(Math.min(Math.max(p.value, 0), 1), [0, 1], [from, to]),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +250,7 @@ const styles = StyleSheet.create({
   // borderRadius ne s'applique pas au flou sur Android : on découpe au parent.
   glassClip: { overflow: 'hidden', borderRadius: radius.md },
   glassTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: glass.tint,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: glass.border,
@@ -226,7 +267,7 @@ const styles = StyleSheet.create({
   // Repli sans flou : surface tonique Material sur Android, voile dense ailleurs.
   glassFallback: isIOS
     ? {
-        backgroundColor: isDark ? 'rgba(28,11,19,.85)' : 'rgba(255,255,255,.82)',
+        backgroundColor: isDark ? 'rgba(16, 17, 19,.85)' : 'rgba(255,255,255,.82)',
         borderRadius: radius.md,
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: colors.border,

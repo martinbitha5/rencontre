@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"revenuecat-mcp": {
+			"type": "http",
+			"url": "https://mcp.revenuecat.ai/mcp"
+		}
+	},
+	"inputs": []
+}

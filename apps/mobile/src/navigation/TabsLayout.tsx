@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getMyPhotos, touchLastActive } from '@/services/api';
 import { cacheSet } from '@/utils/cache';
 import { registerForPushNotifications } from '@/services/notifications';
+import { useAuth } from '@/providers/auth';
 import { prefetchPhotos } from '@/utils/preload';
 import { colors, glass, isDark, isIOS, m3, shadows } from '@/theme';
 
@@ -42,15 +43,34 @@ function M3TabIcon({
 
 function tabIcon(active: keyof typeof Ionicons.glyphMap, inactive: keyof typeof Ionicons.glyphMap) {
   // Fonction de rendu passée à tabBarIcon, pas un composant nommé.
+  // color est un ColorValue depuis React Native 0.88 (plus forcément une chaîne).
   // eslint-disable-next-line react/display-name
-  return ({ color, size, focused }: { color: string; size: number; focused: boolean }) => {
+  return ({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) => {
     const name = focused ? active : inactive;
-    if (isIOS) return <Ionicons name={name} size={size} color={color} />;
-    return <M3TabIcon name={name} focused={focused} color={color} />;
+    // Les teintes de la barre (tabBarActiveTintColor / Inactive) sont des
+    // chaînes de la palette : la valeur reçue est donc toujours une chaîne.
+    const tint = color as string;
+    if (isIOS) return <Ionicons name={name} size={size} color={tint} />;
+    return <M3TabIcon name={name} focused={focused} color={tint} />;
   };
 }
 
+// Les onglets n'existent que pour un compte connecté et onboardé. Au
+// démarrage à froid, la route initiale est l'onglet Rencontres : sans ce
+// garde, les onglets se montaient avant que la navigation ne renvoie vers
+// l'accueil, et lançaient dans le vide (erreurs 401) le fil, les favoris, les
+// soirées, le signal de présence et même la demande de permission des
+// notifications, chez un visiteur qui n'avait pas encore de compte.
 export default function TabsLayout() {
+  const { session, profile } = useAuth();
+  if (!session) return <Redirect href="/(auth)/welcome" />;
+  // Profil pas encore lu, ou compte à terminer : la navigation principale
+  // (RootLayout) envoie vers l'onboarding, rien à monter ici en attendant.
+  if (!profile?.is_onboarded) return null;
+  return <SignedInTabs />;
+}
+
+function SignedInTabs() {
   const insets = useSafeAreaInsets();
   const barHeight = BAR_HEIGHT + insets.bottom;
 
@@ -180,8 +200,8 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  glassBar: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
-  glassBarTint: { ...StyleSheet.absoluteFillObject, backgroundColor: glass.tint },
+  glassBar: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
+  glassBarTint: { ...StyleSheet.absoluteFill, backgroundColor: glass.tint },
   glassBarHighlight: {
     position: 'absolute',
     top: 0,

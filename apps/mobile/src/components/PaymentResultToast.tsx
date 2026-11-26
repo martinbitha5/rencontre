@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '@/utils/haptics';
 import { useEffect } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,11 +51,8 @@ export function PaymentResultToast({
       reduceMotion: ReduceMotion.Never,
     });
     if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(
-        toast.variant === 'success'
-          ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Error,
-      ).catch(() => {});
+      if (toast.variant === 'success') haptic.success();
+      else haptic.error();
     }
     const timer = setTimeout(onDone, DURATION_MS);
     return () => clearTimeout(timer);

@@ -1,0 +1,591 @@
+---
+// Le bandeau de chiffres affiche un vrai compteur (voir src/lib/counter.js).
+import { fetchCounter, counterLabel, formatCount } from '../lib/counter.js';
+import { storeNote } from '../lib/stores.js';
+import StoreBadges from '../components/StoreBadges.astro';
+
+
+let counter;
+for (let attempt = 1; ; attempt++) {
+  try { counter = await fetchCounter(); break; } catch (error) {
+    if (attempt >= 4) throw error;
+    await new Promise((r) => setTimeout(r, attempt * 2000));
+  }
+}
+---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo</title>
+  <meta name="description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <link rel="canonical" href="https://zola-rdc.com/">
+  <meta property="og:site_name" content="Zola">
+  <meta property="og:locale" content="fr_CD">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zola-rdc.com/">
+  <meta property="og:title" content="Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo">
+  <meta property="og:description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <meta property="og:image" content="https://zola-rdc.com/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Zola, des rencontres qui comptent, en RDC">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo">
+  <meta name="twitter:description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <meta name="twitter:image" content="https://zola-rdc.com/og-image.jpg">
+  <script is:inline type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://zola-rdc.com/#organization",
+        "name": "Zola",
+        "legalName": "Goblaire Ltd",
+        "url": "https://zola-rdc.com/",
+        "logo": "https://zola-rdc.com/og-image.jpg",
+        "email": "contact@zola-rdc.com",
+        "contactPoint": [
+          { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
+          { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" }
+        ],
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "20 Wenlock Road",
+          "addressLocality": "London",
+          "postalCode": "N1 7GU",
+          "addressCountry": "GB"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://zola-rdc.com/#website",
+        "url": "https://zola-rdc.com/",
+        "name": "Zola",
+        "alternateName": ["Zola RDC", "Zola rencontre", "Zola application de rencontre", "zola-rdc.com"],
+        "inLanguage": "fr",
+        "publisher": { "@id": "https://zola-rdc.com/#organization" }
+      },
+      {
+        "@type": "MobileApplication",
+        "@id": "https://zola-rdc.com/#app",
+        "name": "Zola",
+        "alternateName": "Zola RDC",
+        "description": "Application de rencontre pour la République démocratique du Congo. Des profils vérifiés de sa ville, qui disent ce qu'ils cherchent, pour l'amour, l'amitié ou le réseau. Matchs, messages en temps réel, et un mode soirée qui montre qui est présent dans un lieu partenaire.",
+        "applicationCategory": "SocialNetworkingApplication",
+        "operatingSystem": "iOS, Android",
+        "inLanguage": "fr",
+        "areaServed": { "@type": "Country", "name": "République démocratique du Congo" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CDF" },
+        "author": { "@id": "https://zola-rdc.com/#organization" },
+        "url": "https://zola-rdc.com/"
+      }
+    ]
+  }
+  </script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="dns-prefetch" href="https://sbsxgwdpdjxsrxcccwno.supabase.co">
+  <link rel="preload" href="/fonts/montserrat-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" as="image" href="/img/scene-match-928.webp" type="image/webp" fetchpriority="high">
+  <link rel="stylesheet" href="theme.css">
+  <style is:inline>
+    /* Accueil. Disposition en sections alternées (texte d'un côté, visuel
+       de l'autre), sur fonds clairs, comme demandé le 23/11/2026 en prenant
+       la page d'accueil de Badoo comme modèle de STRUCTURE. Couleurs, police,
+       textes et visuels restent ceux de Zola : rien n'est repris de leur
+       page (ni texte, ni image, ni illustration, ni violet). */
+    :root {
+      --tint: #fff1f5;
+      --tint-2: #ffe1ea;
+      --ink: #101113;
+    }
+    body { background: #fff; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+
+    /* ---------- En-tête : blanc, logo à gauche, un seul bouton ---------- */
+    .site-head {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: saturate(1.4) blur(8px);
+      -webkit-backdrop-filter: saturate(1.4) blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .site-head .wrap { height: 72px; display: flex; align-items: center; gap: 28px; }
+    .site-head .brand { font-size: 1.25rem; }
+    .site-head nav { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+    .site-head nav a:not(.btn) {
+      color: var(--text); text-decoration: none; font-weight: 600; font-size: .92rem;
+      padding: 8px 14px; border-radius: 999px;
+    }
+    .site-head nav a:not(.btn):hover { background: var(--bg-soft); }
+    .btn.dark { background: var(--ink); color: #fff; }
+    .btn.dark:hover { filter: none; background: #2a2c31; }
+    .btn.line { background: transparent; color: var(--ink); border-color: var(--ink); }
+    .btn.line:hover { background: var(--ink); color: #fff; filter: none; }
+
+    /* ---------- Sections ---------- */
+    .band { padding: 96px 0; }
+    .band.tint { background: var(--tint); }
+    .band.tint-2 { background: var(--tint-2); }
+    .split {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center;
+    }
+    .split.reverse .media { order: -1; }
+    .split > * { min-width: 0; }
+    .eyebrow {
+      display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    }
+    h1 {
+      font-size: clamp(2.4rem, 4.1vw, 3.7rem); font-weight: 900;
+      line-height: 1.04; letter-spacing: -.035em; color: var(--accent);
+      text-wrap: balance;
+    }
+    h2 {
+      font-size: clamp(1.9rem, 3.4vw, 2.9rem); font-weight: 900;
+      line-height: 1.08; letter-spacing: -.03em; color: var(--ink);
+      text-wrap: balance; margin-bottom: 18px;
+    }
+    .copy p { font-size: 1.08rem; color: #3b3e46; margin-bottom: 14px; max-width: 470px; }
+    .copy p.lead { font-size: 1.25rem; color: var(--ink); font-weight: 500; }
+    .copy .lines p { margin-bottom: 2px; }
+    .copy .lines { margin-bottom: 14px; }
+    .copy .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+    .fine { font-size: .78rem; color: var(--muted); margin-top: 22px; max-width: 470px; }
+    .fine a { color: inherit; }
+
+    /* ---------- Héros ---------- */
+    .hero { background: var(--tint); padding: 72px 0 0; overflow: hidden; }
+    .hero .split { align-items: end; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .hero .copy { padding-bottom: 88px; }
+    /* Le cadre prend le format exact de la photo (4:5) : elle s'affiche
+       entière, sans rien rogner, quelle que soit la largeur d'écran. */
+    .hero-art { position: relative; padding: 0 24px 0 48px; }
+    .hero-photo {
+      position: relative; aspect-ratio: 4 / 5;
+      border-radius: 32px 32px 0 0;
+      background: url('/img/scene-match-928.webp') center / cover no-repeat, var(--tint-2);
+      box-shadow: 0 30px 60px rgba(253, 38, 122, .18);
+    }
+    .chip {
+      position: absolute; display: inline-flex; align-items: center; gap: 10px;
+      background: #fff; border-radius: 999px; padding: 10px 18px 10px 10px;
+      font-weight: 700; font-size: .92rem; color: var(--ink);
+      box-shadow: 0 12px 30px rgba(16, 17, 19, .14);
+      white-space: nowrap;
+    }
+    .chip .dot {
+      width: 34px; height: 34px; border-radius: 50%; flex: 0 0 34px;
+      background: var(--flame); display: flex; align-items: center; justify-content: center;
+    }
+    .chip .dot svg { width: 18px; height: 18px; }
+    .chip small { display: block; font-weight: 500; font-size: .74rem; color: var(--muted); }
+    .hero-art .c1 { top: 110px; left: 0; }
+    .hero-art .c2 { top: 250px; right: 0; }
+    .hero-art .c3 { bottom: 70px; left: 20px; }
+
+    /* ---------- Photos de scène (vraies photos Unsplash, licence libre, voir public/img/CREDITS.txt) ---------- */
+    .shot {
+      margin: 0; border-radius: 32px; overflow: hidden; aspect-ratio: 4 / 5;
+      background: var(--tint-2);
+      box-shadow: 0 30px 60px rgba(16, 17, 19, .16);
+    }
+    .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* ---------- Visuels faits en code ---------- */
+    .panel {
+      border-radius: 32px; min-height: 420px; padding: 40px;
+      display: flex; align-items: center; justify-content: center; position: relative;
+      background: var(--flame);
+    }
+    .panel.soft { background: var(--tint-2); }
+    .panel.dark { background: var(--ink); }
+
+    /* Trois cartes */
+    .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 40px; }
+    .step { position: relative; }
+    .step .art {
+      height: 230px; border-radius: 26px; background: #fff;
+      box-shadow: 0 14px 34px rgba(253, 38, 122, .10);
+      display: flex; align-items: center; justify-content: center; margin-top: 18px;
+    }
+    .step .art svg { width: 88px; height: 88px; }
+    .step .tag {
+      position: absolute; top: 0; left: 18px; transform: translateY(-50%);
+      background: var(--flame); color: #fff; font-weight: 800; font-size: .86rem;
+      border-radius: 999px; padding: 7px 16px;
+    }
+    .step h3 { font-size: 1.2rem; font-weight: 800; color: var(--ink); margin: 18px 0 6px; }
+    .step p { color: #3b3e46; }
+    .below { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 40px; }
+    .below a.more { color: var(--ink); font-weight: 700; }
+
+    /* Sécurité */
+    .shield {
+      display: flex; flex-direction: column; gap: 12px; width: min(320px, 100%);
+    }
+    .shield .big {
+      width: 110px; height: 110px; border-radius: 30px; background: #fff; margin: 0 auto 10px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 18px 40px rgba(16, 17, 19, .18);
+    }
+    .shield .big svg { width: 58px; height: 58px; }
+    .shield .row {
+      background: #fff; border-radius: 16px; padding: 12px 16px; display: flex; gap: 12px; align-items: center;
+      font-weight: 700; color: var(--ink); box-shadow: 0 8px 20px rgba(16, 17, 19, .08);
+    }
+    .shield .row i {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--tint-2); flex: 0 0 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .shield .row svg { width: 15px; height: 15px; }
+
+    /* ---------- Bandeau confiance : les chiffres ---------- */
+    .trust { background: var(--tint-2); padding: 80px 0; }
+    .trust .split { align-items: center; grid-template-columns: .75fr 1.25fr; gap: 48px; }
+    .figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .figure { background: #fff; border-radius: 24px; padding: 26px 22px; text-align: center; }
+    .figure b { display: block; font-size: 2.4rem; font-weight: 900; letter-spacing: -.03em; color: var(--accent); }
+    .figure span {
+      display: block; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); text-wrap: balance;
+    }
+    #counter { font-variant-numeric: tabular-nums; }
+
+    /* ---------- Téléchargement ---------- */
+    .dl { text-align: center; }
+    .dl h2 { margin-bottom: 12px; }
+    .dl .wrap > p { color: var(--muted); max-width: 520px; margin: 0 auto 32px; font-size: 1.05rem; }
+    .store-badge.is-soon { cursor: default; }
+    .stores { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .store-badge {
+      display: flex; align-items: center; gap: 12px; background: var(--ink); color: #fff; text-decoration: none;
+      border-radius: 14px; padding: 10px 22px; min-width: 180px; transition: transform .15s ease;
+    }
+    .store-badge:hover { transform: translateY(-2px); }
+    .store-badge svg { width: 28px; height: 28px; flex-shrink: 0; }
+    .store-badge .txt { text-align: left; line-height: 1.25; }
+    .store-badge .small { font-size: .68rem; opacity: .85; display: block; }
+    .store-badge .big { font-size: 1.12rem; font-weight: 700; }
+    .soon { margin-top: 16px; font-size: .85rem; color: var(--muted); }
+
+    /* ---------- Pied de page : colonnes sur fond blanc ---------- */
+    .site-foot { border-top: 1px solid var(--line); padding: 64px 0 40px; background: #fff; color: var(--text); text-align: left; }
+    .foot-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.2fr; gap: 40px; }
+    .foot-grid h4 { font-size: .8rem; font-weight: 800; color: var(--ink); margin-bottom: 14px; letter-spacing: 0; }
+    .foot-grid ul { list-style: none; }
+    .foot-grid li { margin-bottom: 9px; }
+    .foot-grid a { color: #3b3e46; text-decoration: none; font-weight: 500; font-size: .9rem; }
+    .foot-grid a:hover { color: var(--accent); }
+    .foot-grid .about { color: var(--muted); font-size: .86rem; margin-top: 12px; max-width: 260px; }
+    .foot-grid .stores { justify-content: flex-start; gap: 10px; }
+    .foot-grid .store-badge { min-width: 0; padding: 8px 16px; }
+    .foot-bottom {
+      border-top: 1px solid var(--line); margin-top: 44px; padding-top: 22px;
+      text-align: center;
+      font-size: .78rem; color: var(--faint); line-height: 1.6;
+    }
+
+    /* ---------- Tablette et téléphone ---------- */
+    @media (max-width: 960px) {
+      .split, .hero .split, .trust .split { grid-template-columns: 1fr; gap: 44px; }
+      .split.reverse .media { order: 0; }
+      .band { padding: 72px 0; }
+      .hero { padding-top: 48px; }
+      .hero .copy { padding-bottom: 0; text-align: center; }
+      .hero .copy p, .hero .fine { margin-left: auto; margin-right: auto; }
+      .hero .copy .actions { justify-content: center; }
+      .hero-art { max-width: 520px; margin: 0 auto; width: 100%; padding: 0 30px; }
+      .copy { text-align: center; }
+      .copy p, .fine { margin-left: auto; margin-right: auto; }
+      .copy .actions, .below { justify-content: center; }
+      /* Les trois étapes deviennent des cartes horizontales compactes :
+         icône à gauche, étiquette, titre et phrase à droite. Les grandes
+         vignettes de 230 px empilées prenaient tout l'écran. */
+      .cards3 { grid-template-columns: 1fr; gap: 14px; max-width: 520px; margin: 28px auto 0; }
+      .step {
+        display: grid; grid-template-columns: 64px 1fr; column-gap: 16px; align-items: center;
+        background: #fff; border-radius: 22px; padding: 16px 18px 16px 16px; text-align: left;
+        box-shadow: 0 10px 26px rgba(253, 38, 122, .08);
+      }
+      .step .art {
+        grid-column: 1; grid-row: 1 / span 3; align-self: center;
+        width: 64px; height: 64px; margin: 0; border-radius: 18px;
+        background: var(--tint); box-shadow: none;
+      }
+      .step .art svg { width: 32px; height: 32px; }
+      .step .tag {
+        position: static; transform: none; grid-column: 2; grid-row: 1; justify-self: start;
+        font-size: .68rem; padding: 3px 10px;
+      }
+      .step h3 { grid-column: 2; grid-row: 2; font-size: 1.02rem; margin: 6px 0 2px; }
+      .step p { grid-column: 2; grid-row: 3; font-size: .92rem; line-height: 1.4; }
+      .below { margin-top: 28px; }
+      #comment h2 { text-align: center; }
+      .foot-grid { grid-template-columns: 1fr 1fr; }
+      .site-head nav a:not(.btn) { display: none; }
+    }
+    @media (max-width: 560px) {
+      .wrap { padding: 0 20px; }
+      .site-head .wrap { height: 64px; }
+      .band { padding: 56px 0; }
+      .panel { min-height: 0; padding: 32px 20px; border-radius: 26px; }
+      .hero-art { padding: 0 20px; }
+      .hero-photo { border-radius: 26px 26px 0 0; }
+      .hero-art .c1 { top: 70px; left: 0; }
+      .hero-art .c2 { top: 190px; right: 0; }
+      .hero-art .c3 { bottom: 40px; left: 6px; }
+      .chip { font-size: .82rem; padding: 8px 14px 8px 8px; }
+      .chip .dot { width: 28px; height: 28px; flex-basis: 28px; }
+      /* Chiffres : une ligne compacte chacun, nombre à gauche, libellé à droite */
+      .figures { grid-template-columns: 1fr; gap: 10px; }
+      .figure {
+        display: flex; align-items: center; gap: 16px; text-align: left;
+        padding: 14px 20px; border-radius: 20px;
+      }
+      .figure b { font-size: 1.9rem; min-width: 84px; }
+      .figure span { margin-top: 0; }
+      .split, .hero .split, .trust .split { gap: 32px; }
+      .trust { padding: 56px 0; }
+      .store-badge { width: 100%; justify-content: center; }
+      .foot-grid { grid-template-columns: 1fr 1fr; gap: 28px 20px; }
+      .foot-grid > :first-child, .foot-grid > :last-child { grid-column: 1 / -1; }
+      /* Zones de tap d'au moins 36 px pour le doigt */
+      .foot-grid li { margin-bottom: 0; }
+      .foot-grid ul a { display: inline-block; padding: 8px 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-head">
+    <div class="wrap">
+      <a class="brand" href="/">zola</a>
+      <nav>
+        <a href="/blog">Blog</a>
+        <a href="/faq">Questions</a>
+        <a href="/conseils">Sécurité</a>
+        <a class="btn dark" href="#telecharger">Télécharger</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- Héros -->
+    <section class="hero">
+      <div class="wrap split">
+        <div class="copy">
+          <span class="eyebrow">L'app de rencontre de la RDC</span>
+          <h1>Des rencontres qui comptent.</h1>
+          <p class="lead" style="margin-top:18px">Des profils vérifiés, près de chez toi, qui cherchent la même chose que toi.</p>
+          <div class="actions">
+            <a class="btn lg" href="#telecharger">Télécharger Zola</a>
+            <a class="btn line lg" href="#comment">Comment ça marche</a>
+          </div>
+          <p class="fine">Gratuit, sur iPhone et Android. Réservé aux plus de 18 ans.</p>
+        </div>
+        <div class="media hero-art" aria-hidden="true">
+          <div class="hero-photo"></div>
+          <div class="chip c1"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></span><span>Profil vérifié<small>selfie contrôlé par l'équipe</small></span></div>
+          <div class="chip c2"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-9-9c-1.3-3 .5-6 3.6-6 2 0 3.4 1.2 4.4 2.6C12 6.2 13.4 5 15.4 5c3.1 0 4.9 3 3.6 6-2 4.6-7 9-7 9z"/></svg></span><span>C'est un match<small>dis-lui bonjour</small></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vrais profils -->
+    <section class="band">
+      <div class="wrap split reverse">
+        <div class="copy">
+          <span class="eyebrow">Vrais profils</span>
+          <h2>Ici, tu sais à qui tu parles.</h2>
+          <p>Chaque profil peut être vérifié par un selfie, comparé à ses photos par notre équipe en moins de 24 h.</p>
+          <p>Faux comptes, arnaques et insultes sont signalés en deux gestes et traités par une vraie équipe.</p>
+          <div class="actions"><a class="btn dark" href="#telecharger">Télécharger Zola</a></div>
+        </div>
+        <figure class="media shot">
+          <img src="/img/scene-profil-928.webp" srcset="/img/scene-profil-560.webp 560w, /img/scene-profil-928.webp 928w"
+            sizes="(max-width: 960px) 92vw, 540px" width="928" height="1160" loading="lazy" decoding="async"
+            alt="Portrait d'une jeune femme souriante aux tresses">
+        </figure>
+      </div>
+    </section>
+
+    <!-- Intentions -->
+    <section class="band tint">
+      <div class="wrap split">
+        <div class="copy">
+          <span class="eyebrow">Intentions</span>
+          <h2>Rencontre des gens qui cherchent la même chose que toi.</h2>
+          <div class="lines">
+            <p>Tu sais ce que tu veux. Dis-le.</p>
+            <p>Juste discuter ? Pas de souci.</p>
+            <p>Du sérieux ? On adore.</p>
+          </div>
+          <p>Et si tu changes d'avis, tu changes ton profil.</p>
+          <div class="actions"><a class="btn line" href="#telecharger">Télécharger Zola</a></div>
+        </div>
+        <figure class="media shot">
+          <img src="/img/scene-intentions-928.webp" srcset="/img/scene-intentions-560.webp 560w, /img/scene-intentions-928.webp 928w"
+            sizes="(max-width: 960px) 92vw, 540px" width="928" height="1160" loading="lazy" decoding="async"
+            alt="Un couple en tenues de pagne assorties, complice et souriant">
+        </figure>
+      </div>
+    </section>
+
+    <!-- Mode soirée -->
+    <section class="band">
+      <div class="wrap split reverse">
+        <div class="copy">
+          <span class="eyebrow">Mode soirée</span>
+          <h2>Tu sors ce soir ? Vois qui est là.</h2>
+          <p>Dans un bar ou une soirée partenaire, tu scannes le QR code à l'entrée. Zola te montre les personnes présentes, dans la même salle que toi.</p>
+          <p>Tu likes, tu matches, et tu vas dire bonjour.</p>
+          <div class="actions"><a class="btn dark" href="#telecharger">Télécharger Zola</a></div>
+        </div>
+        <figure class="media shot">
+          <img src="/img/scene-soiree-928.webp" srcset="/img/scene-soiree-560.webp 560w, /img/scene-soiree-928.webp 928w"
+            sizes="(max-width: 960px) 92vw, 540px" width="928" height="1160" loading="lazy" decoding="async"
+            alt="Trois amies rient ensemble à une table de bar, le soir">
+        </figure>
+      </div>
+    </section>
+
+    <!-- Comment ça marche : trois cartes -->
+    <section class="band tint" id="comment">
+      <div class="wrap">
+        <h2>3 secondes pour comprendre</h2>
+        <div class="cards3">
+          <div class="step">
+            <span class="tag">1. Ton profil</span>
+            <div class="art"><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg></div>
+            <h3>Crée ton profil</h3>
+            <p>Tes photos et ce que tu cherches. C'est tout.</p>
+          </div>
+          <div class="step">
+            <span class="tag">2. Les profils</span>
+            <div class="art"><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="12" height="16" rx="2"/><path d="M4 7v11a3 3 0 003 3h9"/></svg></div>
+            <h3>Découvre des profils</h3>
+            <p>Des gens vérifiés, près de chez toi.</p>
+          </div>
+          <div class="step">
+            <span class="tag">3. Le match</span>
+            <div class="art"><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-4.35-9-8.5C1.5 9.5 3 5.5 6.5 5c1.9-.3 3.6.7 5.5 2.7 1.9-2 3.6-3 5.5-2.7 3.5.5 5 4.5 3.5 7.5-3 4.15-9 8.5-9 8.5z"/></svg></div>
+            <h3>Matche et discute</h3>
+            <p>Un like de chaque côté, et la conversation s'ouvre. Le reste, c'est toi.</p>
+          </div>
+        </div>
+        <div class="below">
+          <a class="more" href="/faq">Toutes les questions sur Zola</a>
+          <a class="btn line" href="#telecharger">Télécharger Zola</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sécurité -->
+    <section class="band">
+      <div class="wrap split reverse">
+        <div class="copy">
+          <span class="eyebrow">Sécurité</span>
+          <h2>Ta sécurité passe avant tout.</h2>
+          <p>Tu bloques et tu signales en deux gestes. Notre équipe lit chaque signalement, et les comptes de mineurs sont suspendus dans l'heure.</p>
+          <div class="actions"><a class="btn line" href="/conseils">Nos conseils de sécurité</a></div>
+        </div>
+        <div class="media panel soft" aria-hidden="true">
+          <div class="shield">
+            <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.3-3 8.2-7 9.5-4-1.3-7-5.2-7-9.5V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+            <div class="row"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>Badge vérifié par selfie</div>
+            <div class="row"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>Signalement en deux gestes</div>
+            <div class="row"><i><svg viewBox="0 0 24 24" fill="none" stroke="#fd267a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></i>Réservé aux plus de 18 ans</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Partenaires -->
+    <section class="band tint" id="partenaires">
+      <div class="wrap split">
+        <div class="copy">
+          <span class="eyebrow">Organisateurs</span>
+          <h2>Tu organises des soirées ? Zola remplit la salle.</h2>
+          <p>Bar, restaurant, afterwork de marque. Tu poses notre affiche à l'entrée, tes invités se rencontrent, et tu suis les entrées et les matchs en direct.</p>
+          <div class="actions"><a class="btn dark" href="/contact#partenaires">Devenir partenaire</a></div>
+        </div>
+        <figure class="media shot">
+          <img src="/img/scene-affiche-928.webp" srcset="/img/scene-affiche-560.webp 560w, /img/scene-affiche-928.webp 928w"
+            sizes="(max-width: 960px) 92vw, 540px" width="928" height="1160" loading="lazy" decoding="async"
+            alt="Une cliente au comptoir d'un bar chaleureux">
+        </figure>
+      </div>
+    </section>
+
+    <!-- Confiance : les chiffres -->
+    <section class="trust">
+      <div class="wrap split">
+        <div class="copy">
+          <h2>Zola, partout en RDC.</h2>
+          <p>Des gens vrais, dans les 26 provinces, qui veulent se rencontrer autrement.</p>
+        </div>
+        <div class="figures">
+          <div class="figure"><b id="counter" data-count={counter.count} data-mode={counter.mode}>{formatCount(counter.count)}</b><span id="counter-label">{counterLabel(counter)}</span></div>
+          <div class="figure"><b>26</b><span>provinces couvertes en RDC</span></div>
+          <div class="figure"><b>18+</b><span>la communauté des vrais adultes</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Téléchargement -->
+    <section id="telecharger" class="band dl">
+      <div class="wrap">
+        <h2>Télécharge Zola.</h2>
+        <p>Ton profil en deux minutes, et les premières rencontres juste après.</p>
+        <StoreBadges />
+        <p class="soon">{storeNote()}</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <a class="brand" href="/">zola</a>
+          <p class="about">Des rencontres qui comptent, partout en RDC.</p>
+        </div>
+        <div>
+          <h4>Zola</h4>
+          <ul>
+            <li><a href="/blog">Blog</a></li>
+            <li><a href="/faq">Questions</a></li>
+            <li><a href="/contact">Contact</a></li>
+            <li><a href="/contact#partenaires">Organisateurs</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Sécurité et règles</h4>
+          <ul>
+            <li><a href="/conseils">Conseils de sécurité</a></li>
+            <li><a href="/securite-enfants">Sécurité des enfants</a></li>
+            <li><a href="/conditions">Conditions générales</a></li>
+            <li><a href="/confidentialite">Confidentialité</a></li>
+            <li><a href="/mentions-legales">Mentions légales</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Télécharger</h4>
+          <StoreBadges />
+          <p class="about">{storeNote()}</p>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        © 2026 Goblaire Ltd. Tous droits réservés.
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    import '../scripts/counter.js';
+  </script>
+</body>
+</html>

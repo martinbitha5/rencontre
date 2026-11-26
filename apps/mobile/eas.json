@@ -15,7 +15,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://sbsxgwdpdjxsrxcccwno.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_m7L5upRFZXPIaBltmLIkAQ_P77Ij01u"
+        "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_m7L5upRFZXPIaBltmLIkAQ_P77Ij01u",
+        "EXPO_PUBLIC_REVENUECAT_IOS_KEY": "appl_UusyQUXVJDjVNCQfnBFjNBIqrvo"
       }
     }
   },

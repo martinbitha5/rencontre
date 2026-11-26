@@ -183,7 +183,7 @@ export function findPurchase(kind?: string, id?: string): Purchase {
     return {
       kind: 'incognito',
       id: plan.id,
-      title: 'Mode Incognito',
+      title: 'Mode Invisible',
       detail: `Abonnement ${plan.months} mois`,
       price: plan.price,
       priceCdfLabel: plan.priceCdfLabel,

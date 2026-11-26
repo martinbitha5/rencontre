@@ -1,4 +1,5 @@
-import type { Session } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isAuthRetryableFetchError, type Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import React, {
@@ -12,6 +13,7 @@ import React, {
 import { AppState } from 'react-native';
 import { supabase } from '@/services/supabase';
 import type { Profile } from '@/types';
+import { cacheGet, cacheSet } from '@/utils/cache';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -20,6 +22,13 @@ WebBrowser.maybeCompleteAuthSession();
 // qu'au retour au premier plan après au moins cette absence, ou sur demande
 // explicite (refreshProfile après une modification).
 const PROFILE_STALE_MS = 10 * 60 * 1000;
+
+// Dernier profil connu, gardé sur le téléphone (cache local vidé à la
+// déconnexion). Au démarrage, l'app s'ouvre aussitôt avec lui et relit la base
+// en arrière-plan : avant, l'intro restait affichée le temps d'un aller-retour
+// réseau, plusieurs secondes sur un réseau mobile lent, et indéfiniment hors
+// ligne.
+const profileKey = (userId: string) => `profile:${userId}`;
 
 interface AuthState {
   session: Session | null;
@@ -101,6 +110,50 @@ function friendlyAuthError(error: { code?: string; message: string } | null): st
   return 'Une erreur est survenue. Réessaie dans un instant.';
 }
 
+// Session de départ, robuste hors ligne.
+//
+// Quand le jeton d'accès a expiré, getSession() tente de le renouveler. Sans
+// réseau, ce renouvellement échoue (AuthRetryableFetchError, « The Internet
+// connection appears to be offline ») et getSession() répond session: null,
+// alors que la session est toujours intacte dans le stockage. L'app croyait
+// donc l'utilisateur déconnecté et affichait l'écran d'accueil.
+//
+// Dans ce cas précis, on relit la session stockée et on ouvre l'app avec elle
+// et le profil en cache. Le client Supabase renouvelle le jeton tout seul dès
+// que le réseau revient (TOKEN_REFRESHED). Un refus réel du serveur (jeton
+// révoqué) n'est pas une erreur réseau : il reste traité comme une
+// déconnexion.
+//
+// Durée bornée : hors ligne, Supabase réessaie le renouvellement pendant
+// jusqu'à 30 s, et l'intro attendait tout ce temps avant de s'effacer. Passé
+// STARTUP_SESSION_MS, on décide avec la session stockée.
+const STARTUP_SESSION_MS = 2500;
+
+async function storedSession(): Promise<Session | null> {
+  try {
+    const key = (supabase.auth as unknown as { storageKey: string }).storageKey;
+    const raw = await AsyncStorage.getItem(key);
+    const stored = raw ? (JSON.parse(raw) as Session) : null;
+    return stored?.access_token && stored.refresh_token && stored.user ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+async function startupSession(): Promise<{ session: Session | null; offline: boolean }> {
+  const timedOut = Symbol('timeout');
+  const res = await Promise.race([
+    supabase.auth.getSession(),
+    new Promise<typeof timedOut>((r) => setTimeout(() => r(timedOut), STARTUP_SESSION_MS)),
+  ]);
+  if (res === timedOut) return { session: await storedSession(), offline: true };
+  const { data, error } = res;
+  if (data.session || !error || !isAuthRetryableFetchError(error)) {
+    return { session: data.session, offline: false };
+  }
+  return { session: await storedSession(), offline: true };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -109,11 +162,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Date de la dernière lecture réussie : pilote le rechargement au retour au
   // premier plan, et rien d'autre.
   const profileLoadedAt = useRef(0);
+  const sessionRef = useRef<Session | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
-  const loadProfile = useCallback(async (s: Session | null) => {
+  const loadProfile = useCallback(async (s: Session | null): Promise<Profile | null> => {
     if (!s) {
       setProfile(null);
-      return;
+      return null;
     }
     const fetchProfile = () =>
       supabase.from('profiles').select('*').eq('user_id', s.user.id).maybeSingle();
@@ -136,40 +193,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error.code === 'PGRST301' ||
         error.code === '401');
     if (authFailed) {
+      cacheSet(profileKey(s.user.id), null);
       await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
       setProfile(null);
-      return;
+      return null;
     }
 
     // Toujours en échec réseau : on garde le profil déjà connu plutôt que de
     // le vider, sinon l'app renverrait vers l'onboarding un compte complet.
-    if (error) return;
+    if (error) return null;
 
     // Session valide mais aucun profil : le compte a disparu côté base. Même
     // conclusion, on repart proprement de l'écran d'accueil.
     if (!data) {
+      cacheSet(profileKey(s.user.id), null);
       await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
       setProfile(null);
-      return;
+      return null;
     }
 
     profileLoadedAt.current = Date.now();
     setProfile(data as Profile);
+    cacheSet(profileKey(s.user.id), data);
+    return data as Profile;
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      await loadProfile(data.session);
+    startupSession().then(async ({ session: s, offline }) => {
+      if (s) {
+        const cached = await cacheGet<Profile>(profileKey(s.user.id));
+        if (cached?.is_onboarded) {
+          // Ouverture immédiate avec le profil connu, relecture en arrière-plan.
+          setSession(s);
+          setProfile(cached);
+          setLoading(false);
+          loadProfile(s);
+          return;
+        }
+        // Démarrage à froid sans compte complet connu sur ce téléphone :
+        // inscription laissée en plan, session d'un essai précédent, ou profil
+        // illisible faute de réseau. L'app ne saute pas d'elle-même dans
+        // l'onboarding : après l'intro, l'accueil laisse choisir entre créer
+        // un compte et se connecter (se reconnecter reprend l'inscription là
+        // où elle en était).
+        const fresh = offline ? null : await loadProfile(s);
+        if (!fresh?.is_onboarded) {
+          // On ne coupe la session que pour un compte réellement pas fini. Un
+          // profil illisible (réseau) n'efface rien : la session reste stockée
+          // et la prochaine ouverture avec du réseau la reprendra.
+          if (fresh) await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+        setSession(s);
+      }
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
+      // La session de départ est déjà traitée par getSession() ci-dessus.
+      // Sans ce filtre, le profil était chargé une seconde fois au démarrage,
+      // et l'intro attendait ce doublon (drapeau syncing) avant de s'effacer.
+      if (event === 'INITIAL_SESSION') return;
       // Renouvellement de jeton : l'utilisateur n'a pas changé, le profil en
       // mémoire reste bon. Relire la base ici ferait repartir une requête à
       // chaque rafraîchissement automatique de session.
       if (event === 'TOKEN_REFRESHED') {
+        // Ne réveille pas une session écartée au démarrage (compte pas fini,
+        // voir plus haut) : seule une session déjà ouverte est mise à jour.
+        if (!sessionRef.current) return;
         setSession(s);
+        // Démarrage hors ligne : le profil affiché vient du cache. Le premier
+        // renouvellement réussi signale le retour du réseau, on le relit.
+        if (s && profileLoadedAt.current === 0) loadProfile(s);
         return;
       }
       // Session et drapeau posés dans le même rendu : la navigation attend

@@ -11,7 +11,11 @@ import { Button, ErrorText, ScreenHeader } from '@/components/ui';
 import { findPurchase, MOBILE_MONEY_OPERATORS, type MobileMoneyOperator } from '@/config/economy';
 import * as WebBrowser from 'expo-web-browser';
 import { SUPPORT_IS_WHATSAPP, supportUrl } from '@/config/support';
-import { initiateMobileMoneyPayment, waitForPaymentSettlement } from '@/services/payments';
+import {
+  clearMobileMoneyAttempt,
+  initiateMobileMoneyPayment,
+  waitForPaymentSettlement,
+} from '@/services/payments';
 import { useWallet } from '@/providers/wallet';
 import { colors, spacing } from '@/theme';
 import { styles } from './Checkout.styles';
@@ -134,7 +138,7 @@ export default function Checkout() {
         'zola://checkout-return',
       );
       dismissed = browser.type !== 'success';
-    } else {
+    } else if (!result.checkoutUrl) {
       // Poussée directe : la demande de confirmation est déjà sur le
       // téléphone, rien à ouvrir.
       setPushed(true);
@@ -165,6 +169,7 @@ export default function Checkout() {
       setToast({ variant: 'failure', title: 'Paiement annulé', message });
       const late = await waitForPaymentSettlement(result.reference, 5);
       if (late === 'success') {
+        await clearMobileMoneyAttempt(purchase.kind, purchase.id);
         setError(null);
         setDone(true);
         refresh();
@@ -173,6 +178,8 @@ export default function Checkout() {
           title: 'Paiement confirmé',
           message: `${purchase.title} est maintenant actif sur ton compte.`,
         });
+      } else if (late === 'failed' || late === 'cancelled') {
+        await clearMobileMoneyAttempt(purchase.kind, purchase.id);
       }
       return;
     }
@@ -183,6 +190,9 @@ export default function Checkout() {
       result.checkoutUrl ? 30 : 45,
     );
     setWaiting(false);
+    if (settlement === 'success' || settlement === 'failed' || settlement === 'cancelled') {
+      await clearMobileMoneyAttempt(purchase.kind, purchase.id);
+    }
     if (settlement === 'success') {
       setDone(true);
       refresh();

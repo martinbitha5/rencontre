@@ -2,14 +2,16 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { deleteMyAccount, setIncognito } from '@/services/api';
 import { PAYMENTS_ENABLED } from '@/config/features';
+import { SITE } from '@/config/support';
 import { useAppLock } from '@/providers/applock';
 import { BottomSheet } from './BottomSheet';
-import { MenuRow, ScreenHeader, SectionLabel } from '@/components/ui';
+import { ScreenHeader } from '@/components/ui';
+import { getPushPermission, registerForPushNotifications } from '@/services/notifications';
 import { useAuth } from '@/providers/auth';
 import { haptic } from '@/utils/haptics';
 import {
@@ -20,7 +22,6 @@ import {
 import { colors } from '@/theme';
 import { styles } from './Settings.styles';
 
-const SITE = 'https://zola-rdc.com';
 
 // Les trois modes d'apparence, présentés dans la feuille de choix.
 const THEME_OPTIONS: {
@@ -39,9 +40,45 @@ const THEME_OPTIONS: {
   { key: 'dark', label: 'Sombre', detail: 'Toujours le thème sombre', icon: 'moon-outline' },
 ];
 
-// Carte arrondie regroupant les rangées d'une section.
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return <View style={styles.sectionCard}>{children}</View>;
+// Libellé de l'état des notifications, à droite de la ligne.
+const PUSH_LABELS = {
+  granted: 'Activées',
+  denied: 'Désactivées',
+  undetermined: 'À activer',
+  unavailable: '',
+} as const;
+
+// Ligne de réglage : libellé, valeur éventuelle, chevron. Les groupes sont
+// séparés par une bande grise, sans titre.
+function Row({
+  label,
+  detail,
+  onPress,
+  danger,
+}: {
+  label: string;
+  detail?: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
+      accessibilityRole="button"
+    >
+      <Text style={[styles.rowLabel, danger && styles.rowDanger]}>{label}</Text>
+      {!!detail && <Text style={styles.rowDetail}>{detail}</Text>}
+      {!danger && <Ionicons name="chevron-forward" size={18} color={colors.text} />}
+    </Pressable>
+  );
+}
+
+function Gap() {
+  return <View style={styles.gap} />;
 }
 
 export default function Settings() {
@@ -77,16 +114,39 @@ export default function Settings() {
           router.push('/incognito');
         } else {
           Alert.alert(
-            'Incognito indisponible',
-            "Le mode incognito n'est pas activable pour l'instant. Réessaie plus tard.",
+            'Mode Invisible indisponible',
+            "Le mode Invisible n'est pas activable pour l'instant. Réessaie plus tard.",
           );
         }
         return;
       }
       await refreshProfile();
     } catch {
-      Alert.alert('Erreur', "Impossible de changer le mode incognito pour l'instant.");
+      Alert.alert('Erreur', "Impossible de changer le mode Invisible pour l'instant.");
     }
+  };
+
+  // Notifications : l'état vient du téléphone. On propose de les activer si
+  // la question n'a jamais été posée, sinon on ouvre les réglages du
+  // téléphone, seul endroit où elles se gèrent ensuite.
+  const [pushState, setPushState] = useState<keyof typeof PUSH_LABELS>('unavailable');
+  useEffect(() => {
+    getPushPermission().then(setPushState);
+  }, []);
+  const onNotifications = async () => {
+    if (pushState === 'unavailable') {
+      Alert.alert(
+        'Notifications',
+        "Les notifications ne sont pas disponibles sur cette version de l'app. Elles marchent dans l'app installée depuis le store.",
+      );
+      return;
+    }
+    if (pushState === 'undetermined') {
+      await registerForPushNotifications();
+      setPushState(await getPushPermission());
+      return;
+    }
+    Linking.openSettings().catch(() => {});
   };
 
   const openPage = (path: string) => {
@@ -118,103 +178,63 @@ export default function Settings() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScreenHeader title="Paramètres" />
       <ScrollView contentContainerStyle={styles.content}>
-        <SectionLabel>Préférences</SectionLabel>
-        <SectionCard>
-          <MenuRow
-            icon="options-outline"
-            label="Filtres de recherche"
-            onPress={() => router.push('/(tabs)/profile/preferences')}
-          />
-        </SectionCard>
+        <Row label="Modifier mon profil" onPress={() => router.push('/(tabs)/profile/edit')} />
+        <Row label="Filtres de recherche" onPress={() => router.push('/preferences')} />
 
-        <SectionLabel>Apparence</SectionLabel>
-        <SectionCard>
-          <MenuRow
-            icon="color-palette-outline"
-            label="Thème"
-            detail={themeLabel}
-            onPress={() => setThemeSheetOpen(true)}
-          />
-        </SectionCard>
+        <Gap />
+        <Row
+          label="Notifications"
+          detail={PUSH_LABELS[pushState]}
+          onPress={onNotifications}
+        />
+        <Row label="Apparence" detail={themeLabel} onPress={() => setThemeSheetOpen(true)} />
 
-        <SectionLabel>Vie privée</SectionLabel>
-        <SectionCard>
-          <View style={styles.switchRow}>
-            <View style={styles.switchRowIcon}>
-              <Ionicons name="eye-off-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchRowLabel}>Mode incognito</Text>
-              <Text style={styles.switchRowDetail}>
-                {profile?.incognito
-                  ? 'Activé : tu n’apparais plus dans Rencontres'
-                  : 'Ton profil reste visible dans Rencontres'}
-              </Text>
-            </View>
-            <Switch
-              value={!!profile?.incognito}
-              onValueChange={toggleIncognito}
-              trackColor={{ true: colors.accent, false: colors.border }}
-              thumbColor="#ffffff"
-            />
+        <Gap />
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>Mode Invisible</Text>
+            <Text style={styles.rowHint}>
+              {profile?.incognito
+                ? 'Activé, tu n’apparais plus dans Rencontres.'
+                : 'Ton profil reste visible dans Rencontres.'}
+            </Text>
           </View>
-          <MenuRow
-            icon="lock-closed-outline"
-            label="Code secret"
-            detail={hasCode ? 'Activé' : undefined}
-            onPress={() => router.push('/app-lock')}
+          <Switch
+            value={!!profile?.incognito}
+            onValueChange={toggleIncognito}
+            trackColor={{ true: colors.primary, false: colors.border }}
+            thumbColor="#ffffff"
           />
-        </SectionCard>
-
-        <SectionLabel>Assistance</SectionLabel>
-        <SectionCard>
-          <MenuRow
-            icon="chatbox-ellipses-outline"
-            label="Nous contacter"
-            onPress={() => openPage('contact.html')}
-          />
-          <MenuRow
-            icon="heart-circle-outline"
-            label="Conseils et sécurité"
-            onPress={() => openPage('conseils.html')}
-          />
-        </SectionCard>
-
-        <SectionLabel>À propos</SectionLabel>
-        <SectionCard>
-          <MenuRow
-            icon="document-text-outline"
-            label="Conditions générales"
-            onPress={() => openPage('conditions.html')}
-          />
-          <MenuRow
-            icon="shield-checkmark-outline"
-            label="Politique de confidentialité"
-            onPress={() => openPage('confidentialite.html')}
-          />
-          <MenuRow
-            icon="alert-circle-outline"
-            label="Sécurité des enfants"
-            onPress={() => openPage('securite-enfants.html')}
-          />
-          <MenuRow
-            icon="business-outline"
-            label="Mentions légales"
-            onPress={() => openPage('mentions-legales.html')}
-          />
-        </SectionCard>
-
-        <View style={styles.accountZone}>
-          <Pressable onPress={signOut} hitSlop={8}>
-            <Text style={styles.signOutLink}>Déconnexion</Text>
-          </Pressable>
-          <Pressable onPress={confirmDelete} hitSlop={8}>
-            <Text style={styles.deleteLink}>Supprimer mon compte</Text>
-          </Pressable>
-          <Text style={styles.footer}>
-            © 2026 Zola · version {Constants.expoConfig?.version ?? '1.0.0'}
-          </Text>
         </View>
+        <Row label="Confidentialité" onPress={() => router.push('/privacy')} />
+        <Row
+          label="Code secret"
+          detail={hasCode ? 'Activé' : undefined}
+          onPress={() => router.push('/app-lock')}
+        />
+        <Row
+          label="Vérification du profil"
+          detail={profile?.is_verified ? 'Vérifié' : undefined}
+          onPress={() => router.push('/verify-profile')}
+        />
+
+        <Gap />
+        <Row label="Nous contacter" onPress={() => openPage('contact.html')} />
+        <Row label="Conseils et sécurité" onPress={() => openPage('conseils.html')} />
+
+        <Gap />
+        <Row label="Conditions générales" onPress={() => openPage('conditions.html')} />
+        <Row label="Politique de confidentialité" onPress={() => openPage('confidentialite.html')} />
+        <Row label="Sécurité des enfants" onPress={() => openPage('securite-enfants.html')} />
+        <Row label="Mentions légales" onPress={() => openPage('mentions-legales.html')} />
+
+        <Gap />
+        <Row label="Déconnexion" danger onPress={signOut} />
+        <Row label="Supprimer mon compte" danger onPress={confirmDelete} />
+
+        <Text style={styles.footer}>
+          © 2026 Zola · version {Constants.expoConfig?.version ?? '1.0.0'}
+        </Text>
       </ScrollView>
 
       {/* Choix du thème : feuille glissée depuis le bas, comme les écrans de

@@ -45,6 +45,8 @@ export interface Profile extends ProfileDetails {
   filter_smoking: 'oui' | 'non' | null;
   filter_online_only: boolean;
   filter_dm_strict: boolean;
+  // Montrer aux autres mon statut en ligne (migration 066). Vrai par défaut.
+  show_online?: boolean;
   // Ne montrer que les profils au badge bleu (migration 046). Gratuit.
   filter_verified_only: boolean;
 }

@@ -17,7 +17,7 @@
     "android": {
       "package": "com.zola.app",
       "adaptiveIcon": {
-        "backgroundColor": "#481A46",
+        "backgroundColor": "#fd267a",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -33,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#481A46",
+          "backgroundColor": "#fd267a",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -41,13 +41,14 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Zola a besoin d'accéder à vos photos pour créer votre profil."
+          "photosPermission": "Zola a besoin d'accéder à vos photos pour créer votre profil.",
+          "cameraPermission": "Zola utilise l'appareil photo pour prendre les photos de votre profil, vérifier votre identité et scanner les codes QR des soirées."
         }
       ],
       [
         "expo-notifications",
         {
-          "color": "#481A46",
+          "color": "#fd267a",
           "defaultChannel": "default"
         }
       ],
@@ -62,7 +63,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Zola utilise la caméra pour scanner les codes QR des soirées."
+          "cameraPermission": "Zola utilise l'appareil photo pour prendre les photos de votre profil, vérifier votre identité et scanner les codes QR des soirées."
         }
       ],
       "expo-sqlite",
@@ -74,7 +75,9 @@
         }
       ],
       "expo-asset",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

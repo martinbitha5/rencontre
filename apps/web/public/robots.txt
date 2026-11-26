@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /payer
+Disallow: /payer.html
+Disallow: /paiement-retour
+Disallow: /paiement-retour.html
+Disallow: /404.html
+
+Sitemap: https://zola-rdc.com/sitemap.xml

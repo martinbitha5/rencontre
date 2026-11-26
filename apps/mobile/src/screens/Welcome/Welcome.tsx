@@ -1,26 +1,45 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as WebBrowser from 'expo-web-browser';
 import React from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ZolaMark } from '@/components/ZolaLogo';
-import { colors } from '@/theme';
+import { brandRamp, colors, flame } from '@/theme';
+import { preloadWelcomeVideo, WELCOME_VIDEO } from '@/utils/welcomeVideo';
 import { styles } from './Welcome.styles';
 
 const SITE = 'https://zola-rdc.com';
-const heroVideo = require('../../../assets/IMG_1770.mp4');
 
 // Accueil non connecté : deux entrées (Connexion / Créer un compte) qui
 // mènent chacune au choix des trois méthodes, plus les liens légaux.
 export default function Welcome() {
   const router = useRouter();
 
-  const player = useVideoPlayer(heroVideo, (p) => {
+  // Lecteur créé vide, puis rempli avec la copie locale de la vidéo (voir
+  // utils/welcomeVideo) : plus de lecture en flux depuis le serveur de dev.
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = true;
-    p.play();
   });
+
+  React.useEffect(() => {
+    let alive = true;
+    preloadWelcomeVideo().then(async (localUri) => {
+      if (!alive) return;
+      try {
+        await player.replaceAsync(localUri ? { uri: localUri } : WELCOME_VIDEO);
+      } catch {
+        return;
+      }
+      if (alive) player.play();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [player]);
 
   // Sur web, le play() du setup part avant que la source soit prête : on
   // relance la lecture dès que le lecteur passe à l'état readyToPlay.
@@ -40,19 +59,36 @@ export default function Welcome() {
     return () => sub.remove();
   }, [player]);
 
+  // Le logo, le texte et les boutons sont là tout de suite sur le dégradé de
+  // marque ; la vidéo, lue en local, arrive en fondu court dès sa première
+  // image (jamais d'image vide ou de saut brutal).
+  const videoOpacity = useSharedValue(0);
+  const videoStyle = useAnimatedStyle(() => ({ opacity: videoOpacity.value }));
+  const revealVideo = React.useCallback(() => {
+    videoOpacity.set(withTiming(1, { duration: 350 }));
+  }, [videoOpacity]);
+
   const openPage = (path: string) => {
     WebBrowser.openBrowserAsync(`${SITE}/${path}`).catch(() => {});
   };
 
   return (
     <View style={styles.screen}>
-      <VideoView
-        player={player}
-        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-        contentFit="cover"
-        nativeControls={false}
-        pointerEvents="none"
+      <LinearGradient
+        colors={brandRamp}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={StyleSheet.absoluteFill}
       />
+      <Animated.View style={[StyleSheet.absoluteFill, videoStyle]} pointerEvents="none">
+        <VideoView
+          player={player}
+          style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+          contentFit="cover"
+          nativeControls={false}
+          onFirstFrameRender={revealVideo}
+        />
+      </Animated.View>
       <View style={styles.overlay} pointerEvents="none" />
       <SafeAreaView style={styles.safe}>
         <View style={styles.hero}>
@@ -72,6 +108,14 @@ export default function Welcome() {
             style={({ pressed }) => [styles.btn, styles.btnLime, pressed && { opacity: 0.85 }]}
             onPress={() => router.push({ pathname: '/(auth)/methods', params: { mode: 'signin' } })}
           >
+            {/* Dégradé flamme des boutons du site. */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={flame}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 1, y: 0 }}
+              style={[StyleSheet.absoluteFill, styles.btnFill]}
+            />
             <Text style={styles.btnLimeText}>Connexion</Text>
           </Pressable>
           <Pressable

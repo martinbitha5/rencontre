@@ -122,9 +122,9 @@ export function OperatorLogo({ id, size = 40 }: { id: OperatorBrandId; size?: nu
 // ---------------------------------------------------------------------------
 const PACK_ICONS = {
   compass: { glyph: 'compass', color: '#B0798F' },
-  bolt: { glyph: 'bolt', color: '#C2568C' },
+  bolt: { glyph: 'bolt', color: '#ff4f86' },
   rocket: { glyph: 'rocket', color: '#C7963C' },
-  crown: { glyph: 'crown', color: '#481A46' },
+  crown: { glyph: 'crown', color: '#fd267a' },
   incognito: { glyph: 'user-secret', color: '#6A4A86' },
   event: { glyph: 'ticket-alt', color: '#3B7D75' },
 } as const;

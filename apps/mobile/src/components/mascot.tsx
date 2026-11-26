@@ -9,9 +9,9 @@ import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 
 export type MascotVariant = 'dm' | 'likes' | 'views' | 'favorites';
 
-const DARK = '#481A46';
-const ROSE = '#F1CBDD';
-const OUTLINE = '#E7C9DC';
+const DARK = '#101113';
+const ROSE = '#ffe1ea';
+const OUTLINE = '#ffd0de';
 
 // Les deux sabots qui tiennent l'objet, dessinés par-dessus lui.
 function Hooves({ lx, rx, y }: { lx: number; rx: number; y: number }) {
@@ -57,7 +57,7 @@ function HeldObject({ variant }: { variant: MascotVariant }) {
         {/* grand cœur serré contre elle */}
         <Path
           d="M100 172 C84 160 76 151 76 141.5 C76 133.5 82.5 128 89.5 128 C94 128 98.5 130.5 100 134 C101.5 130.5 106 128 110.5 128 C117.5 128 124 133.5 124 141.5 C124 151 116 160 100 172 Z"
-          fill="#9B3F7A"
+          fill="#fd267a"
           stroke="#ffffff"
           strokeWidth={3}
         />
@@ -141,29 +141,29 @@ export function UnicornMascot({
       {/* oreilles */}
       <Path d="M56 82 Q52 58 70 52 Q80 66 74 80 Z" fill="#ffffff" stroke={OUTLINE} strokeWidth={3} />
       <Path d="M144 82 Q148 58 130 52 Q120 66 126 80 Z" fill="#ffffff" stroke={OUTLINE} strokeWidth={3} />
-      <Path d="M62 76 Q60 64 70 60 Q75 68 71 76 Z" fill="#EBB9D0" />
-      <Path d="M138 76 Q140 64 130 60 Q125 68 129 76 Z" fill="#EBB9D0" />
+      <Path d="M62 76 Q60 64 70 60 Q75 68 71 76 Z" fill="#ffc2d5" />
+      <Path d="M138 76 Q140 64 130 60 Q125 68 129 76 Z" fill="#ffc2d5" />
       {/* corne dorée */}
       <Path d="M100 16 L112 56 Q100 62 88 56 Z" fill="#D4AF37" />
       <Path d="M92.5 42 L108.8 45.5 L107 51 L91 46.5 Z" fill="#A8842A" />
       <Path d="M95.5 30 L105.5 33 L104.4 37.8 L94.3 34.5 Z" fill="#A8842A" />
       {/* crinière : trois vagues, du rose pâle au magenta */}
       <Path d="M58 92 Q48 68 76 58 Q78 74 92 70 Q100 68 98 78 Q94 92 76 94 Q64 96 58 92 Z" fill={ROSE} />
-      <Path d="M84 62 Q98 50 114 60 Q122 66 114 74 Q104 80 98 78 Q100 68 92 70 Q86 68 84 62 Z" fill="#D98CB8" />
-      <Path d="M112 84 Q124 60 142 76 Q152 86 140 96 Q124 102 112 84 Z" fill="#9B3F7A" />
+      <Path d="M84 62 Q98 50 114 60 Q122 66 114 74 Q104 80 98 78 Q100 68 92 70 Q86 68 84 62 Z" fill="#ff8fb5" />
+      <Path d="M112 84 Q124 60 142 76 Q152 86 140 96 Q124 102 112 84 Z" fill="#fd267a" />
       {/* yeux */}
-      <Ellipse cx={76} cy={113} rx={10.5} ry={12.5} fill="#171217" />
-      <Ellipse cx={124} cy={113} rx={10.5} ry={12.5} fill="#171217" />
+      <Ellipse cx={76} cy={113} rx={10.5} ry={12.5} fill="#101113" />
+      <Ellipse cx={124} cy={113} rx={10.5} ry={12.5} fill="#101113" />
       <Circle cx={79.5} cy={108} r={3.6} fill="#ffffff" />
       <Circle cx={127.5} cy={108} r={3.6} fill="#ffffff" />
       <Circle cx={73} cy={117} r={1.8} fill="#ffffff" opacity={0.7} />
       <Circle cx={121} cy={117} r={1.8} fill="#ffffff" opacity={0.7} />
       {/* joues */}
-      <Ellipse cx={57} cy={129} rx={9} ry={6} fill="#EFB3CE" />
-      <Ellipse cx={143} cy={129} rx={9} ry={6} fill="#EFB3CE" />
+      <Ellipse cx={57} cy={129} rx={9} ry={6} fill="#ffb3c9" />
+      <Ellipse cx={143} cy={129} rx={9} ry={6} fill="#ffb3c9" />
       {/* bouche : sourire ouvert compact */}
       <Path d="M90 131 Q100 129 110 131 Q108 143 100 143 Q92 143 90 131 Z" fill="#4A2440" />
-      <Path d="M94 139 Q100 136 106 139 Q103 143 100 143 Q97 143 94 139 Z" fill="#D98CB8" />
+      <Path d="M94 139 Q100 136 106 139 Q103 143 100 143 Q97 143 94 139 Z" fill="#ff8fb5" />
       {/* l'objet tenu, différent par page */}
       <HeldObject variant={variant} />
     </Svg>

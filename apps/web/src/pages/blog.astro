@@ -1,0 +1,332 @@
+---
+// Blog : les articles sont lus dans Supabase pendant la construction et écrits
+// directement dans la page. Le visiteur reçoit une page déjà remplie, avec
+// des couvertures réduites. Le balisage est exactement celui que l'ancien
+// script fabriquait dans le navigateur, le CSS ne change donc pas.
+import { getPosts, cardMeta, coverSet, articlePath } from '../lib/blog.js';
+import { storeNote } from '../lib/stores.js';
+
+const posts = await Promise.all(
+  (await getPosts()).map(async (p) => ({ ...p, cover: await coverSet(p.cover_url), meta: cardMeta(p) })),
+);
+const [latest, ...rest] = posts;
+
+// Copie pour la recherche et pour l'actualisation en arrière-plan.
+const clientData = JSON.stringify(
+  posts.map((p) => ({
+    slug: p.slug, title: p.title, excerpt: p.excerpt, content: p.content,
+    cover_url: p.cover_url, published_at: p.published_at, meta: p.meta,
+    cover: p.cover && { src: p.cover.src, srcset: p.cover.srcset },
+  })),
+).replace(/</g, String.fromCharCode(92) + 'u003c'); // un « </script> » dans un texte ne peut pas fermer le bloc
+
+const reveal = "this.parentElement.classList.add('loaded')";
+---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blog Zola | Rencontres, conseils et nouveautés de l'app en RDC</title>
+  <meta name="description" content="Le blog de Zola, l'app de rencontre de la RDC. Conseils pour bien se rencontrer, nouveautés de l'app, soirées à venir et histoires de la communauté.">
+  <link rel="canonical" href="https://zola-rdc.com/blog">
+  <meta property="og:site_name" content="Zola">
+  <meta property="og:locale" content="fr_CD">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zola-rdc.com/blog">
+  <meta property="og:title" content="Blog Zola | Rencontres, conseils et nouveautés">
+  <meta property="og:description" content="Conseils pour bien se rencontrer, nouveautés de l'app, soirées à venir et histoires de la communauté Zola.">
+  <meta property="og:image" content="https://zola-rdc.com/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://sbsxgwdpdjxsrxcccwno.supabase.co" crossorigin>
+  <link rel="dns-prefetch" href="https://sbsxgwdpdjxsrxcccwno.supabase.co">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preload" href="/fonts/montserrat-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="theme.css">
+  <style is:inline>
+    body { line-height: 1.7; font-size: 16px; }
+
+    /* Bandeau annonce */
+    .announce {
+      background: var(--accent);
+      color: #fff;
+      text-align: center;
+      font-size: .88rem;
+      font-weight: 500;
+      padding: 10px 44px;
+      position: relative;
+    }
+    .announce button {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: #fff;
+      font-size: 1.1rem; cursor: pointer; opacity: .8; padding: 4px 8px;
+    }
+    .announce button:hover { opacity: 1; }
+
+    /* Héro : le script y pose en fond la photo du dernier article (propriété
+       background-image en ligne). On ne déclare donc ici que la taille, la
+       position et un voile rose par-dessus, un raccourci `background` serait
+       écrasé et l'image s'afficherait à sa taille naturelle. */
+    .hero {
+      position: relative;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--dark);
+      background-size: cover;
+      background-position: center;
+      isolation: isolate;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(180deg,
+        rgba(16, 17, 19, .55) 0%,
+        rgba(16, 17, 19, .4) 45%,
+        rgba(16, 17, 19, .8) 96%);
+    }
+    .hero-nav {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 20px 28px;
+    }
+    .hero-nav .logo {
+      width: 44px; height: 44px; border-radius: var(--radius);
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 22px rgba(230, 23, 95, .28);
+    }
+    .hero-nav .logo svg { width: 24px; height: 24px; }
+    .hero-nav .brand { color: #fff; }
+    .hero-nav .back { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .6); }
+    .hero-nav .back:hover { background: rgba(255, 255, 255, .14); }
+    .hero-nav .nav-right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+    .search-btn {
+      width: 38px; height: 38px; border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .6);
+      background: transparent;
+      color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .12s ease; flex-shrink: 0;
+    }
+    .search-btn:hover { background: rgba(255, 255, 255, .14); }
+    .search-btn svg { width: 17px; height: 17px; }
+
+    /* Barre de recherche */
+    .search-panel { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: none; }
+    .search-panel.open { display: block; }
+    .search-panel input {
+      font-size: 1.02rem; padding: 13px 20px; margin-top: 30px;
+      border-radius: var(--radius-btn);
+    }
+    .search-panel input::placeholder { color: var(--faint); }
+    .search-count { color: var(--muted); font-size: .9rem; margin: 12px 4px 0; }
+
+    .hero-title {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 30px 24px 80px;
+    }
+    .hero-title h1 {
+      font-size: clamp(2rem, 5.6vw, 3.4rem);
+      font-weight: 900; line-height: 1.15; max-width: 820px;
+      color: #fff; text-shadow: 0 2px 24px rgba(0, 0, 0, .35);
+    }
+
+    main { max-width: 1120px; margin: 0 auto; padding: 56px 24px 90px; }
+    .kicker {
+      display: inline-block; font-size: .62rem;
+      color: var(--accent); background: var(--accent-soft);
+      border-radius: 999px; padding: 4px 14px; margin-bottom: 16px;
+    }
+
+    /* Article vedette */
+    .featured {
+      display: grid; grid-template-columns: 1.15fr 1fr;
+      gap: 44px; align-items: center;
+      text-decoration: none; color: inherit; margin-bottom: 72px;
+    }
+    .featured .cover {
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius);
+      background: var(--accent-soft);
+      border: 1px solid var(--glass-border);
+      overflow: hidden;
+    }
+
+    /* Les couvertures sont de vraies images et non des fonds CSS : un fond ne
+       se charge ni en différé, ni en priorité, et le navigateur ne peut pas le
+       décoder hors du fil principal. Le bloc garde sa place grâce à
+       aspect-ratio, il n'y a donc aucun saut de mise en page pendant l'arrivée
+       de l'image. Le fondu masque l'affichage par bandes d'un gros JPEG. */
+    .cover img {
+      display: block; width: 100%; height: 100%;
+      object-fit: cover; object-position: center;
+      opacity: 0; transition: opacity .35s ease;
+    }
+    .cover.loaded img { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) {
+      .cover img { transition: none; }
+    }
+    .featured h2 {
+      font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+      font-weight: 800; line-height: 1.15; margin-bottom: 18px;
+      color: var(--heading);
+    }
+    .featured p.excerpt { color: var(--muted); font-size: 1.02rem; margin-bottom: 20px; }
+    .meta {
+      text-transform: uppercase; letter-spacing: .08em; font-weight: 700;
+      color: var(--faint); font-size: .7rem;
+    }
+
+    /* Grille */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 48px 40px; }
+    .post {
+      text-decoration: none; color: inherit;
+    }
+    .post .cover {
+      aspect-ratio: 16 / 10;
+      border-radius: var(--radius);
+      background: var(--accent-soft);
+      border: 1px solid var(--glass-border);
+      margin-bottom: 20px;
+      overflow: hidden;
+      transition: opacity .15s;
+    }
+    .post:hover .cover { opacity: .88; }
+    .post h2 {
+      font-size: clamp(1.3rem, 2.6vw, 1.8rem);
+      font-weight: 700; line-height: 1.2; margin-bottom: 12px;
+      color: var(--heading);
+    }
+    .post:hover h2 { color: var(--accent); }
+    .post p.excerpt {
+      color: var(--muted); font-size: .96rem; margin-bottom: 14px;
+      display: -webkit-box; -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .state { text-align: center; color: var(--muted); padding: 70px 20px; font-size: 1rem; }
+
+    @media (max-width: 820px) {
+      .featured { grid-template-columns: 1fr; gap: 24px; margin-bottom: 56px; }
+      .grid { grid-template-columns: 1fr; gap: 44px; }
+      .hero { min-height: 320px; }
+      .hero-title { padding-bottom: 56px; }
+      .hero-nav { padding: 16px 18px; }
+      main { padding-top: 44px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="announce" id="announce">
+    {storeNote()}
+    <button type="button" aria-label="Fermer" onclick="this.parentElement.remove()">&#10005;</button>
+  </div>
+
+  <header class="hero" id="hero">
+    <nav class="hero-nav">
+      <a class="brand" href="/">ZOLA</a>
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>
+      </span>
+      <div class="nav-right">
+        <button type="button" class="search-btn" id="search-btn" aria-label="Rechercher un article" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="11" cy="11" r="7"/>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+          </svg>
+        </button>
+        <a class="back" href="/">Accueil</a>
+      </div>
+    </nav>
+    <div class="hero-title">
+      <h1>Des conseils, des histoires et des nouveautés pour se rencontrer en RDC</h1>
+    </div>
+  </header>
+
+  <div class="search-panel" id="search-panel">
+    <input type="search" id="search-input" placeholder="Rechercher un article…" autocomplete="off">
+    <p class="search-count" id="search-count"></p>
+  </div>
+
+  <main>
+    {latest ? (
+      <div id="content" class="">
+        <a class="featured" href={articlePath(latest.slug)}>
+          <div class="cover">
+            {latest.cover && (
+              <img alt="" decoding="async" loading="eager" fetchpriority="high"
+                src={latest.cover.src} srcset={latest.cover.srcset}
+                sizes="(max-width: 820px) 100vw, 560px"
+                onload={reveal} onerror={reveal} />
+            )}
+          </div>
+          <div>
+            <p class="kicker">Article</p>
+            <h2>{latest.title}</h2>
+            <p class="excerpt">{latest.excerpt || ''}</p>
+            <p class="meta">{latest.meta}</p>
+          </div>
+        </a>
+        {rest.length > 0 && (
+          <div class="grid">
+            {rest.map((post) => (
+              <a class="post" href={articlePath(post.slug)}>
+                <div class="cover">
+                  {post.cover && (
+                    <img alt="" decoding="async" loading="lazy" fetchpriority="low"
+                      src={post.cover.src} srcset={post.cover.srcset}
+                      sizes="(max-width: 820px) 100vw, 540px"
+                      onload={reveal} onerror={reveal} />
+                  )}
+                </div>
+                <p class="kicker">Article</p>
+                <h2>{post.title}</h2>
+                <p class="excerpt">{post.excerpt || ''}</p>
+                <p class="meta">{post.meta}</p>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    ) : (
+      <div id="content" class="state">Les premiers articles arrivent très bientôt.</div>
+    )}
+    <script is:inline>
+      // Le héro reprend la couverture de l'article vedette, une fois l'image
+      // chargée : le navigateur réutilise le même fichier au lieu de le
+      // télécharger deux fois.
+      (function () {
+        var img = document.querySelector('.featured .cover img');
+        if (!img) return;
+        var paint = function () {
+          document.getElementById('hero').style.backgroundImage = "url('" + (img.currentSrc || img.src) + "')";
+        };
+        if (img.complete) paint(); else img.addEventListener('load', paint, { once: true });
+      })();
+    </script>
+  </main>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="/blog">Blog</a>
+      <a href="/faq">F.A.Q</a>
+      <a href="/conditions">Conditions générales</a>
+      <a href="/confidentialite">Confidentialité</a>
+      <a href="/conseils">Conseils et sécurité</a>
+      <a href="/securite-enfants">Sécurité des enfants</a>
+      <a href="/mentions-legales">Mentions légales</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+
+  <script type="application/json" id="posts-data" set:html={clientData}></script>
+  <script>
+    import '../scripts/blog.js';
+  </script>
+</body>
+</html>

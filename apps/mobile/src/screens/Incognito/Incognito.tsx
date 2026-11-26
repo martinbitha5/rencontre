@@ -2,43 +2,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UnicornMascot } from '@/components/mascot';
 import { GlassSurface, PressableScale, Reveal } from '@/components/motion';
 import { Button } from '@/components/ui';
 import { INCOGNITO_PLANS, planSavingPercent } from '@/config/economy';
+import { INCOGNITO_PERKS as PERKS } from '@/config/incognito';
 import { colors, spacing } from '@/theme';
 import { styles } from './Incognito.styles';
 
-// Ce que l'abonnement débloque RÉELLEMENT aujourd'hui. Toute ligne ajoutée ici
-// est une promesse faite à quelqu'un qui paie : ne rien lister qui ne soit pas
-// déjà implémenté et vérifiable dans l'app.
-const PERKS: { icon: keyof typeof Ionicons.glyphMap; title: string; text: string }[] = [
-  {
-    icon: 'eye-off-outline',
-    title: 'Deviens invisible',
-    text: "Ton profil sort du fil Rencontres. Personne ne tombe dessus par hasard.",
-  },
-  {
-    icon: 'globe-outline',
-    title: 'Cache ton statut en ligne',
-    text: "Ta dernière activité n'est plus affichée aux profils qui te découvrent.",
-  },
-  {
-    icon: 'lock-closed-outline',
-    title: "Sécurise l'application",
-    text: "Verrouille Zola avec un code secret à l'ouverture.",
-  },
-  {
-    icon: 'compass-outline',
-    title: 'Continue à explorer',
-    text: "Tu vois tout le monde et tu écris en premier, sans laisser de trace dans leurs vues.",
-  },
-];
+// Ce que l'abonnement débloque vit dans config/incognito.ts : la même liste
+// nourrit la feuille d'introduction du profil, une promesse ne peut pas
+// diverger d'un écran à l'autre.
 
 export default function Incognito() {
   const router = useRouter();
+  const storeName = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
   // La barre du bas est en verre pleine largeur : elle file jusqu'au bord de
   // l'écran, et le bouton remonte au-dessus de la barre de gestes.
   const insets = useSafeAreaInsets();
@@ -69,7 +49,7 @@ export default function Incognito() {
           </Pressable>
         </View>
 
-        <Text style={styles.title}>Passe en mode Incognito</Text>
+        <Text style={styles.title}>Passe en mode Invisible</Text>
         <Text style={styles.subtitle}>
           Disparais du fil public tout en gardant le contrôle.
         </Text>
@@ -80,7 +60,7 @@ export default function Incognito() {
           end={{ x: 1, y: 1 }}
           style={styles.perksCard}
         >
-          <Text style={styles.perksTitle}>Tout ce que tu débloques avec Incognito</Text>
+          <Text style={styles.perksTitle}>Tout ce que tu débloques avec le mode Invisible</Text>
           {PERKS.map((perk, i) => (
             <Reveal key={perk.title} index={i} style={styles.perkRow}>
               <Ionicons name={perk.icon} size={22} color={colors.primary} />
@@ -116,8 +96,12 @@ export default function Incognito() {
                   <Text style={styles.planMonths}>
                     {plan.months} <Text style={styles.planMonthsUnit}>Mois</Text>
                   </Text>
-                  <Text style={styles.planPrice}>{plan.priceCdfLabel}</Text>
-                  <Text style={styles.planPriceUsd}>ou {plan.price}</Text>
+                  <Text style={styles.planPrice}>
+                    {Platform.OS === 'web' ? plan.priceCdfLabel : 'Prix du store'}
+                  </Text>
+                  <Text style={styles.planPriceUsd}>
+                    {Platform.OS === 'web' ? `ou ${plan.price}` : `${storeName} à l’étape suivante`}
+                  </Text>
                 </View>
               </PressableScale>
             );

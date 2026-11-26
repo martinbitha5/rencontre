@@ -1,149 +1,247 @@
 import { StyleSheet } from 'react-native';
-import { colors, shadows, sigCorner, spacing } from '@/theme';
+import { colors, isDark, spacing } from '@/theme';
+
+// Onglet Profil : en-tête blanc (titre, raccourcis, identité, question), puis
+// une zone grise où les cartes blanches se détachent, comme sur le site.
+const AVATAR = 128;
+const RING = 148;
+// Fond de la zone des cartes : gris très clair en clair, un cran au-dessus du
+// noir en sombre.
+const PANEL_BG = isDark ? '#16171a' : '#f4f4f6';
+// Encre sombre fixe : pastille du pourcentage, bloc « soirées », Incognito.
+const INK = '#101113';
 
 export const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  // La hauteur (fonction de l'écran) est posée en ligne dans le rendu.
-  headerGrad: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
   safe: { flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingBottom: spacing.xl * 2, gap: spacing.md },
-  band: {
+  content: { flexGrow: 1 },
+
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 20,
+    paddingRight: 10,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  topTitle: { fontSize: 32, fontWeight: '900', color: colors.primaryDeep, letterSpacing: -0.6 },
+  topIcons: { flexDirection: 'row', alignItems: 'center' },
+  topIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+
+  // Identité.
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    paddingHorizontal: 20,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
+    paddingBottom: spacing.lg,
   },
-  avatarWrap: { width: 130, height: 130 },
-  avatar: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    borderWidth: 4,
-    borderColor: colors.cardSolid,
-    ...shadows.card,
-  },
+  avatarWrap: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
+  ring: { position: 'absolute', top: 0, left: 0 },
+  avatar: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2 },
   avatarFallback: {
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cameraBadge: {
+  // Pastille du pourcentage, à cheval sur le bas de l'anneau.
+  percentPill: {
     position: 'absolute',
-    right: 0,
-    top: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.cardSolid,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.card,
+    bottom: 2,
+    alignSelf: 'center',
+    backgroundColor: isDark ? colors.primary : INK,
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 4,
   },
-  // maxWidth + flexShrink : un très long prénom s'abrège au lieu de pousser
-  // le badge certifié hors de l'écran.
-  nameRow: {
+  percentText: { fontSize: 14, fontWeight: '800', color: '#ffffff', fontVariant: ['tabular-nums'] },
+  identityText: { flex: 1, minWidth: 0, gap: 10 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  nameCompact: { fontSize: 23, letterSpacing: -0.3 },
+  name: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: colors.primaryDeep,
+    letterSpacing: -0.5,
+    flexShrink: 1,
+  },
+  goalChip: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     maxWidth: '100%',
-    paddingHorizontal: spacing.md,
   },
-  name: { fontSize: 26, fontWeight: '800', color: colors.primaryDeep, flexShrink: 1 },
-  balance: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  balanceText: { fontSize: 18, fontWeight: '700', color: colors.text },
-  editPill: {
-    height: 44,
-    paddingHorizontal: 24,
-    borderRadius: 18,
-    borderBottomRightRadius: 8,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.cardSolid,
+  goalText: { fontSize: 16, fontWeight: '700', color: colors.text, flexShrink: 1 },
+  goalTextCompact: { fontSize: 14 },
+  goalSheet: { gap: spacing.sm, paddingBottom: spacing.md },
+
+  // Question : la prochaine chose à faire.
+  promptWrap: { paddingHorizontal: 20, paddingBottom: spacing.lg },
+  prompt: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xs,
-  },
-  editPillText: { fontSize: 15, fontWeight: '700', color: colors.primaryDeep },
-  carousel: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-  },
-  // La largeur (fonction de l'écran) est posée en ligne dans le rendu.
-  promo: {
-    backgroundColor: colors.cardSolid,
+    gap: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
     borderRadius: 24,
-    borderBottomRightRadius: sigCorner,
-    padding: 18,
-    gap: spacing.sm,
-    ...shadows.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
   },
-  promoIconRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  promoIconCircle: {
+  promptIcon: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.selected,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  promoTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
-  promoText: { fontSize: 14, lineHeight: 20, color: colors.textMuted },
-  promoBtnWrap: { alignSelf: 'flex-start', marginTop: spacing.xs },
-  promoBtn: {
-    height: 44,
+  promptText: { flex: 1, fontSize: 17, lineHeight: 24, fontWeight: '600', color: colors.text },
+
+  // Onglets soulignés.
+  tabs: {
+    flexDirection: 'row',
     paddingHorizontal: 20,
-    borderRadius: 18,
-    borderBottomRightRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.background,
   },
-  promoBtnText: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
-  dots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: -spacing.xs,
+  tab: { flex: 1, alignItems: 'center', paddingTop: spacing.sm },
+  tabText: { fontSize: 17, fontWeight: '700', color: colors.textMuted, paddingBottom: 12 },
+  tabTextOn: { color: colors.text, fontWeight: '900' },
+  tabLine: { height: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent' },
+  tabLineOn: { backgroundColor: colors.primary },
+
+  // Zone grise des cartes.
+  panel: {
+    flexGrow: 1,
+    backgroundColor: PANEL_BG,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: spacing.xl * 2,
+    gap: 14,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  dotActive: {
-    width: 18,
-    backgroundColor: colors.accent,
-  },
-  menu: {
-    marginHorizontal: spacing.md,
-    gap: 0,
-  },
-  menuCard: {
+
+  // Tuiles d'état.
+  tiles: { flexDirection: 'row', gap: 12 },
+  // Écran étroit ou grand texte : une tuile par ligne, rien n'est coupé.
+  tilesStacked: { flexDirection: 'column' },
+  tile: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 22,
     backgroundColor: colors.cardSolid,
-    borderRadius: 20,
-    borderBottomRightRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    ...shadows.card,
   },
-  menuIconWash: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.washFrom,
+  tileIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.selected,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: { flex: 1, fontSize: 17, fontWeight: '600', color: colors.text },
-  menuDetail: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
+  tileBody: { flex: 1, minWidth: 0, gap: 2 },
+  tileLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  tileValue: { fontSize: 17, fontWeight: '800', color: colors.text },
+
+  // Carte vedette : bloc sombre à halo rose, comme sur le site.
+  feature: {
+    borderRadius: 26,
+    backgroundColor: INK,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
+    overflow: 'hidden',
+    gap: 14,
+  },
+  featureHalo: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: colors.primary,
+    opacity: 0.35,
+  },
+  featureKicker: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2,
+    color: '#ff8fb5',
+    textAlign: 'center',
+  },
+  featureTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#ffffff',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  featureBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+  },
+  featureBtnText: { fontSize: 16, fontWeight: '800', color: INK },
+  featureList: {
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    borderRadius: 18,
+    padding: 16,
+  },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  featureCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+
+  // Cartes d'action.
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    backgroundColor: colors.cardSolid,
+  },
+  actionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.selected,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionIconDark: { backgroundColor: INK },
+  actionBody: { flex: 1, gap: 4 },
+  actionTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  actionText: { fontSize: 14, lineHeight: 19, color: colors.textMuted },
 });

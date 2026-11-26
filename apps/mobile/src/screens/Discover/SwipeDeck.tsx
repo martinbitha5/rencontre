@@ -8,10 +8,12 @@ import React, {
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
@@ -29,20 +31,21 @@ interface SwipeDeckProps {
   onToggleFavorite?: (profile: FeedProfile) => void;
 }
 
-// Commandes exposées à l'écran : Like et Passer partent des boutons, jamais
-// du geste. Le paquet garde la main sur l'animation de sortie de la carte.
+// Commandes exposées à l'écran : les boutons Like et Passer lancent la même
+// sortie que le geste.
 export interface SwipeDeckHandle {
   swipeOut: (liked: boolean) => void;
 }
 
-// Le glissement horizontal n'a qu'un seul sens : feuilleter les photos du
-// profil. Il ne peut pas déclencher un Like ou un Dislike — ces décisions
-// passent par les boutons, qui envoient la carte hors de l'écran.
-//
-// Pendant le glissement, la carte ne bouge PAS (demande explicite : pas
-// d'animation) : au relâchement, la photo change d'un coup, exactement comme
-// sur la fiche détaillée.
-const PHOTO_MIN_RATIO = 0.05;
+// Le glissement décide : vers la droite c'est un like, vers la gauche un non.
+// La carte suit le doigt et pivote, le tampon « J'AIME » ou « NON » apparaît
+// en route. Au relâchement, au-delà du seuil (ou d'un geste vif), la carte
+// s'envole ; en deçà, elle revient au centre avec un léger rebond.
+// Les photos se feuillettent en touchant le bord gauche ou droit de la carte.
+const DECIDE_RATIO = 0.28; // part de la largeur à franchir pour décider
+const FLING_VELOCITY = 900; // un geste vif décide même sur une courte course
+const STAMP_FROM = 0.06; // le tampon commence à paraître
+const STAMP_FULL = 0.26; // le tampon est entièrement visible
 
 // Pile de cartes : la suivante dépasse en bas de la carte du dessus, une
 // troisième affleure derrière elle. Chaque rang est décrit par sa position de
@@ -61,6 +64,12 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
 ) {
   const { width } = useWindowDimensions();
   const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  // Doigt posé sur la carte : elle se soulève légèrement.
+  const dragging = useSharedValue(false);
+  // Côté du seuil franchi pendant le geste (-1, 0, 1) : une vibration légère
+  // à chaque passage, pour sentir le moment où la décision est prise.
+  const armed = useSharedValue(0);
   // Vrai pendant l'envol d'une carte : ignore les commandes en rafale et fige
   // le geste. Shared value : lue depuis les worklets du geste (thread UI).
   const leaving = useSharedValue(false);
@@ -95,31 +104,40 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
 
   const finishSwipe = useCallback(
     (liked: boolean) => {
-      leaving.value = false;
-      translateX.value = 0;
+      leaving.set(false);
+      translateX.set(0);
+      translateY.set(0);
       if (top) onSwipe(top, liked);
     },
-    [top, onSwipe, translateX, leaving],
+    [top, onSwipe, translateX, translateY, leaving],
   );
 
-  // Envol de la carte, déclenché par les boutons de l'écran : à droite pour
-  // un Like, à gauche pour un Passer, avec le tampon qui se révèle en route.
+  const decidedFeedback = useCallback((liked: boolean) => {
+    if (liked) haptic.success();
+    else haptic.tap();
+  }, []);
+
+  // Envol de la carte, depuis le geste ou les boutons : à droite pour un
+  // Like, à gauche pour un Passer, avec le tampon qui se révèle en route.
   const swipeOut = useCallback(
     (liked: boolean) => {
       if (!top || leaving.value) return;
-      leaving.value = true;
-      translateX.value = withTiming(
+      // Les boutons vibrent déjà de leur côté : pas de second retour ici.
+      leaving.set(true);
+      translateX.set(withTiming(
         (liked ? 1 : -1) * width * 1.4,
         { duration: 260 },
         () => runOnJS(finishSwipe)(liked),
-      );
+      ));
     },
     [top, width, translateX, leaving, finishSwipe],
   );
 
   useImperativeHandle(ref, () => ({ swipeOut }), [swipeOut]);
 
-  // Glissement vers la gauche : photo suivante, comme on tourne une page.
+  const tick = useCallback(() => haptic.select(), []);
+
+  // Bord droit : photo suivante ; bord gauche : précédente.
   const shiftPhoto = useCallback(
     (dir: 1 | -1) => {
       setPhotoIndex((i) => {
@@ -133,36 +151,82 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
   );
 
   const pan = Gesture.Pan()
-    // Le geste ne prend la main qu'au-delà de dix points : en deçà, l'appui
-    // reste un appui et ouvre le profil.
+    // Le geste ne prend la main qu'au-delà de dix points à l'horizontale : en
+    // deçà, l'appui reste un appui (photo suivante ou profil), et un geste
+    // vertical laisse défiler l'écran.
     .activeOffsetX([-10, 10])
+    .failOffsetY([-24, 24])
+    .onBegin(() => {
+      if (leaving.value) return;
+      dragging.set(true);
+    })
+    .onUpdate((e) => {
+      if (leaving.value) return;
+      translateX.set(e.translationX);
+      // Un peu de jeu vertical : la carte se tient dans la main, pas sur un rail.
+      translateY.set(e.translationY * 0.2);
+      const side = e.translationX > width * DECIDE_RATIO ? 1
+        : e.translationX < -width * DECIDE_RATIO ? -1 : 0;
+      if (side !== armed.value) {
+        armed.set(side);
+        if (side !== 0) runOnJS(tick)();
+      }
+    })
     .onEnd((e) => {
       if (leaving.value) return;
       const dx = e.translationX;
-      if (photoCount > 1 && Math.abs(dx) > width * PHOTO_MIN_RATIO) {
-        runOnJS(shiftPhoto)(dx < 0 ? 1 : -1);
+      const vx = e.velocityX;
+      const decided = Math.abs(dx) > width * DECIDE_RATIO
+        || (Math.abs(vx) > FLING_VELOCITY && Math.sign(vx) === Math.sign(dx));
+      if (decided && top) {
+        const liked = dx > 0;
+        leaving.set(true);
+        runOnJS(decidedFeedback)(liked);
+        // La carte part dans la direction du geste, à sa vitesse.
+        const duration = Math.max(160, Math.min(320, (width * 1.4 - Math.abs(dx)) / (Math.abs(vx) / 1000 || 1)));
+        translateX.set(withTiming((liked ? 1 : -1) * width * 1.5, { duration }, () =>
+          runOnJS(finishSwipe)(liked),
+        ));
+        translateY.set(withTiming(translateY.value + e.velocityY * 0.05, { duration }));
+      } else {
+        translateX.set(withSpring(0, { damping: 15, stiffness: 180 }));
+        translateY.set(withSpring(0, { damping: 15, stiffness: 180 }));
       }
+    })
+    .onFinalize(() => {
+      dragging.set(false);
+      armed.set(0);
     });
 
   const topStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
-      { rotate: `${interpolate(translateX.value, [-width, width], [-14, 14])}deg` },
+      { translateY: translateY.value },
+      { rotate: `${interpolate(translateX.value, [-width, width], [-12, 12])}deg` },
+      { scale: withSpring(dragging.value ? 1.02 : 1, { damping: 18, stiffness: 220 }) },
     ],
   }));
 
-  // Les tampons ne se révèlent que sur la course d'envol (au-delà de ce que le
-  // drag retenu peut atteindre) : jamais pendant qu'on feuillette les photos.
-  const likeStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [width * 0.4, width * 0.9], [0, 1]),
+  // Les tampons grandissent en même temps qu'ils apparaissent.
+  const likeStyle = useAnimatedStyle(() => {
+    const t = interpolate(translateX.value, [width * STAMP_FROM, width * STAMP_FULL], [0, 1], Extrapolation.CLAMP);
+    return { opacity: t, transform: [{ rotate: '-14deg' }, { scale: 0.8 + t * 0.25 }] };
+  });
+  const nopeStyle = useAnimatedStyle(() => {
+    const t = interpolate(translateX.value, [-width * STAMP_FULL, -width * STAMP_FROM], [1, 0], Extrapolation.CLAMP);
+    return { opacity: t, transform: [{ rotate: '14deg' }, { scale: 0.8 + t * 0.25 }] };
+  });
+  // Teinte de toute la carte : verte vers le like, rouge vers le non.
+  const likeTint = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, width * 0.5], [0, 0.2], Extrapolation.CLAMP),
   }));
-  const nopeStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-width * 0.9, -width * 0.4], [1, 0]),
+  const nopeTint = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-width * 0.5, 0], [0.2, 0], Extrapolation.CLAMP),
   }));
   // Avancement de l'envol : 0 au repos, 1 quand la carte du dessus est sortie.
   // Chaque carte de la pile glisse d'un rang pendant ce trajet.
   const nextStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(translateX.value) / (width * 0.9), 1);
+    const progress = Math.min(Math.abs(translateX.value) / (width * 0.6), 1);
     return {
       transform: [
         { translateY: interpolate(progress, [0, 1], [STACK.next.translateY, 0]) },
@@ -172,7 +236,7 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
     };
   });
   const thirdStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(translateX.value) / (width * 0.9), 1);
+    const progress = Math.min(Math.abs(translateX.value) / (width * 0.6), 1);
     return {
       transform: [
         {
@@ -210,6 +274,15 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
             onOpenDetail={onOpenProfile ? () => onOpenProfile(top) : undefined}
             favorite={isFavorite?.(top)}
             onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(top) : undefined}
+            onStepPhoto={shiftPhoto}
+          />
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.tint, { backgroundColor: onLight.success }, likeTint]}
+          />
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.tint, { backgroundColor: onLight.danger }, nopeTint]}
           />
           {/* Tampons posés sur une pastille blanche : couleurs fixes, les
               variantes claires du thème sombre s'y délavaient. */}
@@ -230,15 +303,17 @@ const styles = StyleSheet.create({
   cardWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   stamp: {
     position: 'absolute',
-    top: 28,
+    top: 96, // sous le prénom et les pastilles, jamais dessus
     borderWidth: 4,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 4,
     // Pastille crème Velours plutôt que blanc pur : mêmes encres fixes.
-    backgroundColor: 'rgba(255,252,254,.88)',
+    backgroundColor: 'rgba(255, 255, 255,.88)',
   },
-  likeStamp: { left: 20, borderColor: onLight.success, transform: [{ rotate: '-14deg' }] },
-  nopeStamp: { right: 20, borderColor: onLight.danger, transform: [{ rotate: '14deg' }] },
+  // La rotation des tampons est posée par leur style animé (avec l'échelle).
+  likeStamp: { left: 20, borderColor: onLight.success },
+  nopeStamp: { right: 20, borderColor: onLight.danger },
+  tint: { ...StyleSheet.absoluteFill, borderRadius: 20 }, // même arrondi que ProfileCard
   stampText: { fontSize: 26, fontWeight: '800', letterSpacing: 2 },
 });

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppLock } from '@/providers/applock';
+import { useAuth } from '@/providers/auth';
 import { colors, radius, spacing } from '@/theme';
 
 export const CODE_LENGTH = 4;
@@ -81,12 +82,33 @@ export function CodePad({
 
 // Écran plein affiché par-dessus l'app tant que le code n'est pas saisi.
 export function LockScreen() {
-  const { unlock } = useAppLock();
+  const { unlock, forgetCode } = useAppLock();
+  const { signOut } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (code: string) => {
     const ok = await unlock(code);
     setError(ok ? null : 'Code incorrect. Réessaie.');
+  };
+
+  // Issue de secours : sans elle, un code oublié bloquait l'app pour de bon.
+  // On se déconnecte, le code est effacé, et on se reconnecte normalement.
+  const forgot = () => {
+    Alert.alert(
+      'Code oublié ?',
+      'Tu vas être déconnecté et ton code sera effacé. Tu pourras te reconnecter avec ton compte, puis choisir un nouveau code.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Me déconnecter',
+          style: 'destructive',
+          onPress: async () => {
+            await forgetCode();
+            await signOut().catch(() => {});
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -97,12 +119,17 @@ export function LockScreen() {
         error={error}
         onComplete={submit}
       />
+      <Pressable onPress={forgot} hitSlop={12} style={styles.forgot}>
+        <Text style={styles.forgotText}>Code oublié ? Se déconnecter</Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  forgot: { alignSelf: 'center', paddingVertical: spacing.md, marginBottom: spacing.md },
+  forgotText: { fontSize: 14, fontWeight: '600', color: colors.textMuted, textDecorationLine: 'underline' },
   pad: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   lockIcon: {
     width: 64,

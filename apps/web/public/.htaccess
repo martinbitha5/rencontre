@@ -1,0 +1,105 @@
+# Zola : réglages du serveur Hostinger (LiteSpeed, compatible Apache).
+#
+# Le site était servi par Vercel avec « cleanUrls » : /blog ouvrait blog.html.
+# Sur Hostinger, sans ce fichier, /blog renvoie la page 404 de l'hébergeur et
+# tout lien partagé sans « .html » meurt. Ce fichier rend les deux formes
+# valables (/blog et /blog.html), fixe la page 404 du site et reprend les
+# en-têtes de sécurité qui vivaient dans vercel.json.
+
+Options -Indexes
+DirectoryIndex index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Une seule adresse pour Google : www.zola-rdc.com renvoie vers zola-rdc.com
+  # (le passage en https est déjà forcé par Hostinger).
+  RewriteCond %{HTTP_HOST} ^www\.zola-rdc\.com$ [NC]
+  RewriteRule ^(.*)$ https://zola-rdc.com/$1 [R=301,L]
+
+  # Une seule adresse par page pour Google : la forme en « .html » demandée
+  # par un visiteur renvoie définitivement vers l'adresse propre (/faq.html
+  # vers /faq, /index.html vers /). THE_REQUEST ne voit que la demande
+  # d'origine, pas la réécriture interne plus bas : pas de boucle.
+  # Exclues : admin (outil interne), payer et paiement-retour (adresses de
+  # retour MultiPay, qui peuvent arriver en POST), 404.
+  RewriteCond %{THE_REQUEST} \s/index\.html[\s?] [NC]
+  RewriteRule ^index\.html$ / [R=301,L]
+  RewriteCond %{THE_REQUEST} \s/(article/)?([a-z0-9-]+)\.html[\s?] [NC]
+  RewriteCond %2 !^(admin|payer|paiement-retour|404)$
+  RewriteRule ^(article/)?([a-z0-9-]+)\.html$ /$1$2 [R=301,L]
+
+  # Articles du blog (site construit par Astro, voir astro.config.mjs).
+  # Chaque article publié au moment de la construction a sa page statique
+  # article/<slug>.html. Les anciens liens partagés en « ?slug= » y sont
+  # renvoyés définitivement, pour que Google et WhatsApp gardent une seule
+  # adresse. La 3e condition recapture le slug : %1 dans la règle vient de
+  # la dernière condition testée.
+  RewriteCond %{QUERY_STRING} (?:^|&)slug=([A-Za-z0-9-]+)(?:&|$)
+  RewriteCond %{DOCUMENT_ROOT}/article/%1.html -f
+  RewriteCond %{QUERY_STRING} (?:^|&)slug=([A-Za-z0-9-]+)(?:&|$)
+  RewriteRule ^article(?:\.html)?$ /article/%1? [R=301,L]
+
+  # /article/mon-slug -> la page statique si elle existe...
+  RewriteCond %{DOCUMENT_ROOT}/article/$1.html -f
+  RewriteRule ^article/([^/.]+)/?$ article/$1.html [L]
+  # ... sinon la page de secours, qui lit l'article en direct (article publié
+  # depuis la dernière construction).
+  RewriteRule ^article/([^/.]+)/?$ article.html?slug=$1 [L,QSA]
+
+  # /blog -> blog.html, /faq -> faq.html, etc.
+  # Seulement si le fichier .html existe : le reste tombe en 404.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+  RewriteRule ^([a-z0-9-]+)/?$ $1.html [L,QSA]
+</IfModule>
+
+ErrorDocument 404 /404.html
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Fichiers qui n'ont rien à faire en ligne s'ils sont déposés par erreur.
+<FilesMatch "^(\.env.*|\.gitignore|vercel\.json|middleware\.js)$">
+  Require all denied
+</FilesMatch>
+
+# ---------------------------------------------------------------------------
+# Vitesse : compression et cache navigateur
+# ---------------------------------------------------------------------------
+
+# Textes compressés à l'envoi (LiteSpeed le fait souvent déjà, ceci le garantit).
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/xml application/javascript text/javascript application/json image/svg+xml
+</IfModule>
+
+# Les pages HTML sont toujours revérifiées (un article publié se voit tout de
+# suite) ; le reste est gardé par le navigateur entre deux visites.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 hour"
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType application/xml "access plus 1 hour"
+  ExpiresByType text/css "access plus 1 day"
+  ExpiresByType application/javascript "access plus 1 day"
+  ExpiresByType text/javascript "access plus 1 day"
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Les fichiers de /_astro/ ont leur propre règle (public/_astro/.htaccess).
+  <FilesMatch "\.woff2$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   AudioModule,
   RecordingPresets,
-  setAudioModeAsync,
   useAudioPlayer,
   useAudioPlayerStatus,
   useAudioRecorder,
@@ -19,18 +18,16 @@ import {
   Animated,
   Easing,
   FlatList,
-  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   blockUser,
   chatMediaUrl,
@@ -50,19 +47,22 @@ import {
   unmatch,
   voiceUrl,
 } from '@/services/api';
-import { ZolaMark } from '@/components/ZolaLogo';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { ReportModal } from '@/components/ReportModal';
 import { Centered, VerifiedBadge } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
+import { claimAudioFocus, releaseAudioFocus } from '@/utils/audioSession';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { setActiveChatMatchId } from '@/services/notifications';
 import { haptic } from '@/utils/haptics';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { realtimeChannel, supabase } from '@/services/supabase';
-import { colors, isDark } from '@/theme';
-import type { Message, Reaction, ViewableProfile } from '@/types';
+import { colors, keyboardAppearance } from '@/theme';
+import { timeAgo, type Message, type Reaction, type ViewableProfile } from '@/types';
+import { afterInteractions } from '@/utils/afterInteractions';
 import { styles } from './Chat.styles';
+import { safeBack } from '@/utils/safeBack';
 
 const REACTION_EMOJIS = ['❤️', '😂', '😍', '😮', '😢', '👍'];
 
@@ -80,46 +80,66 @@ function formatTime(iso: string): string {
 }
 
 const DAYS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.'];
-const MONTHS = [
-  'Janvier',
-  'Février',
-  'Mars',
-  'Avril',
-  'Mai',
-  'Juin',
-  'Juillet',
-  'Août',
-  'Septembre',
-  'Octobre',
-  'Novembre',
-  'Décembre',
-];
-
-// Libellé des séparateurs de date, ex. « Dim. 02 Août ».
-function formatDayLabel(iso: string): string {
-  const d = new Date(iso);
-  return `${DAYS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]}`;
-}
-
 function sameDay(a: string, b: string): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-// Papier peint Velours : filigrane d'empreintes ZolaMark, très discret,
-// en positions déterministes derrière la liste. C'est le motif signature
-// de Zola, à la place de tout motif emprunté.
-const WALL_PRINTS: { top: `${number}%`; left: `${number}%`; size: number; rotate: number }[] = [
-  { top: '3%', left: '6%', size: 110, rotate: -14 },
-  { top: '10%', left: '62%', size: 90, rotate: 12 },
-  { top: '26%', left: '26%', size: 130, rotate: 8 },
-  { top: '38%', left: '70%', size: 74, rotate: -10 },
-  { top: '52%', left: '4%', size: 96, rotate: 16 },
-  { top: '62%', left: '56%', size: 120, rotate: -8 },
-  { top: '80%', left: '18%', size: 70, rotate: 10 },
-  { top: '86%', left: '68%', size: 100, rotate: -16 },
-];
+// ---------------------------------------------------------------------------
+// Une seule lecture à la fois
+//
+// Notes vocales et vidéos s'inscrivent ici quand elles démarrent. Lancer une
+// lecture arrête celle qui jouait : deux voix ne se superposent jamais.
+// Démarrer un enregistrement coupe aussi tout ce qui joue.
+// ---------------------------------------------------------------------------
+type PlaybackOwner = object;
+let nowPlaying: { owner: PlaybackOwner; stop: () => void } | null = null;
 
-// Bulle de note vocale : lecture/pause + position.
+function claimPlayback(owner: PlaybackOwner, stop: () => void) {
+  if (nowPlaying && nowPlaying.owner !== owner) {
+    try {
+      nowPlaying.stop();
+    } catch {
+      // lecteur déjà libéré : rien à arrêter
+    }
+  }
+  nowPlaying = { owner, stop };
+}
+
+function releasePlayback(owner: PlaybackOwner) {
+  if (nowPlaying?.owner === owner) nowPlaying = null;
+}
+
+function stopAllPlayback() {
+  const current = nowPlaying;
+  nowPlaying = null;
+  try {
+    current?.stop();
+  } catch {
+    // déjà arrêté
+  }
+}
+
+// Onde de la note vocale : des barres de hauteur fixe tirées du chemin du
+// fichier, pour que chaque note ait sa silhouette et la garde d'un rendu à
+// l'autre. La partie écoutée se remplit au fil de la lecture.
+const WAVE_BARS = 24;
+function waveFor(path: string): number[] {
+  let h = 2166136261;
+  for (let i = 0; i < path.length; i++) {
+    h ^= path.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const bars: number[] = [];
+  for (let i = 0; i < WAVE_BARS; i++) {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    bars.push(0.25 + ((h >>> 0) % 1000) / 1333);
+  }
+  return bars;
+}
+
+// Bulle de note vocale : lecture/pause, onde qui se remplit, durée.
 function VoiceBubble({
   path,
   mine,
@@ -131,16 +151,61 @@ function VoiceBubble({
 }) {
   const player = useAudioPlayer({ uri: voiceUrl(path) });
   const status = useAudioPlayerStatus(player);
-  const fg = mine ? '#ffffff' : colors.primary;
+  const [owner] = useState<PlaybackOwner>(() => ({}));
+  const [bars] = useState(() => waveFor(path));
+  const fg = mine ? '#ffffff' : colors.text;
+  const dim = mine ? 'rgba(255,255,255,0.45)' : 'rgba(127,110,125,0.45)';
 
-  const toggle = () => {
+  // La note vocale met la musique de la personne en pause le temps de
+  // jouer, puis la lui rend : focus pris avant play(), rendu dès que la
+  // lecture s'arrête (fin, pause, interruption système, démontage).
+  const holdsFocus = useRef(false);
+  useEffect(() => {
+    if (!status.playing) {
+      releasePlayback(owner);
+      if (holdsFocus.current) {
+        holdsFocus.current = false;
+        releaseAudioFocus();
+      }
+    }
+  }, [status.playing, owner]);
+  useEffect(
+    () => () => {
+      releasePlayback(owner);
+      if (holdsFocus.current) {
+        holdsFocus.current = false;
+        releaseAudioFocus();
+      }
+    },
+    [owner],
+  );
+
+  const toggle = async () => {
+    haptic.tap();
     if (status.playing) {
       player.pause();
       return;
     }
-    if (status.didJustFinish) player.seekTo(0);
+    // Arrête la note ou la vidéo qui jouait avant de lancer celle-ci.
+    claimPlayback(owner, () => player.pause());
+    // didJustFinish ne dure qu'un instant : on se fie à la position réelle.
+    // Une note lue jusqu'au bout reste calée à la fin, play() n'y jouerait
+    // rien, il faut revenir au début pour pouvoir la réécouter.
+    const dur = player.duration || status.duration;
+    const atEnd =
+      status.didJustFinish || (dur > 0 && player.currentTime >= dur - 0.25);
+    if (atEnd) await player.seekTo(0);
+    if (!holdsFocus.current) {
+      holdsFocus.current = true;
+      await claimAudioFocus();
+    }
     player.play();
   };
+
+  const progress =
+    status.duration > 0 ? Math.min(1, Math.max(0, status.currentTime / status.duration)) : 0;
+  const shownSecs =
+    status.playing || status.currentTime > 0 ? status.currentTime : status.duration;
 
   return (
     <Pressable
@@ -148,19 +213,70 @@ function VoiceBubble({
       onPress={toggle}
       onLongPress={onLongPress}
       delayLongPress={280}
+      accessibilityRole="button"
+      accessibilityLabel={status.playing ? 'Mettre la note vocale en pause' : 'Écouter la note vocale'}
     >
-      <Ionicons name={status.playing ? 'pause-circle' : 'play-circle'} size={32} color={fg} />
-      <Text style={[styles.voiceText, { color: fg }]}>
-        {formatSeconds(status.currentTime > 0 ? status.currentTime : status.duration)}
-      </Text>
-      <Ionicons name="mic-outline" size={16} color={fg} />
+      <View style={[styles.voicePlay, mine ? styles.voicePlayMine : styles.voicePlayTheirs]}>
+        <Ionicons
+          name={status.playing ? 'pause' : 'play'}
+          size={16}
+          color={mine ? colors.accent : '#ffffff'}
+          style={!status.playing && { marginLeft: 2 }}
+        />
+      </View>
+      <View style={styles.wave}>
+        {bars.map((h, i) => (
+          <View
+            key={i}
+            style={[
+              styles.waveBar,
+              { height: 4 + h * 20, backgroundColor: i / WAVE_BARS < progress ? fg : dim },
+            ]}
+          />
+        ))}
+      </View>
+      <Text style={[styles.voiceText, { color: fg }]}>{formatSeconds(shownSecs)}</Text>
     </Pressable>
   );
 }
 
 // Bulle vidéo : lecteur inline avec contrôles natifs.
 function VideoBubble({ path }: { path: string }) {
-  const player = useVideoPlayer(chatMediaUrl(path));
+  const player = useVideoPlayer(chatMediaUrl(path), (p) => {
+    // Ne coupe la musique que pendant qu'elle joue avec le son (le défaut
+    // natif iOS, doNotMix, la couperait même à l'arrêt).
+    p.audioMixingMode = 'auto';
+  });
+  const [owner] = useState<PlaybackOwner>(() => ({}));
+  // expo-video prend le focus quand la vidéo joue mais ne le rend jamais :
+  // on le rend nous-mêmes à l'arrêt pour que la musique reprenne.
+  const holdsFocus = useRef(false);
+  useEffect(() => {
+    const sub = player.addListener('playingChange', ({ isPlaying }) => {
+      if (isPlaying) {
+        // Une vidéo qui démarre coupe la note vocale en cours, et inversement.
+        claimPlayback(owner, () => player.pause());
+        if (!holdsFocus.current) {
+          holdsFocus.current = true;
+          claimAudioFocus();
+        }
+      } else {
+        releasePlayback(owner);
+        if (holdsFocus.current) {
+          holdsFocus.current = false;
+          releaseAudioFocus();
+        }
+      }
+    });
+    return () => {
+      sub.remove();
+      releasePlayback(owner);
+      if (holdsFocus.current) {
+        holdsFocus.current = false;
+        releaseAudioFocus();
+      }
+    };
+  }, [player, owner]);
   return (
     <VideoView
       player={player}
@@ -175,141 +291,204 @@ function VideoBubble({ path }: { path: string }) {
 // casserait React.memo sur toutes les bulles sans réaction.
 const EMPTY_REACTIONS: Reaction[] = [];
 
-// Une bulle et ses satellites (séparateur de date, réactions, état d'envoi).
+// Un message fait d'emojis seuls (jusqu'à 6) s'affiche en grand, sans bulle.
+let EMOJI_ONLY: RegExp | null = null;
+try {
+  EMOJI_ONLY = new RegExp('^(?:\\p{Extended_Pictographic}|\\p{Emoji_Modifier}|\\u200d|\\ufe0f|\\s)+$', 'u');
+} catch {
+  EMOJI_ONLY = null;
+}
+function isEmojiOnly(text: string | null): boolean {
+  if (!text || !EMOJI_ONLY) return false;
+  const t = text.trim();
+  if (!t || /[0-9#*]/.test(t) || !EMOJI_ONLY.test(t)) return false;
+  return Array.from(t.replace(/[\s‍️]/g, '')).length <= 6;
+}
+
+// Repère horaire centré : l'heure seule aujourd'hui, le jour et l'heure dans
+// la semaine, la date au-delà. Ex. « MAR. 12:08 ».
+const MONTHS_SHORT = [
+  'JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN',
+  'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.',
+];
+const TIME_GAP_MS = 60 * 60 * 1000;
+const GROUP_GAP_MS = 10 * 60 * 1000;
+function formatStamp(iso: string): string {
+  const d = new Date(iso);
+  const time = formatTime(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return time;
+  const days = (now.getTime() - d.getTime()) / 86400000;
+  if (days < 7) return `${DAYS[d.getDay()].toUpperCase()} ${time}`;
+  const date = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+  return d.getFullYear() === now.getFullYear()
+    ? `${date} ${time}`
+    : `${date} ${d.getFullYear()} ${time}`;
+}
+
+// Position d'un message dans sa grappe : les coins intérieurs se resserrent
+// pour que les bulles d'une même personne se lisent comme un seul bloc.
+type GroupPos = 'single' | 'first' | 'middle' | 'last';
+
+function cornerStyle(mine: boolean, pos: GroupPos) {
+  const big = 20;
+  const small = 5;
+  const topInner = pos === 'middle' || pos === 'last' ? small : big;
+  const bottomInner = pos === 'first' || pos === 'middle' ? small : big;
+  return mine
+    ? {
+        borderTopLeftRadius: big,
+        borderBottomLeftRadius: big,
+        borderTopRightRadius: topInner,
+        borderBottomRightRadius: bottomInner,
+      }
+    : {
+        borderTopRightRadius: big,
+        borderBottomRightRadius: big,
+        borderTopLeftRadius: topInner,
+        borderBottomLeftRadius: bottomInner,
+      };
+}
+
+// Petite photo ronde de l'autre personne, posée au pied de sa grappe.
+function TinyAvatar({ path, name, size }: { path?: string; name?: string; size: number }) {
+  return path ? (
+    <Image
+      source={{ uri: photoUrl(path) }}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+    />
+  ) : (
+    <View
+      style={[
+        styles.tinyFallback,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
+      <Text style={[styles.tinyFallbackText, { fontSize: size * 0.45 }]}>
+        {name?.[0]?.toUpperCase() ?? '?'}
+      </Text>
+    </View>
+  );
+}
+
+// Un message et ses satellites : repère horaire, avatar, réactions, état.
 // Mémoïsée : la frappe dans le composeur ou l'arrivée d'un message ne
 // re-rend plus tout l'historique, seulement les lignes qui changent.
 const MessageRow = React.memo(function MessageRow({
   item,
   mine,
-  prevCreatedAt,
-  prevSenderId,
+  stamp,
+  pos,
   msgReactions,
-  isLastMine,
+  status,
+  otherPhoto,
+  otherName,
   onLongPress,
   onOpenImage,
 }: {
   item: Message;
   mine: boolean;
-  prevCreatedAt: string | null;
-  prevSenderId: string | null;
+  // Repère horaire à afficher au-dessus, ou null.
+  stamp: string | null;
+  pos: GroupPos;
   msgReactions: Reaction[];
-  isLastMine: boolean;
+  // État sous mon dernier message : envoi, envoyé, ou vu.
+  status: 'pending' | 'sent' | 'seen' | null;
+  otherPhoto?: string;
+  otherName?: string;
   onLongPress: (m: Message) => void;
   onOpenImage: (url: string) => void;
 }) {
+  // Toucher une bulle montre son heure exacte, comme dans les messageries.
+  const [showTime, setShowTime] = useState(false);
   const isMedia = item.media_path && (item.kind === 'image' || item.kind === 'video');
-  const newDay = !prevCreatedAt || !sameDay(prevCreatedAt, item.created_at);
-  // Un peu plus d'air quand la parole change de côté.
-  const newGroup = !!prevCreatedAt && !newDay && prevSenderId !== item.sender_id;
-  const metaColor = mine ? 'rgba(255,255,255,0.75)' : colors.textMuted;
-  // Heure dans la bulle ; pour mes messages, suivie de l'état :
-  // horloge le temps de l'envoi, une coche quand le serveur l'a
-  // distribué, deux coches claires quand l'autre l'a lu.
-  const meta = (
-    <>
-      <Text
-        style={[
-          styles.metaTime,
-          { color: isMedia ? 'rgba(255,255,255,0.9)' : metaColor },
-        ]}
+  const bigEmoji = item.kind === 'text' && isEmojiOnly(item.content);
+  const tail = pos === 'single' || pos === 'last';
+  const grouped = pos === 'middle' || pos === 'last';
+
+  const body =
+    item.kind === 'audio' && item.media_path ? (
+      <VoiceBubble path={item.media_path} mine={mine} onLongPress={() => onLongPress(item)} />
+    ) : item.kind === 'image' && item.media_path ? (
+      <Pressable
+        onPress={() => onOpenImage(chatMediaUrl(item.media_path!))}
+        onLongPress={() => onLongPress(item)}
+        delayLongPress={280}
       >
-        {formatTime(item.created_at)}
-      </Text>
-      {mine &&
-        (item.pending ? (
-          <Ionicons
-            name="time-outline"
-            size={12}
-            color={isMedia ? 'rgba(255,255,255,0.9)' : metaColor}
-          />
-        ) : item.read_at ? (
-          <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.9)" />
-        ) : (
-          <Ionicons
-            name="checkmark"
-            size={13}
-            color={isMedia ? 'rgba(255,255,255,0.9)' : metaColor}
-          />
-        ))}
-    </>
-  );
+        <Image
+          source={{ uri: chatMediaUrl(item.media_path) }}
+          style={styles.mediaBubble}
+          contentFit="cover"
+          transition={150}
+        />
+      </Pressable>
+    ) : item.kind === 'video' && item.media_path ? (
+      <VideoBubble path={item.media_path} />
+    ) : bigEmoji ? (
+      <Text style={styles.bigEmoji}>{item.content}</Text>
+    ) : (
+      <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{item.content}</Text>
+    );
+
   return (
-    <View style={newGroup && styles.groupGap}>
-      {/* Séparateur de date : pilule centrée « Dim. 02 Août » */}
-      {newDay && (
-        <View style={styles.dayRow}>
-          <Text style={styles.dayPill}>{formatDayLabel(item.created_at)}</Text>
-        </View>
-      )}
-      <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
-        <Pressable
-          onLongPress={() => onLongPress(item)}
-          delayLongPress={280}
-          style={[
-            styles.bubble,
-            mine ? styles.bubbleMine : styles.bubbleTheirs,
-            isMedia && styles.bubbleMedia,
-          ]}
-        >
-          {item.kind === 'audio' && item.media_path ? (
-            <VoiceBubble
-              path={item.media_path}
-              mine={mine}
-              onLongPress={() => onLongPress(item)}
-            />
-          ) : item.kind === 'image' && item.media_path ? (
-            <Pressable
-              onPress={() => onOpenImage(chatMediaUrl(item.media_path!))}
-              onLongPress={() => onLongPress(item)}
-              delayLongPress={280}
-            >
-              <Image
-                source={{ uri: chatMediaUrl(item.media_path) }}
-                style={styles.mediaBubble}
-                contentFit="cover"
-                transition={150}
-              />
-            </Pressable>
-          ) : item.kind === 'video' && item.media_path ? (
-            <VideoBubble path={item.media_path} />
-          ) : (
-            <Text style={[styles.bubbleText, mine && { color: '#fff' }]}>
-              {item.content}
-            </Text>
-          )}
-          {/* Sur les médias, l'heure se pose sur l'image dans une
-              petite pastille sombre ; sinon en pied de bulle. */}
-          {isMedia ? (
-            <View style={styles.mediaMeta}>{meta}</View>
-          ) : (
-            <View style={styles.metaRow}>{meta}</View>
-          )}
-        </Pressable>
-        {msgReactions.length > 0 && (
-          <View style={styles.reactionsPill}>
-            {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
-              const count = msgReactions.filter((r) => r.emoji === emoji).length;
-              return (
-                <Text key={emoji} style={styles.reactionText}>
-                  {emoji}
-                  {count > 1 ? ` ${count}` : ''}
-                </Text>
-              );
-            })}
+    <View style={grouped ? styles.rowGrouped : styles.rowNewGroup}>
+      {!!stamp && <Text style={styles.stamp}>{stamp}</Text>}
+      <View style={[styles.msgLine, mine ? styles.msgLineMine : styles.msgLineTheirs]}>
+        {/* Colonne avatar : la photo n'apparaît qu'au pied de la grappe. */}
+        {!mine && (
+          <View style={styles.avatarCol}>
+            {tail && <TinyAvatar path={otherPhoto} name={otherName} size={28} />}
           </View>
         )}
-        {/* Le libellé d'état n'accompagne que mon dernier message. */}
-        {isLastMine && (
-          <Text
-            style={[
-              styles.statusText,
-              !item.pending && item.read_at !== null && { color: colors.accent },
+        <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
+          <Pressable
+            onPress={() => setShowTime((v) => !v)}
+            onLongPress={() => onLongPress(item)}
+            delayLongPress={280}
+            style={({ pressed }) => [
+              bigEmoji
+                ? styles.emojiBubble
+                : [
+                    styles.bubble,
+                    mine ? styles.bubbleMine : styles.bubbleTheirs,
+                    cornerStyle(mine, pos),
+                    isMedia && styles.bubbleMedia,
+                    item.pending && styles.bubblePending,
+                  ],
+              pressed && { opacity: 0.85 },
             ]}
           >
-            {item.pending ? 'Envoi…' : item.read_at ? 'Lu' : 'Distribué'}
-          </Text>
-        )}
+            {body}
+          </Pressable>
+          {msgReactions.length > 0 && (
+            <View style={[styles.reactionsPill, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
+              {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
+                const count = msgReactions.filter((r) => r.emoji === emoji).length;
+                return (
+                  <Text key={emoji} style={styles.reactionText}>
+                    {emoji}
+                    {count > 1 ? ` ${count}` : ''}
+                  </Text>
+                );
+              })}
+            </View>
+          )}
+          {showTime && <Text style={styles.tapTime}>{formatStamp(item.created_at)}</Text>}
+        </View>
       </View>
+      {/* Sous mon dernier message : la photo de l'autre quand c'est lu,
+          sinon depuis quand c'est parti. */}
+      {status === 'seen' ? (
+        <View style={styles.seenRow}>
+          <TinyAvatar path={otherPhoto} name={otherName} size={16} />
+        </View>
+      ) : status ? (
+        <Text style={styles.statusText}>
+          {status === 'pending' ? 'Envoi…' : `Envoyé ${timeAgo(item.created_at)}`}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -317,7 +496,7 @@ const MessageRow = React.memo(function MessageRow({
 // Pastille rouge qui pulse pendant l'enregistrement, doublée d'une onde qui
 // s'évase : le rythme dit « micro ouvert » sans chiffre ni spinner.
 function RecordingDot() {
-  const pulse = useRef(new Animated.Value(0)).current;
+  const [pulse] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -365,6 +544,10 @@ function RecordingDot() {
 
 // Barre de saisie isolée avec son propre état de brouillon : taper une
 // lettre ne re-rend que cette barre, jamais la liste des bulles.
+//
+// Gabarit des messageries : « + » pour joindre une photo ou une vidéo, champ
+// arrondi avec le micro à l'intérieur, et à droite l'envoi quand il y a du
+// texte, sinon un coeur envoyé d'un seul geste.
 const ChatComposer = React.memo(function ChatComposer({
   sending,
   sendingMedia,
@@ -379,6 +562,7 @@ const ChatComposer = React.memo(function ChatComposer({
   onStartRecording: () => void;
 }) {
   const [draft, setDraft] = useState('');
+  const hasText = !!draft.trim();
 
   const submit = async () => {
     const content = draft.trim();
@@ -390,46 +574,63 @@ const ChatComposer = React.memo(function ChatComposer({
     if (!ok) setDraft(content);
   };
 
+  const sendHeart = () => {
+    if (sending) return;
+    haptic.impact();
+    onSendText('❤️');
+  };
+
   return (
     <View style={styles.composer}>
       <Pressable
-        style={[styles.attachBtn, sendingMedia && { opacity: 0.5 }]}
+        style={({ pressed }) => [styles.iconBtn, (pressed || sendingMedia) && { opacity: 0.5 }]}
         onPress={onPickMedia}
         disabled={sendingMedia}
         hitSlop={6}
+        accessibilityLabel="Envoyer une photo ou une vidéo"
       >
         {sendingMedia ? (
           <ActivityIndicator size="small" color={colors.accent} />
         ) : (
-          <Ionicons name="image-outline" size={22} color={colors.accent} />
+          <Ionicons name="add-circle" size={30} color={colors.accent} />
         )}
       </Pressable>
-      <TextInput
-        style={styles.input}
-        placeholder="Tape ton message"
-        placeholderTextColor={colors.textMuted}
-        value={draft}
-        onChangeText={setDraft}
-        multiline
-        maxLength={2000}
-      />
-      {draft.trim() ? (
-        <Pressable
-          style={[styles.sendBtn, sending && { opacity: 0.5 }]}
-          onPress={submit}
-          disabled={sending}
-        >
-          <Ionicons name="paper-plane" size={20} color={colors.textOnAccent} />
-        </Pressable>
-      ) : (
-        <Pressable
-          style={[styles.sendBtn, sending && { opacity: 0.5 }]}
-          onPress={onStartRecording}
-          disabled={sending}
-        >
-          <Ionicons name="mic" size={20} color={colors.textOnAccent} />
-        </Pressable>
-      )}
+      <View style={styles.inputPill}>
+        <TextInput
+          keyboardAppearance={keyboardAppearance}
+          style={styles.input}
+          placeholder="Message"
+          placeholderTextColor={colors.textMuted}
+          value={draft}
+          onChangeText={setDraft}
+          multiline
+          maxLength={2000}
+        />
+        {!hasText && (
+          <Pressable
+            onPress={onStartRecording}
+            disabled={sending}
+            hitSlop={8}
+            style={({ pressed }) => [styles.inPillBtn, pressed && { opacity: 0.5 }]}
+            accessibilityLabel="Enregistrer une note vocale"
+          >
+            <Ionicons name="mic" size={22} color={colors.accent} />
+          </Pressable>
+        )}
+      </View>
+      <Pressable
+        style={({ pressed }) => [
+          styles.iconBtn,
+          (sending || pressed) && { opacity: 0.5 },
+          pressed && { transform: [{ scale: 0.9 }] },
+        ]}
+        onPress={hasText ? submit : sendHeart}
+        disabled={sending}
+        hitSlop={6}
+        accessibilityLabel={hasText ? 'Envoyer' : 'Envoyer un coeur'}
+      >
+        <Ionicons name={hasText ? 'send' : 'heart'} size={hasText ? 24 : 28} color={colors.accent} />
+      </Pressable>
     </View>
   );
 });
@@ -459,7 +660,6 @@ export default function Chat() {
   const listRef = useRef<FlatList<Message>>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const headerHeight = useHeaderHeight();
-  const insets = useSafeAreaInsets();
   // Android edge-to-edge : hauteur à ajouter sous le composeur pour qu'il
   // reste collé au clavier (voir src/lib/keyboard.ts).
   const keyboardInset = useKeyboardInset();
@@ -533,7 +733,7 @@ export default function Chat() {
     if (!otherId) return;
     verifiedFetched.current = true;
     // Purement cosmétique : ce fetch attend que le premier rendu soit posé.
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = afterInteractions(() => {
       getProfileView(otherId)
         .then((p) => setOtherVerified(!!p?.is_verified))
         .catch(() => {});
@@ -578,7 +778,7 @@ export default function Chat() {
       .finally(() => setLoading(false));
     // Rien de tout ça ne conditionne le premier affichage : les réactions et
     // le marquage lu partent une fois l'écran posé, sans gêner l'ouverture.
-    const deferred = InteractionManager.runAfterInteractions(() => {
+    const deferred = afterInteractions(() => {
       getReactions(matchId)
         .then((list) => {
           const grouped: Record<number, Reaction[]> = {};
@@ -749,18 +949,23 @@ export default function Chat() {
     // Retour haptique dès l'appui sur le micro : la main sait que
     // l'enregistrement démarre avant même que l'interface bascule.
     haptic.impact();
+    // Plus rien ne joue pendant qu'on parle.
+    stopAllPlayback();
     const perm = await AudioModule.requestRecordingPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Micro non autorisé', 'Autorise le micro pour envoyer des notes vocales.');
       return;
     }
     try {
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      // Le micro prend le focus : la musique se tait le temps de parler,
+      // sinon elle serait captée par l'enregistrement.
+      await claimAudioFocus({ recording: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
       setRecordSecs(0);
       setRecording(true);
     } catch {
+      await releaseAudioFocus();
       Alert.alert('Erreur', "Impossible de démarrer l'enregistrement.");
     }
   }, [recorder]);
@@ -773,7 +978,7 @@ export default function Chat() {
     } catch {
       // rien à annuler si l'enregistreur n'a pas démarré
     }
-    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    await releaseAudioFocus();
   }, [recorder]);
 
   const sendRecording = useCallback(async () => {
@@ -784,7 +989,7 @@ export default function Chat() {
     setRecording(false);
     try {
       await recorder.stop();
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      await releaseAudioFocus();
       const uri = recorder.uri;
       if (!uri) throw new Error('enregistrement introuvable');
       const msg = await sendAudioMessage(matchId, uri);
@@ -876,7 +1081,7 @@ export default function Chat() {
           const otherId = resolveOtherId();
           if (otherId) await blockUser(otherId).catch(() => {});
           else if (matchId) await unmatch(matchId).catch(() => {});
-          router.back();
+          safeBack(router);
         },
       },
       {
@@ -885,7 +1090,7 @@ export default function Chat() {
         onPress: async () => {
           if (!matchId) return;
           await unmatch(matchId).catch(() => {});
-          router.back();
+          safeBack(router);
         },
       },
       { text: 'Annuler', style: 'cancel' },
@@ -905,7 +1110,7 @@ export default function Chat() {
         'Signalement envoyé',
         'Notre équipe examine le dossier. Le profil est bloqué : vous ne vous verrez plus.',
       );
-      router.back();
+      safeBack(router);
     } catch {
       Alert.alert('Erreur', 'Impossible de signaler ce profil.');
     }
@@ -914,6 +1119,7 @@ export default function Chat() {
   // L'état détaillé (Distribué / Lu) ne s'écrit que sous mon dernier message :
   // les coches suffisent sur les précédents, l'écran reste léger.
   const lastMineId = [...messages].reverse().find((m) => m.sender_id === myId)?.id;
+  const lastId = messages[messages.length - 1]?.id;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -928,7 +1134,7 @@ export default function Chat() {
           // bord de l'écran.
           headerLeft: () => (
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => safeBack(router)}
               style={styles.headerBtn}
               accessibilityRole="button"
               accessibilityLabel="Fermer la conversation"
@@ -977,23 +1183,6 @@ export default function Chat() {
           ),
         }}
       />
-      {/* Papier peint : filigrane d'empreintes Zola, purement décoratif */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {WALL_PRINTS.map((p, i) => (
-          <View
-            key={i}
-            style={{
-              position: 'absolute',
-              top: p.top,
-              left: p.left,
-              opacity: isDark ? 0.05 : 0.04,
-              transform: [{ rotate: `${p.rotate}deg` }],
-            }}
-          >
-            <ZolaMark size={p.size} color={colors.primaryDeep} strokeWidth={1.6} />
-          </View>
-        ))}
-      </View>
       <KeyboardAvoidingView
         style={styles.container}
         // iOS seulement : sur Android, l'edge-to-edge du SDK 54 rend le
@@ -1027,14 +1216,47 @@ export default function Chat() {
             }
             renderItem={({ item, index }) => {
               const prev = index > 0 ? messages[index - 1] : null;
+              const next = index < messages.length - 1 ? messages[index + 1] : null;
+              const at = (m: Message) => new Date(m.created_at).getTime();
+              // Repère horaire : nouveau jour, ou plus d'une heure de silence.
+              const breaks = (a: Message, b: Message) =>
+                !sameDay(a.created_at, b.created_at) || at(b) - at(a) > TIME_GAP_MS;
+              const stamp = !prev || breaks(prev, item) ? formatStamp(item.created_at) : null;
+              // Grappe : même personne, sans repère entre deux, à moins de 10 min.
+              const joinsPrev =
+                !!prev && !stamp && prev.sender_id === item.sender_id && at(item) - at(prev) < GROUP_GAP_MS;
+              const joinsNext =
+                !!next &&
+                !breaks(item, next) &&
+                next.sender_id === item.sender_id &&
+                at(next) - at(item) < GROUP_GAP_MS;
+              const pos: GroupPos = joinsPrev
+                ? joinsNext
+                  ? 'middle'
+                  : 'last'
+                : joinsNext
+                  ? 'first'
+                  : 'single';
+              const mine = item.sender_id === myId;
+              // L'état ne s'écrit que sous mon dernier message, s'il clôt le fil.
+              const status =
+                mine && item.id === lastMineId && item.id === lastId
+                  ? item.pending
+                    ? 'pending'
+                    : item.read_at
+                      ? 'seen'
+                      : 'sent'
+                  : null;
               return (
                 <MessageRow
                   item={item}
-                  mine={item.sender_id === myId}
-                  prevCreatedAt={prev?.created_at ?? null}
-                  prevSenderId={prev?.sender_id ?? null}
+                  mine={mine}
+                  stamp={stamp}
+                  pos={pos}
                   msgReactions={reactions[item.id] ?? EMPTY_REACTIONS}
-                  isLastMine={item.sender_id === myId && item.id === lastMineId}
+                  status={status}
+                  otherPhoto={photoPath || undefined}
+                  otherName={name}
                   onLongPress={openMsgAction}
                   onOpenImage={openImage}
                 />
@@ -1139,33 +1361,11 @@ export default function Chat() {
         </Pressable>
       </Modal>
 
-      {/* Photo en plein écran */}
-      <Modal
-        visible={fullImage !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFullImage(null)}
-      >
-        <Pressable style={styles.fullImageOverlay} onPress={() => setFullImage(null)}>
-          {fullImage && (
-            <Image source={{ uri: fullImage }} style={styles.fullImage} contentFit="contain" />
-          )}
-          {/* Ce bouton était une simple View : il n'avait aucun onPress et ne
-              fermait que par ricochet, via le tap du fond. Posé en plus à 54
-              points du haut — une valeur en dur — il tombait sous l'encoche sur
-              les grands écrans, là où le tap ne portait plus. Vrai Pressable,
-              et départ à l'inset réel. */}
-          <Pressable
-            style={[styles.fullImageClose, { top: Math.max(insets.top, 12) + 8 }]}
-            onPress={() => setFullImage(null)}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Fermer la photo"
-          >
-            <Ionicons name="close" size={26} color="#ffffff" />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Photo en plein écran : la même galerie que sur les profils. */}
+      <PhotoViewer
+        uris={fullImage ? [fullImage] : null}
+        onClose={() => setFullImage(null)}
+      />
     </SafeAreaView>
   );
 }

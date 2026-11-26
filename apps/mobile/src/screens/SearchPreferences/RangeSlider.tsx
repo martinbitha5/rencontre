@@ -57,8 +57,8 @@ export function RangeSlider({
     const u = Math.max(width - THUMB_W, 1);
     setUsable(u);
     // Pose les poignées sur les valeurs courantes, une fois la largeur connue.
-    lowX.value = ((initialLow - min) / span) * u;
-    highX.value = ((initialHigh - min) / span) * u;
+    lowX.set(((initialLow - min) / span) * u);
+    highX.set(((initialHigh - min) / span) * u);
   };
 
   // Intention du geste, déclarée explicitement sur les deux poignées.
@@ -83,14 +83,14 @@ export function RangeSlider({
     .activeOffsetX(ACTIVE_X)
     .failOffsetY(FAIL_Y)
     .onStart(() => {
-      lowStart.value = lowX.value;
+      lowStart.set(lowX.value);
     })
     .onUpdate((e) => {
       const next = Math.min(Math.max(lowStart.value + e.translationX, 0), highX.value);
-      lowX.value = next;
+      lowX.set(next);
       const val = Math.round(min + (next / Math.max(usable, 1)) * span);
       if (val !== lastLow.value) {
-        lastLow.value = val;
+        lastLow.set(val);
         runOnJS(report)(val, lastHigh.value);
       }
     });
@@ -99,14 +99,14 @@ export function RangeSlider({
     .activeOffsetX(ACTIVE_X)
     .failOffsetY(FAIL_Y)
     .onStart(() => {
-      highStart.value = highX.value;
+      highStart.set(highX.value);
     })
     .onUpdate((e) => {
       const next = Math.max(Math.min(highStart.value + e.translationX, usable), lowX.value);
-      highX.value = next;
+      highX.set(next);
       const val = Math.round(min + (next / Math.max(usable, 1)) * span);
       if (val !== lastHigh.value) {
-        lastHigh.value = val;
+        lastHigh.set(val);
         runOnJS(report)(lastLow.value, val);
       }
     });

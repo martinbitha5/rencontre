@@ -134,6 +134,53 @@ export async function deletePhoto(photo: MyPhoto): Promise<void> {
   await supabase.storage.from('photos').remove([photo.storage_path]);
 }
 
+// Remplace l'image d'une photo existante SANS toucher à sa ligne : même
+// identifiant, même position, seul le fichier change. Le nouveau fichier est
+// envoyé d'abord ; la ligne n'est mise à jour qu'une fois l'envoi réussi, et
+// l'ancien fichier n'est retiré qu'après. À aucun moment le profil ne pointe
+// vers un fichier absent.
+export async function replacePhoto(photo: MyPhoto, base64: string): Promise<MyPhoto> {
+  const userId = await requireUserId();
+  const path = `${userId}/${Date.now()}.jpg`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('photos')
+    .upload(path, decode(base64), { contentType: 'image/jpeg' });
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await supabase
+    .from('photos')
+    .update({ storage_path: path })
+    .eq('id', photo.id)
+    .select('id, user_id, storage_path, position')
+    .single();
+  if (error) {
+    await supabase.storage.from('photos').remove([path]);
+    throw error;
+  }
+  await supabase.storage.from('photos').remove([photo.storage_path]);
+  return data as MyPhoto;
+}
+
+// Réécrit les positions dans l'ordre reçu : la première photo de la liste
+// devient la photo principale, celle que le fil et les listes affichent.
+export async function reorderPhotos(photos: MyPhoto[]): Promise<MyPhoto[]> {
+  await Promise.all(
+    photos.map((p, i) =>
+      p.position === i
+        ? Promise.resolve()
+        : supabase
+            .from('photos')
+            .update({ position: i })
+            .eq('id', p.id)
+            .then(({ error }) => {
+              if (error) throw error;
+            }),
+    ),
+  );
+  return photos.map((p, i) => ({ ...p, position: i }));
+}
+
 // ---------- Découverte / swipe ----------
 
 export async function getDiscoveryFeed(limit = 20): Promise<FeedProfile[]> {
@@ -202,6 +249,51 @@ export async function getEventFeed(eventId: string, limit = 20): Promise<FeedPro
   });
   if (error) throw error;
   return (data ?? []) as FeedProfile[];
+}
+
+// Décider dans la soirée (migration 056). Un recalage reste dans la soirée et
+// s'efface avec elle ; un like est une relation, il rejoint swipes et peut
+// devenir un match. Lève `evenement_termine` si la soirée s'est fermée entre
+// deux cartes : le fil doit alors resynchroniser et repasser en Rencontres.
+export async function sendEventSwipe(
+  eventId: string,
+  targetId: string,
+  liked: boolean,
+): Promise<SwipeResult> {
+  const { data, error } = await supabase.rpc('event_swipe', {
+    p_event: eventId,
+    p_target: targetId,
+    p_liked: liked,
+  });
+  if (error) throw error;
+  return data as SwipeResult;
+}
+
+// Historique de la soirée : les profils recalés ce soir, tant qu'elle dure.
+export async function getEventPassedProfiles(eventId: string): Promise<PassedProfile[]> {
+  const { data, error } = await supabase.rpc('get_event_passed', { p_event: eventId });
+  if (error) throw error;
+  return (data ?? []) as PassedProfile[];
+}
+
+// Se raviser sur un profil recalé en soirée.
+export async function likeFromEventHistory(
+  eventId: string,
+  targetId: string,
+): Promise<HistoryLikeResult> {
+  const { data, error } = await supabase.rpc('event_like_from_history', {
+    p_event: eventId,
+    p_target: targetId,
+  });
+  if (error) throw error;
+  return data as HistoryLikeResult;
+}
+
+// Vrai quand le serveur signale que la soirée est finie ou qu'on n'en fait
+// plus partie : dans les deux cas le fil doit quitter le mode soirée.
+export function isEventOverError(error: unknown): boolean {
+  const message = String((error as { message?: string } | null)?.message ?? '');
+  return message.includes('evenement_termine') || message.includes('non_participant');
 }
 
 // ---------- Favoris (privé, max 10) ----------
@@ -512,6 +604,9 @@ export async function getProfileView(userId: string): Promise<ViewableProfile | 
   const d = data as Profile & { cities: { name: string } | null };
   return {
     ...d,
+    // Statut caché (mode Invisible ou statut en ligne coupé) : on ne montre
+    // pas l'heure de dernière activité, comme le font les fonctions du fil.
+    last_active_at: d.incognito || d.show_online === false ? null : d.last_active_at,
     city_name: d.cities?.name ?? null,
     photos: (photos ?? []).map((p) => ({ id: p.id, path: p.storage_path })),
   } as unknown as ViewableProfile;
@@ -537,6 +632,26 @@ export async function blockUser(targetId: string): Promise<void> {
 // décider depuis le backoffice. `matchId` joint la conversation au dossier pour
 // que le modérateur puisse vérifier ce qui s'est réellement dit (le serveur
 // refuse le rattachement si l'auteur du signalement n'en fait pas partie).
+// Personnes que j'ai bloquées (migration 065), les plus récentes d'abord.
+export interface BlockedUser {
+  user_id: string;
+  display_name: string | null;
+  photo: string | null;
+  blocked_at: string;
+}
+
+export async function getMyBlocks(): Promise<BlockedUser[]> {
+  const { data, error } = await supabase.rpc('get_my_blocks');
+  if (error) throw error;
+  return (data ?? []) as BlockedUser[];
+}
+
+// Retire le blocage. Une conversation fermée par le blocage reste fermée.
+export async function unblockUser(targetId: string): Promise<void> {
+  const { error } = await supabase.rpc('unblock_user', { p_target: targetId });
+  if (error) throw error;
+}
+
 export async function reportUser(
   targetId: string,
   reason: string,

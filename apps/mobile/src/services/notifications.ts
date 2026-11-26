@@ -3,13 +3,14 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import type { NotificationResponse } from 'expo-notifications';
 import { supabase } from '@/services/supabase';
+import { IS_EXPO_GO } from '@/utils/expoGo';
 
 // Expo Go ne supporte plus les notifications push depuis le SDK 53 : le simple
 // import d'expo-notifications y déclenche une erreur au démarrage (son module
 // d'auto-enregistrement du token s'exécute à l'import). On ne charge donc le
 // module que hors Expo Go, c'est-à-dire dans un development build ou une app
 // compilée, où les push fonctionnent vraiment.
-const isExpoGo = Constants.executionEnvironment === 'storeClient';
+const isExpoGo = IS_EXPO_GO;
 
 type NotificationsModule = typeof import('expo-notifications');
 
@@ -86,7 +87,7 @@ export async function registerForPushNotifications(): Promise<void> {
         name: 'Notifications Zola',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#9B3F7A',
+        lightColor: '#fd267a',
       });
     }
 
@@ -112,6 +113,25 @@ export async function registerForPushNotifications(): Promise<void> {
       .upsert({ user_id: userId, token, updated_at: new Date().toISOString() });
   } catch {
     // jamais bloquant
+  }
+}
+
+/**
+ * État de l'autorisation des notifications sur ce téléphone, pour l'écran
+ * Paramètres. 'unavailable' : Expo Go, simulateur ou web, où les push
+ * n'existent pas.
+ */
+export async function getPushPermission(): Promise<
+  'granted' | 'denied' | 'undetermined' | 'unavailable'
+> {
+  try {
+    const Notifications = getNotifications();
+    if (!Notifications || !Device.isDevice) return 'unavailable';
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return 'granted';
+    return canAskAgain ? 'undetermined' : 'denied';
+  } catch {
+    return 'unavailable';
   }
 }
 

@@ -21,20 +21,42 @@ export type PickPhotoResult =
   | { status: 'ok'; base64: string }
   | { status: 'cancelled' }
   | { status: 'denied' }
+  | { status: 'camera_denied' }
   | { status: 'error'; message: string };
 
-export async function pickProfilePhoto(): Promise<PickPhotoResult> {
-  // Permission explicite : sans elle, la galerie se referme aussitôt et
-  // l'utilisateur croit que le bouton est mort.
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return { status: 'denied' };
+// D'où vient la photo : la galerie du téléphone ou l'appareil photo.
+export type PhotoSource = 'library' | 'camera';
 
-  const picked = await ImagePicker.launchImageLibraryAsync({
+export async function pickProfilePhoto(source: PhotoSource = 'library'): Promise<PickPhotoResult> {
+  // Permission explicite : sans elle, la galerie (ou la caméra) se referme
+  // aussitôt et l'utilisateur croit que le bouton est mort.
+  const perm =
+    source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) return { status: source === 'camera' ? 'camera_denied' : 'denied' };
+
+  const options: ImagePicker.ImagePickerOptions = {
     mediaTypes: ['images'],
     quality: 1,
     // Pas de base64 ici : c'est justement lui qui échouait.
     base64: false,
-  });
+  };
+  let picked: ImagePicker.ImagePickerResult;
+  try {
+    picked =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ ...options, cameraType: ImagePicker.CameraType.front })
+        : await ImagePicker.launchImageLibraryAsync(options);
+  } catch (e) {
+    // Simulateur sans caméra, appareil photo occupé : on le dit au lieu de
+    // laisser le bouton sans effet.
+    const detail = (e as { message?: string })?.message ?? '';
+    return {
+      status: 'error',
+      message: source === 'camera' ? "L'appareil photo n'est pas disponible." : detail || 'Galerie indisponible.',
+    };
+  }
   if (picked.canceled) return { status: 'cancelled' };
 
   const asset = picked.assets?.[0];
@@ -70,6 +92,9 @@ export function pickPhotoMessage(res: Exclude<PickPhotoResult, { status: 'ok' }>
   if (res.status === 'cancelled') return null;
   if (res.status === 'denied') {
     return "Autorise l'accès à tes photos dans les réglages pour en ajouter.";
+  }
+  if (res.status === 'camera_denied') {
+    return "Autorise l'accès à l'appareil photo dans les réglages pour prendre une photo.";
   }
   return res.message;
 }

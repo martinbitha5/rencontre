@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { colors, radius, shadows, sigCorner, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   // Tout l'écran vit sur l'ivoire : plus de dégradé, plus de feuille.
@@ -80,38 +80,54 @@ export const styles = StyleSheet.create({
   },
   dmSegmentText: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
   dmSegmentTextActive: { color: colors.textOnAccent, fontWeight: '800' },
-  // Cartes des DMs envoyés : carte crème au coin signature, elle porte le
-  // message entier, l'état de lecture et la corbeille.
+  // Cartes des DMs envoyés : en-tête (avatar, nom, état de lecture), le
+  // message en bulle comme dans la conversation, puis l'attente et « Retirer ».
   sentCard: {
     backgroundColor: colors.cardSolid,
-    borderRadius: 24,
-    borderBottomRightRadius: sigCorner,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: 12,
     ...shadows.card,
   },
   sentHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sentTime: { fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
-  sentMessage: { fontSize: 15, color: colors.text, lineHeight: 21 },
+  sentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface,
+  },
+  sentChipRead: { backgroundColor: colors.accent },
+  sentChipText: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  sentChipTextRead: { color: colors.textOnAccent },
+  sentBubble: {
+    alignSelf: 'flex-end',
+    maxWidth: '88%',
+    backgroundColor: colors.accent,
+    borderRadius: 20,
+    borderBottomRightRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sentBubbleText: { fontSize: 15, lineHeight: 21, color: colors.textOnAccent },
   sentFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  sentStatus: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  sentStatusText: { fontSize: 13.5, fontWeight: '600', color: colors.textMuted },
-  trashBtn: {
-    width: 46,
-    height: 40,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.cardSolid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  sentWaiting: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sentStatusText: { flexShrink: 1, fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  withdrawBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
+  withdrawText: { fontSize: 13, fontWeight: '700', color: colors.danger },
   emptyMascot: { marginBottom: spacing.lg },
   emptyText: {
     fontSize: 15,

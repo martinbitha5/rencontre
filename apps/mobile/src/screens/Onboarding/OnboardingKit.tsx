@@ -1,47 +1,27 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
+  interpolateColor,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
+import { PressableScale, useSelectedBackground, useToggleProgress } from '@/components/motion';
 import { haptic } from '@/utils/haptics';
-import { colors, shadows, sigCorner, spacing } from '@/theme';
+import { colors, flame, motion, spacing } from '@/theme';
 
-// Kit de l'onboarding : les primitives visuelles du parcours. Pas d'animation
-// décorative : les états s'affichent directement, le retour d'appui passe par
-// une simple baisse d'opacité, et l'haptique confirme chaque choix.
-
-// Dégradé signature du parcours : le magenta Velours vers sa version appuyée,
-// dans les deux thèmes (les tokens portent déjà la déclinaison sombre).
-export const ACCENT_GRADIENT = [colors.accent, colors.accentPressed] as [
-  string,
-  string,
-];
-
-// Dégradé des sélections MULTIPLES : voile rose pâle, encre prune. Le magenta
-// dit « c'est ici qu'il faut appuyer » ; il ne peut pas dire ça vingt fois sur
-// le même écran. Une liste de centres d'intérêt entièrement magenta ne
-// signalerait plus rien et écraserait le bouton d'action juste en dessous.
-// Les choix UNIQUES (genre, recherche, objectif) gardent le magenta : là, une
-// seule pastille est allumée et elle doit se voir.
-export const SELECT_GRADIENT = [colors.selected, colors.washTo] as [
-  string,
-  string,
-];
+// Kit de l'onboarding. Une question par écran, sur fond clair : un grand
+// titre, une ligne d'explication, des réponses en lignes pleine largeur, et
+// un seul bouton plein en bas. Les couleurs restent celles de Zola : le prune
+// pour l'action et l'état choisi, le rose pâle pour la ligne sélectionnée.
 
 // ---------------------------------------------------------------------------
-// En-tête : chevron retour + barre de progression au dégradé. La largeur est
-// recalculée à chaque rendu, sans animation.
+// En-tête : chevron retour et fine barre de progression.
 // ---------------------------------------------------------------------------
 export function OnboardingHeader({
   step,
@@ -52,58 +32,63 @@ export function OnboardingHeader({
   total: number;
   onBack: () => void;
 }) {
+  // La barre glisse jusqu'à sa nouvelle longueur au lieu de sauter.
+  const progress = useSharedValue(step / total);
+  useEffect(() => {
+    progress.set(
+      withTiming(step / total, {
+        duration: motion.duration.slow,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+      }),
+    );
+  }, [step, total, progress]);
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
+
   return (
     <View style={kh.header}>
       <Pressable
         onPress={onBack}
-        hitSlop={12}
+        hitSlop={14}
+        disabled={step === 1}
         style={({ pressed }) => [
           kh.back,
-          step === 1 && { opacity: 0.35 },
-          pressed && step > 1 && { opacity: 0.7 },
+          step === 1 && { opacity: 0 },
+          pressed && { opacity: 0.6 },
         ]}
+        accessibilityLabel="Retour"
       >
-        <Ionicons name="chevron-back" size={20} color={colors.text} />
+        <Ionicons name="chevron-back" size={24} color={colors.text} />
       </Pressable>
       <View style={kh.track}>
-        <View style={[kh.fill, { width: `${(step / total) * 100}%` }]}>
-          <LinearGradient
-            colors={ACCENT_GRADIENT}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
+        <Animated.View style={[kh.fill, fillStyle]} />
       </View>
-      <Text style={kh.count}>
-        {step}
-        <Text style={kh.countTotal}>/{total}</Text>
-      </Text>
+      <View style={kh.back} />
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pastille d'étape : l'icône qui donne sa personnalité à chaque question.
+// Pastille d'étape : icône prune dans un rond rose pâle, au-dessus du titre.
 // ---------------------------------------------------------------------------
 export function StepBadge({ icon }: { icon: keyof typeof Ionicons.glyphMap }) {
   return (
     <View style={kb.badge}>
-      <Ionicons name={icon} size={22} color={colors.accent} />
+      <Ionicons name={icon} size={24} color={colors.primary} />
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Bouton principal : dégradé signature et coin signature Velours, retour
-// d'appui par opacité. L'unique bouton plein de l'écran.
+// Bouton principal : pilule pleine prune. L'unique bouton plein de l'écran.
 // ---------------------------------------------------------------------------
 export function GradientButton({
   title,
   onPress,
   disabled,
   loading,
-  icon = 'arrow-forward',
+  icon = null,
 }: {
   title: string;
   onPress: () => void;
@@ -112,248 +97,220 @@ export function GradientButton({
   icon?: keyof typeof Ionicons.glyphMap | null;
 }) {
   return (
-    <Pressable
+    <PressableScale
       disabled={disabled || loading}
       onPress={() => {
         haptic.impact();
         onPress();
       }}
-      style={({ pressed }) => [
-        kg.btn,
-        disabled && { opacity: 0.35 },
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      style={[kg.btn, disabled && kg.btnOff]}
     >
+      {/* Dégradé flamme des boutons du site (--flame). */}
       <LinearGradient
-        colors={ACCENT_GRADIENT}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+        colors={flame}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 0 }}
+        style={[StyleSheet.absoluteFill, kg.btnFill]}
       />
       {loading ? (
-        <ActivityIndicator color="#ffffff" />
+        <ActivityIndicator color={colors.textOnPrimary} />
       ) : (
         <>
+          {icon !== null && <Ionicons name={icon} size={18} color={colors.textOnPrimary} />}
           <Text style={kg.text}>{title}</Text>
-          {icon !== null && <Ionicons name={icon} size={18} color="#ffffff" />}
         </>
       )}
+    </PressableScale>
+  );
+}
+
+// Lien « Ignorer » posé au-dessus du bouton principal.
+export function SkipLink({ onPress, label = 'Ignorer' }: { onPress: () => void; label?: string }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [kg.skip, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={kg.skipText}>{label}</Text>
     </Pressable>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Carte d'option pleine largeur : icône dans un carré teinté, libellé, coche
-// à la sélection.
+// Rond de sélection : vide, ou prune avec un point blanc. En mode multiple,
+// une case arrondie cochée.
+// ---------------------------------------------------------------------------
+function Mark({ on, multi }: { on: boolean; multi?: boolean }) {
+  // Le contour fond vers le prune et le contenu éclot au ressort : la réponse
+  // se pose sous le doigt au lieu d'apparaître d'un coup.
+  const p = useToggleProgress(on);
+  const shell = useAnimatedStyle(() => {
+    const t = Math.min(Math.max(p.value, 0), 1);
+    return {
+      borderColor: interpolateColor(t, [0, 1], [colors.text, colors.primary]),
+      backgroundColor: interpolateColor(t, [0, 1], ['transparent', colors.primary]),
+    };
+  });
+  const inner = useAnimatedStyle(() => ({
+    opacity: Math.min(Math.max(p.value, 0), 1),
+    transform: [{ scale: p.value }],
+  }));
+  return (
+    <Animated.View style={[multi ? km.box : km.ring, shell]}>
+      <Animated.View style={inner}>
+        {multi ? (
+          <Ionicons name="checkmark" size={15} color={colors.textOnPrimary} />
+        ) : (
+          <View style={km.dot} />
+        )}
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ligne de réponse : libellé, explication facultative, rond à droite. La
+// ligne choisie passe en rose pâle. `icon` ajoute un pictogramme à gauche.
 // ---------------------------------------------------------------------------
 export function OptionCard({
   icon,
   label,
   hint,
   selected,
+  multi,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
   label: string;
   hint?: string;
   selected?: boolean;
+  multi?: boolean;
   onPress: () => void;
 }) {
+  const bg = useSelectedBackground(!!selected, colors.surface, colors.selected);
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.select();
         onPress();
       }}
-      style={({ pressed }) => [
-        ko.card,
-        selected && ko.cardOn,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityRole={multi ? 'checkbox' : 'radio'}
+      accessibilityState={{ checked: !!selected }}
+      scaleTo={0.98}
     >
-      <View style={[ko.iconBox, selected && ko.iconBoxOn]}>
-        <Ionicons
-          name={icon}
-          size={19}
-          color={selected ? colors.textOnAccent : colors.accent}
-        />
-      </View>
-      <View style={ko.body}>
-        <Text style={[ko.label, selected && ko.labelOn]}>{label}</Text>
-        {!!hint && <Text style={ko.hint}>{hint}</Text>}
-      </View>
-      {selected && (
-        <View style={ko.check}>
-          <Ionicons name="checkmark" size={14} color={colors.textOnAccent} />
+      <Animated.View style={[ko.row, !!hint && ko.rowTall, bg]}>
+        {!!icon && <Ionicons name={icon} size={22} color={colors.text} style={ko.icon} />}
+        <View style={ko.body}>
+          <Text style={[ko.label, !!hint && ko.labelStrong]}>{label}</Text>
+          {!!hint && <Text style={ko.hint}>{hint}</Text>}
         </View>
-      )}
-    </Pressable>
+        <Mark on={!!selected} multi={multi} />
+      </Animated.View>
+    </PressableScale>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Tuile de choix : carte demi-largeur verticale (genre, enfants), grande
-// icône, coche à la sélection.
+// Bouton de choix entouré, centré (genre). Choisi, il se remplit de prune.
 // ---------------------------------------------------------------------------
 export function ChoiceTile({
-  icon,
   label,
   selected,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
   label: string;
   selected?: boolean;
   onPress: () => void;
 }) {
+  const p = useToggleProgress(!!selected);
+  const fill = useAnimatedStyle(() => {
+    const t = Math.min(Math.max(p.value, 0), 1);
+    return {
+      backgroundColor: interpolateColor(t, [0, 1], ['transparent', colors.primary]),
+      borderColor: interpolateColor(t, [0, 1], [colors.text, colors.primary]),
+    };
+  });
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.select();
         onPress();
       }}
-      style={({ pressed }) => [
-        kt.tile,
-        selected && kt.tileOn,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: !!selected }}
     >
-      <View style={[kt.iconRing, selected && kt.iconRingOn]}>
-        <Ionicons
-          name={icon}
-          size={26}
-          color={selected ? colors.textOnAccent : colors.accent}
-        />
-      </View>
-      <Text style={[kt.label, selected && kt.labelOn]}>{label}</Text>
-      {selected && (
-        <View style={kt.check}>
-          <Ionicons name="checkmark" size={13} color={colors.textOnAccent} />
-        </View>
-      )}
-    </Pressable>
+      <Animated.View style={[kt.pill, fill]}>
+        <Text style={[kt.label, selected && kt.labelOn]}>{label}</Text>
+      </Animated.View>
+    </PressableScale>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pilules segmentées (Jamais / Parfois / Souvent) : le segment actif porte le
-// dégradé signature. Un nouvel appui sur l'actif le désélectionne (géré par
-// le parent, comme partout dans le parcours).
-// ---------------------------------------------------------------------------
-export function SegmentPills({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: string; label: string }[];
-  value: string | null;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <View style={ks.track}>
-      {options.map((o) => {
-        const on = value === o.value;
-        return (
-          <Pressable
-            key={o.value}
-            style={({ pressed }) => [ks.item, pressed && { opacity: 0.85 }]}
-            onPress={() => {
-              haptic.select();
-              onChange(o.value);
-            }}
-          >
-            {on && (
-              <View style={[StyleSheet.absoluteFill, ks.activeClip]}>
-                <LinearGradient
-                  colors={ACCENT_GRADIENT}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </View>
-            )}
-            <Text style={[ks.text, on && ks.textOn]} numberOfLines={1}>
-              {o.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Chip de sélection : active, elle porte le dégradé signature. Utilisée pour
-// langues, religion, études et centres d'intérêt.
+// Puce de centre d'intérêt : grise avec un « + », rose pâle et cochée une
+// fois choisie.
 // ---------------------------------------------------------------------------
 export function BounceChip({
   label,
+  icon,
   active,
   onPress,
 }: {
   label: string;
+  // Pictogramme au trait posé avant le libellé (centres d'intérêt).
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   active?: boolean;
   onPress: () => void;
 }) {
+  const bg = useSelectedBackground(!!active, colors.surface, colors.selected);
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptic.select();
         onPress();
       }}
-      style={({ pressed }) => [
-        kc.chip,
-        active && kc.chipOn,
-        pressed && { opacity: 0.85 },
-      ]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: !!active }}
+      scaleTo={0.94}
     >
-      {active && (
-        <LinearGradient
-          colors={SELECT_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
+      <Animated.View style={[kc.chip, bg]}>
+        {!!icon && (
+          <MaterialCommunityIcons
+            name={icon}
+            size={17}
+            color={active ? colors.selectedInk : colors.text}
+          />
+        )}
+        <Text style={[kc.text, active && kc.textOn]}>{label}</Text>
+        <Ionicons
+          name={active ? 'checkmark' : 'add'}
+          size={16}
+          color={active ? colors.selectedInk : colors.text}
         />
-      )}
-      <Text style={[kc.text, active && kc.textOn]}>{label}</Text>
-    </Pressable>
+      </Animated.View>
+    </PressableScale>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Trait de saisie : la ligne sous le grand champ du prénom. Pleine quand la
-// saisie est valide, discrète sinon.
+// Trait de saisie sous un champ nu : fin et gris, plus marqué quand la saisie
+// est valide.
 // ---------------------------------------------------------------------------
 export function FocusLine({ active }: { active: boolean }) {
-  return (
-    <View style={kf.track}>
-      <View
-        style={[
-          kf.fill,
-          {
-            transform: [{ scaleX: active ? 1 : 0.08 }],
-            opacity: active ? 1 : 0.35,
-          },
-        ]}
-      >
-        <LinearGradient
-          colors={ACCENT_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-    </View>
-  );
+  return <View style={[kf.line, active && kf.lineOn]} />;
 }
 
 // ---------------------------------------------------------------------------
-// Curseur de taille : une poignée sur un rail, on touche n'importe où et elle
-// s'y place. Le segment parcouru se teinte. `value` null = pas encore choisi :
-// la poignée attend au centre, estompée.
+// Curseur de taille : rail fin, poignée blanche ronde. On touche n'importe où
+// et elle s'y place. `value` null = pas encore choisi, poignée au centre.
 // ---------------------------------------------------------------------------
-const THUMB = 36;
-const TRACK_H = 6;
+const THUMB = 30;
+const TRACK_H = 3;
 
 export function HeightSlider({
   min,
@@ -375,14 +332,13 @@ export function HeightSlider({
     const u = Math.max(width - THUMB, 1);
     setUsable(u);
     const v = value ?? Math.round((min + max) / 2);
-    x.value = ((v - min) / span) * u;
+    x.set(((v - min) / span) * u);
   };
 
-  // « Effacer » côté parent : la poignée revient au centre, sans transition.
   useEffect(() => {
     if (value === null && usable > 0) {
-      last.value = -1;
-      x.value = ((Math.round((min + max) / 2) - min) / span) * usable;
+      last.set(-1);
+      x.set(((Math.round((min + max) / 2) - min) / span) * usable);
     }
   }, [value, usable, min, max, span, x, last]);
 
@@ -394,10 +350,10 @@ export function HeightSlider({
   const moveTo = (ex: number) => {
     'worklet';
     const nx = Math.min(Math.max(ex - THUMB / 2, 0), usable);
-    x.value = nx;
+    x.set(nx);
     const val = Math.round(min + (nx / Math.max(usable, 1)) * span);
     if (val !== last.value) {
-      last.value = val;
+      last.set(val);
       runOnJS(report)(val);
     }
   };
@@ -418,27 +374,12 @@ export function HeightSlider({
   return (
     <GestureDetector gesture={pan}>
       <View
-        style={[kd.wrap, value === null && { opacity: 0.55 }]}
+        style={[kd.wrap, value === null && { opacity: 0.6 }]}
         onLayout={(e) => onLayout(e.nativeEvent.layout.width)}
       >
         <View style={kd.track} />
-        <Animated.View style={[kd.fill, fillStyle]}>
-          <LinearGradient
-            colors={ACCENT_GRADIENT}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[StyleSheet.absoluteFill, { borderRadius: TRACK_H / 2 }]}
-          />
-        </Animated.View>
-        <Animated.View style={[kd.thumb, thumbStyle]}>
-          <LinearGradient
-            colors={ACCENT_GRADIENT}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={kd.thumbDot} />
-        </Animated.View>
+        <Animated.View style={[kd.fill, fillStyle]} />
+        <Animated.View style={[kd.thumb, thumbStyle]} />
       </View>
     </GestureDetector>
   );
@@ -450,212 +391,137 @@ const kh = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
   },
   back: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
   },
   track: {
     flex: 1,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.surface,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
     overflow: 'hidden',
   },
-  fill: {
-    height: '100%',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  count: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.text,
-    minWidth: 36,
-    textAlign: 'right',
-    fontVariant: ['tabular-nums'],
-  },
-  countTotal: { color: colors.textMuted, fontWeight: '600' },
+  fill: { height: '100%', borderRadius: 2, backgroundColor: colors.text },
 });
 
 const kb = StyleSheet.create({
   badge: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.cardSolid,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
+    backgroundColor: colors.selected,
   },
 });
 
 const kg = StyleSheet.create({
   btn: {
-    height: 56,
-    borderRadius: 18,
-    borderBottomRightRadius: 8,
-    overflow: 'hidden',
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    ...shadows.floating,
   },
-  text: { fontSize: 16, fontWeight: '800', color: '#ffffff', letterSpacing: 0.2 },
+  btnFill: { borderRadius: 27 },
+  btnOff: { opacity: 0.4 },
+  text: { fontSize: 16, fontWeight: '700', color: colors.textOnPrimary },
+  skip: { alignSelf: 'center', paddingVertical: 10, marginBottom: 4 },
+  skipText: { fontSize: 15, fontWeight: '600', color: colors.text },
 });
 
-const ko = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.cardSolid,
-    borderRadius: 20,
-    borderBottomRightRadius: sigCorner,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    ...shadows.card,
-  },
-  cardOn: {
-    borderColor: colors.accent,
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  iconBoxOn: { backgroundColor: colors.accent },
-  body: { flex: 1, gap: 2 },
-  label: { fontSize: 16, fontWeight: '600', color: colors.text },
-  labelOn: { fontWeight: '800' },
-  hint: { fontSize: 13, color: colors.textMuted },
-  check: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-
-const kt = StyleSheet.create({
-  tile: {
-    flex: 1,
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.cardSolid,
-    borderRadius: 20,
-    borderBottomRightRadius: sigCorner,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.sm,
-    ...shadows.card,
-  },
-  tileOn: {
-    borderColor: colors.accent,
-  },
-  iconRing: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  iconRingOn: { backgroundColor: colors.accent },
-  label: { fontSize: 15, fontWeight: '700', color: colors.text },
-  labelOn: { color: colors.accent },
-  check: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
+const km = StyleSheet.create({
+  ring: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: colors.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textOnPrimary,
+  },
+  box: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
   },
 });
 
-const ks = StyleSheet.create({
-  track: {
+const ko = StyleSheet.create({
+  row: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderBottomRightRadius: 6,
-    padding: 4,
-    gap: 4,
+    borderRadius: 14,
+    paddingHorizontal: spacing.md,
+    minHeight: 52,
+    paddingVertical: 12,
   },
-  item: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 12,
-    borderBottomRightRadius: 6,
+  rowTall: { paddingVertical: 16 },
+  icon: { width: 24 },
+  body: { flex: 1, gap: 3 },
+  label: { fontSize: 15, fontWeight: '600', color: colors.text },
+  labelStrong: { fontSize: 16, fontWeight: '700' },
+  hint: { fontSize: 13, lineHeight: 18, color: colors.textMuted },
+});
+
+const kt = StyleSheet.create({
+  pill: {
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: colors.text,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
   },
-  activeClip: {
-    borderRadius: 12,
-    borderBottomRightRadius: 6,
-    overflow: 'hidden',
-  },
-  text: { fontSize: 14, fontWeight: '700', color: colors.textMuted },
-  textOn: { color: '#ffffff' },
+  label: { fontSize: 15, fontWeight: '700', color: colors.text },
+  labelOn: { color: colors.textOnPrimary },
 });
 
 const kc = StyleSheet.create({
   chip: {
-    borderRadius: 16,
-    borderBottomRightRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.cardSolid,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  // Sélectionnée : voile rose, liseré prune. Le liseré fait tout le travail de
-  // signalement — sans lui, un voile rose pâle sur une carte claire se verrait
-  // à peine.
-  chipOn: { borderColor: colors.primary },
-  text: { fontSize: 15, fontWeight: '600', color: colors.text },
+  emoji: { fontSize: 15 },
+  text: { fontSize: 14, fontWeight: '600', color: colors.text },
   textOn: { color: colors.selectedInk, fontWeight: '700' },
 });
 
 const kf = StyleSheet.create({
-  track: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    overflow: 'hidden',
-  },
-  fill: { height: '100%', borderRadius: 2, overflow: 'hidden' },
+  line: { height: 1, backgroundColor: colors.border },
+  lineOn: { height: 1.5, backgroundColor: colors.text },
 });
 
 const kd = StyleSheet.create({
-  wrap: {
-    height: THUMB + 10,
-    justifyContent: 'center',
-  },
+  wrap: { height: THUMB + 12, justifyContent: 'center' },
   track: {
     height: TRACK_H,
     borderRadius: TRACK_H / 2,
@@ -667,7 +533,7 @@ const kd = StyleSheet.create({
     left: 0,
     height: TRACK_H,
     borderRadius: TRACK_H / 2,
-    overflow: 'hidden',
+    backgroundColor: colors.text,
     top: '50%',
     marginTop: -TRACK_H / 2,
   },
@@ -677,19 +543,13 @@ const kd = StyleSheet.create({
     width: THUMB,
     height: THUMB,
     borderRadius: THUMB / 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: colors.border,
     shadowColor: '#000',
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.16,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
-  },
-  thumbDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
   },
 });

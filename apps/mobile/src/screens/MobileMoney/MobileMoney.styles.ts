@@ -54,7 +54,7 @@ export const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.6)',
+    backgroundColor: 'rgba(16, 17, 19,.6)',
     justifyContent: 'center',
     padding: spacing.lg,
   },

@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 14, fontWeight: '800', color: colors.textOnAccent },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.6)',
+    backgroundColor: 'rgba(16, 17, 19,.6)',
     justifyContent: 'center',
     padding: spacing.lg,
   },

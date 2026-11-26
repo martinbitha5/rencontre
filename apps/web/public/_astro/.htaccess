@@ -1,0 +1,10 @@
+# Tout ce dossier est produit par Astro : chaque nom de fichier contient une
+# empreinte qui change à chaque modification. Le navigateur peut donc les
+# garder un an sans jamais servir une vieille version.
+<IfModule mod_headers.c>
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 year"
+</IfModule>

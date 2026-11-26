@@ -3,53 +3,48 @@ import { colors, radius, shadows, spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  // L'empreinte en filigrane, calée en haut à droite, légèrement hors cadre.
-  watermark: {
-    position: 'absolute',
-    top: 2,
-    right: -16,
-    opacity: 0.07,
-  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  brand: { fontSize: 30, fontWeight: '800', color: colors.primaryDeep },
-  headerGroup: {
+  headerText: { flex: 1, gap: 4 },
+  brand: { fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  tagline: { fontSize: 14, lineHeight: 19, color: colors.textMuted },
+  headerGroup: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingTop: 6 },
+  balance: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  balanceText: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  headerBtn: { alignItems: 'center', justifyContent: 'center' },
+  // Bandeau de soirée : crème, bordure café, coin signature. Le ticket
+  // magenta est le seul accent : on est quelque part, ce soir.
+  eventBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.sm,
     backgroundColor: colors.cardSolid,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    // Coin signature Velours, version resserrée pour ce petit conteneur.
     borderRadius: 16,
     borderBottomRightRadius: 6,
-    padding: 6,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
   },
-  balance: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.sm,
-  },
-  balanceText: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  // Boutons carrés de l'en-tête : crème, bordure hairline café, et le même
-  // coin signature que leur conteneur.
-  headerBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    borderBottomRightRadius: 5,
-    backgroundColor: colors.cardSolid,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+  eventIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  eventName: { color: colors.primaryDeep, fontSize: 14, fontWeight: '800' },
+  eventHint: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
+  eventAction: { color: colors.primary, fontSize: 12, fontWeight: '800' },
   quotaBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -63,21 +58,26 @@ export const styles = StyleSheet.create({
   },
   quotaText: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
   quotaAction: { color: colors.primary, fontSize: 12, fontWeight: '800' },
-  deck: { flex: 1, margin: spacing.md, marginTop: 0 },
+  // Scène : le paquet occupe tout, les boutons flottent sur le bas de la
+  // photo, comme posés dessus.
+  stage: { flex: 1, marginHorizontal: spacing.md, marginBottom: spacing.sm },
+  deck: { flex: 1 },
   actions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 18,
-    paddingBottom: spacing.md,
+    gap: 20,
   },
-  // Cercle crème (surface de carte) : son X garde l'encre café fixe
-  // (onLight), et l'ombre chaude de l'échelle commune le fait flotter.
+  // Trois ronds blancs, icônes à l'encre : la photo reste la vedette.
   actionBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.cardSolid,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     ...shadows.floating,
   },
   actionInner: {
@@ -86,16 +86,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Ambre du DM : la couleur des pièces habille le message payant, qui se
-  // distingue ainsi du corail du like d'un coup d'oeil.
-  msgBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: colors.purple,
-  },
-  // Pastille blanche portant la pièce dorée : la monnaie interne garde sa
-  // couleur propre sur tous les écrans.
+  msgBtn: { width: 50, height: 50, borderRadius: 25 },
   msgCostBadge: {
     position: 'absolute',
     top: -2,
@@ -107,7 +98,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  likeBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: colors.accent },
+  likeBtn: {},
   emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
   emptyText: {
     fontSize: 15,
@@ -118,7 +109,7 @@ export const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.6)',
+    backgroundColor: 'rgba(16, 17, 19,.6)',
     justifyContent: 'center',
     padding: spacing.lg,
   },

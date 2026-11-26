@@ -8,18 +8,16 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { scanEvent } from '@/services/api';
 import { OperatorLogo, PackIcon, type OperatorBrandId } from '@/components/brand';
-import { Button, ErrorText, HeaderBackButton, ScreenHeader, SectionLabel } from '@/components/ui';
-import { formatCdf, MOBILE_MONEY_OPERATORS, type MobileMoneyOperator } from '@/config/economy';
-import { PAYMENTS_ENABLED } from '@/config/features';
+import { Button, ErrorText, HeaderBackButton, ScreenHeader } from '@/components/ui';
+import { formatCdf, MOBILE_MONEY_OPERATORS } from '@/config/economy';
+import { EVENT_PAYMENTS_ENABLED, PAYMENTS_ENABLED } from '@/config/features';
 import { initiateMobileMoneyPayment, waitForPaymentSettlement } from '@/services/payments';
 import { notifyPartyAccessChanged } from '@/utils/partySignal';
 import { colors, onLight } from '@/theme';
@@ -58,20 +56,6 @@ export default function Scan() {
   const [payError, setPayError] = useState<string | null>(null);
   const lastScan = useRef(0);
 
-  // Opérateur et numéro : Interswitch attend un numéro de client, et un champ
-  // vide lui fait refuser la transaction (« Incorrect Transaction »). On les
-  // demande donc ici, comme dans la boutique. Ils sont conservés entre deux
-  // tentatives : après un paiement raté, on ne retape pas son numéro.
-  const [operatorId, setOperatorId] = useState<MobileMoneyOperator>(
-    MOBILE_MONEY_OPERATORS[0].id,
-  );
-  const [phone, setPhone] = useState('');
-  // Numéro congolais : 9 chiffres après +243, commençant par 8 ou 9.
-  const digits = phone.replace(/\D/g, '');
-  const phoneValid = /^[89]\d{8}$/.test(digits);
-  const operator =
-    MOBILE_MONEY_OPERATORS.find((o) => o.id === operatorId) ?? MOBILE_MONEY_OPERATORS[0];
-
   // Accès accordé (entrée libre, déjà sur la liste, ou paiement validé) :
   // prévenir Rencontres, qui bascule aussitôt sur les personnes présentes.
   const granted = outcome?.kind === 'granted';
@@ -93,11 +77,10 @@ export default function Scan() {
       }
       if (result.status === 'payment_required') {
         setPayError(null);
-        // Aucun tunnel de paiement n'est présenté tant que l'app est
-        // gratuite : une soirée encore tarifée au backoffice se règle alors
-        // auprès de l'organisateur, sur place. Mettre son prix à 0 rend
-        // l'entrée immédiate.
-        if (!PAYMENTS_ENABLED) {
+        // Entrée payante : réglée sur le web (EVENT_PAYMENTS_ENABLED), même
+        // quand le reste de l'app est gratuit. Si les deux interrupteurs sont
+        // coupés, elle se règle auprès de l'organisateur, sur place.
+        if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) {
           setOutcome({
             kind: 'denied',
             message: `L'entrée de « ${result.name} » se règle directement auprès de l'organisateur. Re-scanne le code une fois sur la liste.`,
@@ -110,6 +93,9 @@ export default function Scan() {
           name: result.name,
           priceCdf: result.price_cdf,
         });
+        // Pas d'écran intermédiaire : la page de paiement s'ouvre aussitôt.
+        // L'écran avec le bouton ne sert plus qu'à réessayer après un échec.
+        void payEntry(result.event_id, result.name);
         return;
       }
       // Déjà sur la liste, ou entrée libre : rien à payer.
@@ -125,18 +111,17 @@ export default function Scan() {
   // la base), paiement sur la page sécurisée Interswitch (carte ou Mobile
   // Money), puis verdict redemandé au serveur. L'accès n'est jamais accordé
   // ici : c'est multipay-return qui l'inscrit, après vérification.
-  const payEntry = async () => {
-    if (outcome?.kind !== 'payment' || !phoneValid) return;
-    const { eventId, name } = outcome;
+  async function payEntry(eventId: string, name: string) {
     setPayError(null);
     setPaying(true);
     setPushed(false);
 
+    // Sans opérateur ni numéro : le serveur prend le rail navigateur et
+    // renvoie l'adresse de la page de paiement du site, où l'on choisit
+    // Mobile Money ou carte.
     const result = await initiateMobileMoneyPayment({
       kind: 'event',
       itemId: eventId,
-      operator: operatorId,
-      phone: `+243${digits}`,
     });
     if (result.status === 'unavailable') {
       setPaying(false);
@@ -213,7 +198,7 @@ export default function Scan() {
     setPayError(
       "Le paiement n'est pas encore confirmé. Dès sa validation, re-scanne le code : ton entrée sera reconnue.",
     );
-  };
+  }
 
   const closeOutcome = () => {
     setOutcome(null);
@@ -268,7 +253,7 @@ export default function Scan() {
             <Ionicons name="ticket-outline" size={22} color={colors.accent} />
           </View>
           <Text style={styles.hintText}>
-            {PAYMENTS_ENABLED
+            {PAYMENTS_ENABLED || EVENT_PAYMENTS_ENABLED
               ? "L'accès se paie une seule fois : ensuite tu peux sortir et revenir librement."
               : "L'accès se valide une seule fois : ensuite tu peux sortir et revenir librement."}
           </Text>
@@ -298,7 +283,7 @@ export default function Scan() {
         ) : outcome?.kind === 'granted' ? (
           <View style={[styles.result, styles.resultGranted]}>
             <View style={styles.resultIcon}>
-              <Ionicons name="checkmark" size={72} color="#2C8A57" />
+              <Ionicons name="checkmark" size={72} color="#16a34a" />
             </View>
             {/* Fond accent : encre blanche, comme l'écran de refus. Les styles
                 partagés visent le fond neutre de l'écran de paiement, où le
@@ -318,6 +303,15 @@ export default function Scan() {
             <View style={styles.resultActions}>
               <Button title="Découvrir qui est là" onPress={goToParty} />
             </View>
+          </View>
+        ) : outcome?.kind === 'payment' && paying ? (
+          <View style={[styles.result, styles.resultPayment]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.resultTitle}>Ouverture du paiement</Text>
+            <Text style={styles.resultName}>{outcome.name}</Text>
+            <Text style={styles.resultText}>
+              {`Entrée ${formatCdf(outcome.priceCdf)}. La page sécurisée s’ouvre, tu y paies par Mobile Money ou par carte.`}
+            </Text>
           </View>
         ) : outcome?.kind === 'payment' ? (
           <SafeAreaView style={styles.paymentSafe} edges={['top', 'bottom']}>
@@ -341,71 +335,38 @@ export default function Scan() {
                   </Text>
                 </View>
 
-                <SectionLabel>Moyen de paiement</SectionLabel>
-                <View style={styles.group}>
-                  {MOBILE_MONEY_OPERATORS.map((op) => {
-                    const active = op.id === operatorId;
-                    return (
-                      <Pressable
-                        key={op.id}
-                        style={({ pressed }) => [
-                          styles.row,
-                          active && styles.rowActive,
-                          pressed && { opacity: 0.7 },
-                        ]}
-                        onPress={() => setOperatorId(op.id)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                      >
-                        <OperatorLogo id={op.id as OperatorBrandId} size={38} />
-                        <Text style={styles.rowLabel}>{op.name}</Text>
-                        <Ionicons
-                          name={active ? 'radio-button-on' : 'radio-button-off'}
-                          size={20}
-                          color={active ? colors.primary : colors.textMuted}
-                        />
-                      </Pressable>
-                    );
-                  })}
+                {/* Paiement sur le web : la page sécurisée du site, où l'on
+                    choisit Mobile Money ou carte. Rien à saisir ici. */}
+                <View style={styles.webPay}>
+                  <View style={styles.webPayHead}>
+                    <View style={styles.webPayIcon}>
+                      <Ionicons name="lock-closed" size={18} color={colors.primary} />
+                    </View>
+                    <Text style={styles.webPayTitle}>Paiement sécurisé sur le web</Text>
+                  </View>
+                  <Text style={styles.webPayText}>
+                    Une page de paiement s’ouvre. Tu y règles l’entrée par Mobile Money ou par
+                    carte bancaire, puis tu reviens ici automatiquement.
+                  </Text>
+                  <View style={styles.webPayMethods}>
+                    {MOBILE_MONEY_OPERATORS.map((op) => (
+                      <OperatorLogo key={op.id} id={op.id as OperatorBrandId} size={34} />
+                    ))}
+                    <View style={styles.cardChip}>
+                      <Ionicons name="card" size={18} color={colors.text} />
+                      <Text style={styles.cardChipText}>Carte</Text>
+                    </View>
+                  </View>
                 </View>
-
-                <View
-                  style={[
-                    styles.phoneRow,
-                    !phoneValid && digits.length === 9 && styles.phoneRowError,
-                  ]}
-                >
-                  <Text style={styles.prefix}>+243</Text>
-                  <TextInput
-                    style={styles.phoneInput}
-                    placeholder="Numéro de téléphone"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="phone-pad"
-                    maxLength={11}
-                    value={phone}
-                    onChangeText={(v) => {
-                      setPhone(v);
-                      setPayError(null);
-                    }}
-                    accessibilityLabel={`Numéro ${operator.name}`}
-                  />
-                  {phoneValid && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-                  )}
-                </View>
-                <Text style={styles.paymentHint}>
-                  {`Le numéro du compte ${operator.name} qui règle l'entrée. Tu termines dans la fenêtre sécurisée du service de paiement, où la carte bancaire reste possible.`}
-                </Text>
 
                 <ErrorText>{payError}</ErrorText>
               </ScrollView>
 
               <View style={styles.paymentFooter}>
                 <Button
-                  title={`Payer ${formatCdf(outcome.priceCdf)}`}
-                  onPress={payEntry}
+                  title={payError ? 'Réessayer le paiement' : `Payer ${formatCdf(outcome.priceCdf)}`}
+                  onPress={() => void payEntry(outcome.eventId, outcome.name)}
                   loading={paying}
-                  disabled={!phoneValid}
                 />
                 <Button title="Annuler" variant="ghost" onPress={closeOutcome} />
               </View>

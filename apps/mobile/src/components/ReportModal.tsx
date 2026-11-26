@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, spacing, keyboardAppearance } from '@/theme';
 import { Button } from '@/components/ui';
 
 // Doit correspondre à la contrainte check de la table reports.
@@ -91,6 +91,7 @@ export function ReportModal({
                   Ce qui s’est passé {chosen.key === 'autre' ? '' : '(facultatif)'}
                 </Text>
                 <TextInput
+                  keyboardAppearance={keyboardAppearance}
                   style={styles.input}
                   value={details}
                   onChangeText={setDetails}
@@ -119,7 +120,7 @@ export function ReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.6)',
+    backgroundColor: 'rgba(16, 17, 19,.6)',
     justifyContent: 'flex-end',
   },
   card: {

@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,8 +13,11 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
+import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
+import { PressableScale } from '@/components/motion';
 import { haptic } from '@/utils/haptics';
-import { colors, isIOS, m3, radius, shadows, spacing } from '@/theme';
+import { colors, flame, isIOS, m3, radius, shadows, spacing, keyboardAppearance } from '@/theme';
+import { safeBack } from '@/utils/safeBack';
 
 // Chaque composant parle la langue de sa plateforme : Liquid Glass sur iOS
 // (translucides, pilules, enfoncement au ressort), Material 3 sur Android
@@ -41,6 +44,63 @@ export function VerifiedBadge({ size = 18 }: { size?: number }) {
       color={VERIFIED_BLUE}
       accessibilityLabel="Profil certifié"
     />
+  );
+}
+
+// Durée d'affichage de l'infobulle « Profil certifié » après un appui.
+const VERIFIED_HINT_MS = 1600;
+// Largeur de la bulle, assez large pour « Profil certifié » sur une ligne.
+const VERIFIED_HINT_W = 132;
+
+// Badge certifié qui S'EXPLIQUE au toucher : un appui fait apparaître une
+// petite infobulle sombre « Profil certifié » au-dessus du pictogramme, qui
+// s'efface d'elle-même. Le badge seul reste le repère ; le mot n'apparaît que
+// quand on le demande, et ne masque jamais la photo durablement.
+export function VerifiedBadgeButton({ size = 18 }: { size?: number }) {
+  const [shown, setShown] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  const reveal = () => {
+    haptic.select();
+    setShown(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setShown(false), VERIFIED_HINT_MS);
+  };
+
+  return (
+    <View style={styles.verifiedWrap}>
+      {shown && (
+        <Animated.View
+          entering={FadeInDown.duration(180)}
+          exiting={FadeOut.duration(220)}
+          // Largeur FIXE et posée en absolu par rapport au badge : un enfant
+          // absolu hérite de la largeur de son parent (ici celle du badge,
+          // une vingtaine de points), le texte se repliait lettre par lettre.
+          style={[styles.verifiedHint, { bottom: size + 8, left: size / 2 - VERIFIED_HINT_W / 2 }]}
+          pointerEvents="none"
+        >
+          <Text style={styles.verifiedHintText} numberOfLines={1}>
+            Profil certifié
+          </Text>
+          <View style={styles.verifiedHintCaret} />
+        </Animated.View>
+      )}
+      <Pressable
+        onPress={reveal}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Profil certifié"
+        accessibilityHint="Affiche la signification du badge"
+      >
+        <VerifiedBadge size={size} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -74,7 +134,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled 
     danger: '#ffffff',
   }[variant];
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         // Impact franc pour l'action principale, léger pour le reste.
         if (variant === 'primary' || variant === 'danger') haptic.impact();
@@ -82,6 +142,11 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled 
         onPress();
       }}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityState={{
+        disabled: !!(disabled || loading),
+        busy: !!loading,
+      }}
       // Ondulation Material : claire sur les fonds pleins, teintée ailleurs.
       android_ripple={{ color: filled ? m3.rippleOnPrimary : m3.ripple }}
       style={({ pressed }) => [
@@ -93,19 +158,28 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled 
         // iOS : les variantes pleines portent une ombre, elles se détachent du
         // fond comme de vrais boutons. M3 : un bouton plein reste plat.
         isIOS && (variant === 'primary' || variant === 'secondary') && shadows.card,
-        isIOS && variant === 'primary' && pressed && { backgroundColor: colors.accentPressed },
+        // Le bouton principal porte le dégradé flamme du site : à l'appui il
+        // s'assombrit légèrement, comme le filtre brightness(.94) du site.
+        isIOS && variant === 'primary' && pressed && { opacity: 0.9 },
         isIOS && variant !== 'primary' && pressed && { opacity: 0.75 },
-        // Retour tactile iOS : le bouton se comprime légèrement sous le doigt.
-        isIOS && pressed && { transform: [{ scale: 0.98 }] },
         (disabled || loading) && { opacity: 0.45 },
       ]}
     >
+      {variant === 'primary' && (
+        <LinearGradient
+          pointerEvents="none"
+          colors={flame}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 1, y: 0 }}
+          style={[StyleSheet.absoluteFill, styles.buttonFill]}
+        />
+      )}
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
         <Text style={[styles.buttonText, { color: fg }]}>{title}</Text>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -122,7 +196,14 @@ interface ChipProps {
 export function Chip({ label, active, onPress, small }: ChipProps) {
   return (
     <Pressable
-      onPress={onPress ? () => { haptic.select(); onPress(); } : undefined}
+      onPress={
+        onPress
+          ? () => {
+              haptic.select();
+              onPress();
+            }
+          : undefined
+      }
       disabled={!onPress}
       android_ripple={{ color: m3.ripple }}
       style={({ pressed }) => [
@@ -131,7 +212,10 @@ export function Chip({ label, active, onPress, small }: ChipProps) {
         active &&
           (isIOS
             ? { backgroundColor: colors.primary }
-            : { backgroundColor: m3.secondaryContainer, borderColor: 'transparent' }),
+            : {
+                backgroundColor: m3.secondaryContainer,
+                borderColor: 'transparent',
+              }),
         isIOS && pressed && { opacity: 0.8 },
       ]}
     >
@@ -139,7 +223,9 @@ export function Chip({ label, active, onPress, small }: ChipProps) {
         style={[
           styles.chipText,
           small && styles.chipTextSmall,
-          active && { color: isIOS ? colors.textOnPrimary : m3.onSecondaryContainer },
+          active && {
+            color: isIOS ? colors.textOnPrimary : m3.onSecondaryContainer,
+          },
         ]}
       >
         {label}
@@ -165,11 +251,16 @@ export function SectionCard({
   );
 }
 
-export function Input(props: TextInputProps) {
+export function Input(
+  props: TextInputProps & {
+    ref?: React.Ref<React.ComponentRef<typeof TextInput>>;
+  },
+) {
   // Liseré vert quand le champ a le focus : on sait toujours où on écrit.
   const [focused, setFocused] = useState(false);
   return (
     <TextInput
+      keyboardAppearance={keyboardAppearance}
       placeholderTextColor={colors.textMuted}
       {...props}
       onFocus={(e) => {
@@ -200,7 +291,7 @@ export function HeaderBackButton({ onPress }: { onPress?: () => void }) {
   const router = useRouter();
   return (
     <Pressable
-      onPress={onPress ?? (() => router.back())}
+      onPress={onPress ?? (() => safeBack(router))}
       hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel="Retour"
@@ -266,15 +357,12 @@ export function WizardHeader({
   const router = useRouter();
   return (
     <View style={styles.wizardHeader}>
-      <Pressable onPress={onBack ?? (() => router.back())} hitSlop={12} style={styles.backBtn}>
+      <Pressable onPress={onBack ?? (() => safeBack(router))} hitSlop={12} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={22} color={colors.text} />
       </Pressable>
       <View style={styles.progressSegments}>
         {Array.from({ length: total }).map((_, i) => (
-          <View
-            key={i}
-            style={[styles.progressSegment, i < step && styles.progressSegmentDone]}
-          />
+          <View key={i} style={[styles.progressSegment, i < step && styles.progressSegmentDone]} />
         ))}
       </View>
       <Text style={styles.stepCounter}>
@@ -340,7 +428,10 @@ export function Segmented<T extends string>({
             !isIOS && i > 0 && styles.segmentDivider,
             value === o.key && styles.segmentActive,
           ]}
-          onPress={() => { haptic.select(); onChange(o.key); }}
+          onPress={() => {
+            haptic.select();
+            onChange(o.key);
+          }}
         >
           <Text
             style={[styles.segmentText, value === o.key && styles.segmentTextActive]}
@@ -372,7 +463,10 @@ export function OptionRow({
         selected && styles.optionRowSelected,
         isIOS && pressed && { opacity: 0.85 },
       ]}
-      onPress={() => { haptic.select(); onPress(); }}
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
     >
       <Text style={[styles.optionRowText, selected && { color: colors.primary }]}>{label}</Text>
       {selected && (
@@ -411,7 +505,10 @@ export function SelectableCard({
         isIOS && pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
         style,
       ]}
-      onPress={() => { haptic.select(); onPress(); }}
+      onPress={() => {
+        haptic.select();
+        onPress();
+      }}
     >
       {(!!title || !!badge) && (
         <View style={styles.selectCardHead}>
@@ -481,7 +578,7 @@ export function HeaderBand({
             largeur, assez épais pour se voir, dans la palette pour rester
             élégant. */}
         <LinearGradient
-          colors={[colors.accent, colors.accentPressed, colors.accent]}
+          colors={[flame[0], flame[1], flame[0]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.headerBandEdge}
@@ -519,7 +616,10 @@ export function MenuRow({
         styles.menuRow,
         isIOS && pressed && { backgroundColor: colors.surface },
       ]}
-      onPress={() => { haptic.tap(); onPress(); }}
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
     >
       {!!icon && (
         <View style={styles.menuRowIcon}>
@@ -543,6 +643,30 @@ export function MenuRow({
 }
 
 const styles = StyleSheet.create({
+  verifiedWrap: { alignItems: 'center', justifyContent: 'center' },
+  // Bulle sombre à largeur fixe (position horizontale posée en ligne).
+  verifiedHint: {
+    position: 'absolute',
+    width: VERIFIED_HINT_W,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 17, 19,0.92)',
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    zIndex: 10,
+    elevation: 10,
+  },
+  verifiedHintText: { color: '#ffffff', fontSize: 12.5, fontWeight: '700' },
+  // Petite pointe sous la bulle, vers le badge.
+  verifiedHintCaret: {
+    position: 'absolute',
+    bottom: -5,
+    width: 10,
+    height: 10,
+    backgroundColor: 'rgba(16, 17, 19,0.92)',
+    transform: [{ rotate: '45deg' }],
+  },
   wizardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -567,8 +691,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   progressSegmentDone: { backgroundColor: colors.accent },
-  stepCounter: { fontSize: 13, fontWeight: '700', color: colors.textMuted, minWidth: 30, textAlign: 'right' },
-  stepTitleBlock: { paddingHorizontal: spacing.md, marginTop: spacing.lg, gap: spacing.sm },
+  stepCounter: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+    minWidth: 30,
+    textAlign: 'right',
+  },
+  stepTitleBlock: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
   stepTitleText: {
     fontSize: 30,
     fontWeight: '800',
@@ -577,7 +711,11 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   stepSubtitleText: { fontSize: 15, color: colors.textMuted, lineHeight: 22 },
-  stepIntro: { paddingHorizontal: spacing.md, marginTop: spacing.sm, gap: spacing.sm },
+  stepIntro: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
   stepIconBox: {
     width: 52,
     height: 52,
@@ -617,7 +755,9 @@ const styles = StyleSheet.create({
     ? { backgroundColor: colors.primary, ...shadows.card }
     : { backgroundColor: m3.secondaryContainer },
   segmentText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-  segmentTextActive: { color: isIOS ? colors.textOnPrimary : m3.onSecondaryContainer },
+  segmentTextActive: {
+    color: isIOS ? colors.textOnPrimary : m3.onSecondaryContainer,
+  },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -637,7 +777,12 @@ const styles = StyleSheet.create({
   },
   // flexShrink : un libellé long passe à la ligne au lieu de pousser la coche
   // hors de la pilule sur les petits écrans.
-  optionRowText: { fontSize: 16, fontWeight: '600', color: colors.text, flexShrink: 1 },
+  optionRowText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    flexShrink: 1,
+  },
   optionCheck: {
     width: 22,
     height: 22,
@@ -656,18 +801,35 @@ const styles = StyleSheet.create({
     overflow: isIOS ? undefined : 'hidden',
   },
   selectCardSelected: isIOS
-    ? { borderColor: colors.primary, backgroundColor: colors.card, ...shadows.card }
+    ? {
+        borderColor: colors.primary,
+        backgroundColor: colors.card,
+        ...shadows.card,
+      }
     : { borderColor: colors.primary, backgroundColor: m3.surfaceContainerHigh },
-  selectCardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  selectCardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   // flexShrink : le badge reste visible même si le titre est long.
-  selectCardTitle: { fontSize: 17, fontWeight: '800', color: colors.text, flexShrink: 1 },
+  selectCardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.text,
+    flexShrink: 1,
+  },
   selectCardBadge: {
     backgroundColor: colors.accent,
     borderRadius: radius.full,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  selectCardBadgeText: { fontSize: 11, fontWeight: '800', color: colors.textOnAccent },
+  selectCardBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textOnAccent,
+  },
   selectCardDesc: { fontSize: 13, color: colors.textMuted, lineHeight: 19 },
   selectCardCheck: {
     position: 'absolute',
@@ -740,7 +902,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuRowLabel: { flex: 1, minWidth: 0, fontSize: 16, fontWeight: '600', color: colors.text },
+  menuRowLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
   menuRowDetail: {
     fontSize: 14,
     fontWeight: '600',
@@ -755,6 +923,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
+  buttonFill: { borderRadius: radius.full },
   buttonText: {
     fontSize: 16,
     fontWeight: '700',
@@ -848,7 +1017,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   screenHeaderTitle: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     textAlign: 'center',
     textAlignVertical: 'center',
     lineHeight: 52,

@@ -5,8 +5,10 @@ import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorText, StepIntro } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
-import { colors } from '@/theme';
+import { colors, keyboardAppearance } from '@/theme';
 import { styles } from './Verify.styles';
+import { safeBack } from '@/utils/safeBack';
+import { type InputHandle, useFocusWhenShown } from '@/utils/useFocusWhenShown';
 
 const CODE_LENGTH = 6;
 const RESEND_DELAY = 60;
@@ -21,7 +23,14 @@ export default function Verify() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_DELAY);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<InputHandle>(null);
+  useFocusWhenShown(inputRef, !!email);
+
+  // Sans e-mail, cet écran ne peut rien vérifier (ouverture directe, état
+  // restauré) : retour à l'accueil plutôt qu'une demande de code sans issue.
+  useEffect(() => {
+    if (!email) router.replace('/(auth)/welcome');
+  }, [email, router]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -58,9 +67,11 @@ export default function Verify() {
     setCountdown(RESEND_DELAY);
   };
 
+  if (!email) return <SafeAreaView style={styles.safe} />;
+
   return (
     <SafeAreaView style={styles.safe}>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
+      <Pressable onPress={() => safeBack(router, '/(auth)/welcome')} hitSlop={10} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <KeyboardAvoidingView
@@ -73,7 +84,10 @@ export default function Verify() {
           subtitle={`Insère le code reçu par e-mail à ${email ?? ''}. Si tu ne le vois pas, vérifie tes spams.`}
         />
 
-        <Pressable style={styles.boxes} onPress={() => inputRef.current?.focus()}>
+        {/* Le vrai champ est posé sur les cases, invisible mais à taille
+            réelle : un champ de 1 px perdait le focus sur Android (clavier
+            qui sort puis se referme). Toucher une case touche le champ. */}
+        <View style={styles.boxes}>
           {Array.from({ length: CODE_LENGTH }).map((_, i) => (
             <View
               key={i}
@@ -86,16 +100,20 @@ export default function Verify() {
               <Text style={styles.boxText}>{code[i] ?? ''}</Text>
             </View>
           ))}
-        </Pressable>
-        <TextInput
-          ref={inputRef}
-          value={code}
-          onChangeText={onChange}
-          keyboardType="number-pad"
-          maxLength={CODE_LENGTH}
-          autoFocus
-          style={styles.hiddenInput}
-        />
+          <TextInput
+            keyboardAppearance={keyboardAppearance}
+            ref={inputRef}
+            value={code}
+            onChangeText={onChange}
+            keyboardType="number-pad"
+            maxLength={CODE_LENGTH}
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            caretHidden
+            contextMenuHidden
+            style={styles.hiddenInput}
+          />
+        </View>
 
         <Pressable onPress={resend} disabled={countdown > 0} hitSlop={8}>
           <Text style={[styles.resend, countdown > 0 && { color: colors.textMuted }]}>

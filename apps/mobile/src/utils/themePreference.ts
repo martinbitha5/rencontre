@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
-import { Appearance, DevSettings } from 'react-native';
+import { AppState, Appearance, DevSettings } from 'react-native';
 import { isDark } from '@/theme';
 
 // Choix de thème : « system » suit le téléphone, « light » et « dark » forcent.
@@ -63,7 +63,9 @@ export async function setThemePref(pref: ThemePref): Promise<void> {
   try {
     await AsyncStorage.setItem(PREF_KEY, pref);
   } catch {}
-  Appearance.setColorScheme(pref === 'system' ? null : pref);
+  // « unspecified » rend la main au réglage du téléphone (null n'est plus
+  // accepté depuis React Native 0.88).
+  Appearance.setColorScheme(pref === 'system' ? 'unspecified' : pref);
 
   // Thème forcé : la cible est connue d'avance, aucune lecture native à
   // faire. On recharge dès qu'elle diffère de ce que l'écran montre.
@@ -89,16 +91,48 @@ export async function setThemePref(pref: ThemePref): Promise<void> {
 // figé au chargement : tant que l'effectif lui correspond, rien à faire.
 // Un thème forcé pose un override natif : l'effectif ne bouge alors pas, le
 // guetteur reste muet.
+//
+// Piège iOS : quand l'app passe en arrière-plan, le système la redessine en
+// clair PUIS en sombre pour les aperçus du sélecteur d'apps, et émet deux
+// changements de thème qui n'en sont pas. Réagir à ces faux signaux
+// rechargeait l'app à chaque passage dans une autre app, et un rechargement
+// lancé pendant la mise en arrière-plan plantait Expo Go (« runtime not
+// ready », « Cannot find native module 'ExpoAsset' »). On ne décide donc
+// qu'au premier plan, après un court délai qui laisse le système se poser,
+// et on revérifie au retour au premier plan.
+const SETTLE_MS = 600;
+
 export function watchSystemTheme(): () => void {
-  const sub = Appearance.addChangeListener(() => {
-    (async () => {
-      const pref = await getThemePref();
-      if (pref !== 'system') return;
-      const current = Appearance.getColorScheme() ?? 'light';
-      if (current !== FROZEN_SCHEME) await reloadBundle();
-    })().catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const check = async () => {
+    if (AppState.currentState !== 'active') return;
+    const pref = await getThemePref();
+    if (pref !== 'system') return;
+    const current = Appearance.getColorScheme() ?? 'light';
+    if (current !== FROZEN_SCHEME && AppState.currentState === 'active') {
+      await reloadBundle();
+    }
+  };
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      check().catch(() => {});
+    }, SETTLE_MS);
+  };
+
+  const themeSub = Appearance.addChangeListener(schedule);
+  // Thème du téléphone changé pendant que l'app dormait : on l'applique au
+  // retour, une fois l'app vraiment au premier plan.
+  const appSub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') schedule();
+    else if (timer) clearTimeout(timer);
   });
-  return () => sub.remove();
+  return () => {
+    if (timer) clearTimeout(timer);
+    themeSub.remove();
+    appSub.remove();
+  };
 }
 
 // Appelée une fois au démarrage, derrière l'écran de chargement.

@@ -1,7 +1,8 @@
-import * as Haptics from 'expo-haptics';
+import { haptic } from '@/utils/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -13,28 +14,40 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAppLock } from '@/providers/applock';
 import { useAuth } from '@/providers/auth';
-import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/ZolaLogo';
-import { brandRamp } from '@/theme';
+import { FingerprintDraw } from '@/components/ZolaLogo';
+import { flame } from '@/theme';
 
-// Intro de démarrage : les lignes de l'empreinte (le logo Zola) se dessinent
-// une à une, un éclat de lumière signe la reconnaissance, le wordmark
-// apparaît, l'écran tient un court instant puis s'efface en fondu avec un
-// léger zoom sur l'app. Rapide (~2 s) : c'est une signature, pas un film.
+// Intro de démarrage, dans le prolongement EXACT de l'écran de démarrage
+// natif (app.json : logo empreinte blanc, 76 pt, centré, sur #fd267a).
 //
-// Tout est piloté par Reanimated sur le thread UI (60 fps), le dessin des
-// lignes vit dans FingerprintDraw (composant partagé du logo).
+// Avant, l'écran natif montrait le logo, puis l'intro repartait d'un fond plus
+// sombre avec un logo vide redessiné trait par trait : à l'ouverture, le logo
+// disparaissait puis réapparaissait. Maintenant :
+//   1. l'écran natif reste affiché tant que l'intro n'a pas peint sa première
+//      image (RootLayout bloque la disparition automatique) ;
+//   2. l'intro démarre sur le même rose plein, le logo déjà formé, à la même
+//      taille et au même endroit ;
+//   3. le fond glisse vers le dégradé flamme du site (rose vers orange), le
+//      logo grandit, l'éclat de reconnaissance passe, le wordmark apparaît,
+//      puis fondu vers l'app.
+// Rien ne disparaît pour revenir ensuite.
 
-// Chronologie (ms depuis le montage). Le dessin lui-même suit la chronologie
-// exportée par ZolaLogo (formé + éclat retombé à LOGO_FORMED_MS).
-const WORD_AT = 850; // apparition du wordmark, chevauche la fin du dessin
-const DONE_AT = LOGO_FORMED_MS + 550; // logo formé puis tenue d'environ 0,5 s
-const EXIT_MS = 420;
+const SPLASH_BG = '#fd267a'; // app.json > expo-splash-screen > backgroundColor
+const LOGO_SIZE = 150;
+// Le glyphe occupe ~75 % de l'image de l'écran natif (76 pt) : ~57 pt.
+// FingerprintDraw le dessine sur ~85 % de sa taille : 0,45 recolle les deux.
+const START_SCALE = 0.45;
+
+const GROW_MS = 650;
+const WORD_AT = 380;
+const DONE_AT = 1250; // logo formé, wordmark posé, courte tenue
+const EXIT_MS = 380;
 
 export function IntroSplash({ onFinish }: { onFinish: () => void }) {
   // Sortie conditionnée à deux choses : l'animation est arrivée au bout de sa
   // tenue, ET l'app derrière est prête (session chargée, verrou évalué). La
   // navigation de Gate s'est faite pendant l'intro : le fondu débouche
-  // directement sur le bon écran, profils compris.
+  // directement sur le bon écran.
   const { loading, syncing } = useAuth();
   const { ready: lockReady } = useAppLock();
   const appReady = lockReady && !loading && !syncing;
@@ -44,59 +57,63 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
   const [exiting, setExiting] = useState(false);
   const exitStarted = useRef(false);
 
+  const solid = useSharedValue(1); // rose plein de l'écran natif
+  const logoScale = useSharedValue(reduceMotion ? 1 : START_SCALE);
   const wordOpacity = useSharedValue(reduceMotion ? 1 : 0);
   const wordShift = useSharedValue(reduceMotion ? 0 : 10);
   const overlayOpacity = useSharedValue(1);
   const overlayScale = useSharedValue(1);
 
+  // L'écran natif ne s'efface qu'une fois la première image de l'intro
+  // posée : jamais d'image vide entre les deux.
+  const onFirstLayout = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (reduceMotion) {
-      // Accessibilité : pas de chorégraphie, le logo formé s'affiche
-      // brièvement puis s'efface en fondu simple.
-      const t = setTimeout(() => setAnimDone(true), 800);
+      solid.set(withTiming(0, { duration: 300 }));
+      const t = setTimeout(() => setAnimDone(true), 700);
       return () => clearTimeout(t);
     }
-    wordOpacity.value = withDelay(WORD_AT, withTiming(1, { duration: 380 }));
-    wordShift.value = withDelay(
+    solid.set(withTiming(0, { duration: 520, easing: Easing.inOut(Easing.quad) }));
+    logoScale.set(withTiming(1, { duration: GROW_MS, easing: Easing.out(Easing.cubic) }));
+    wordOpacity.set(withDelay(WORD_AT, withTiming(1, { duration: 360 })));
+    wordShift.set(withDelay(
       WORD_AT,
-      withTiming(0, { duration: 380, easing: Easing.out(Easing.cubic) }),
-    );
+      withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) }),
+    ));
 
-    // Micro retour haptique au moment de l'éclat : discret, façon capteur
-    // d'empreinte qui reconnaît. Sans objet sur le web.
-    const haptic = setTimeout(() => {
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-    }, 800);
+    // Retour haptique de l'éclat : passe par utils/haptics, désactivé pour
+    // l'instant.
+    const tick = setTimeout(() => haptic.tap(), 300);
     const done = setTimeout(() => setAnimDone(true), DONE_AT);
     return () => {
-      clearTimeout(haptic);
+      clearTimeout(tick);
       clearTimeout(done);
     };
-  }, [reduceMotion, wordOpacity, wordShift]);
+  }, [reduceMotion, solid, logoScale, wordOpacity, wordShift]);
 
   useEffect(() => {
     if (!animDone || !appReady || exitStarted.current) return;
     exitStarted.current = true;
     setExiting(true);
-    overlayScale.value = withTiming(1.06, {
-      duration: EXIT_MS,
-      easing: Easing.in(Easing.cubic),
-    });
-    overlayOpacity.value = withTiming(
+    overlayScale.set(withTiming(1.05, { duration: EXIT_MS, easing: Easing.in(Easing.cubic) }));
+    overlayOpacity.set(withTiming(
       0,
       { duration: EXIT_MS, easing: Easing.inOut(Easing.quad) },
       (finished) => {
         if (finished) runOnJS(onFinish)();
       },
-    );
+    ));
   }, [animDone, appReady, overlayOpacity, overlayScale, onFinish]);
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
     transform: [{ scale: overlayScale.value }],
   }));
+  const solidStyle = useAnimatedStyle(() => ({ opacity: solid.value }));
+  const logoStyle = useAnimatedStyle(() => ({ transform: [{ scale: logoScale.value }] }));
   const wordStyle = useAnimatedStyle(() => ({
     opacity: wordOpacity.value,
     transform: [{ translateY: wordShift.value }],
@@ -106,33 +123,49 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
     <Animated.View
       style={[styles.overlay, overlayStyle]}
       pointerEvents={exiting ? 'none' : 'auto'}
+      onLayout={onFirstLayout}
     >
+      {/* Dégradé flamme du site (--flame, 45 degrés). */}
       <LinearGradient
-        colors={brandRamp}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.fill}
-      >
-        <FingerprintDraw size={150} color="#ffffff" glowColor="#f0704f" strokeWidth={2} />
-        <Animated.View style={wordStyle}>
+        colors={flame}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: SPLASH_BG }, solidStyle]} />
+
+      {/* Le logo reste au centre exact de l'écran, comme sur l'écran natif.
+          Le wordmark se pose dessous sans le déplacer. */}
+      <View style={styles.center} pointerEvents="none">
+        <Animated.View style={logoStyle}>
+          <FingerprintDraw drawn size={LOGO_SIZE} color="#ffffff" glowColor="#ffffff" strokeWidth={2} />
+        </Animated.View>
+        <Animated.View style={[styles.words, wordStyle]}>
           <Text style={styles.wordmark}>ZOLA</Text>
           <Text style={styles.tagline}>Des rencontres qui comptent</Text>
         </Animated.View>
-      </LinearGradient>
+      </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 100,
   },
-  fill: {
-    flex: 1,
+  center: {
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 18,
+  },
+  words: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: LOGO_SIZE / 2 + 18,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   wordmark: {
     color: '#ffffff',
@@ -144,7 +177,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tagline: {
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
     fontWeight: '500',
     marginTop: 6,

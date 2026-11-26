@@ -1,3 +1,4 @@
+import type { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 // Listes d'options des champs de profil détaillés + libellés d'affichage.
 
 export interface Option {
@@ -21,6 +22,20 @@ export const GOAL_OPTIONS: Option[] = [
   { value: 'rien_de_serieux', label: 'Rien de sérieux' },
   { value: 'je_me_laisse_surprendre', label: 'Je me laisse surprendre' },
 ];
+
+// Une icône par intention, la même partout (carte du deck, fiche, profil,
+// onboarding, filtres) : on reconnaît une intention avant de lire son nom.
+const GOAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  relation_serieuse: 'heart',
+  mariage: 'diamond',
+  amitie: 'people',
+  rien_de_serieux: 'cafe',
+  je_me_laisse_surprendre: 'sparkles',
+};
+
+export function goalIcon(value: string | null | undefined): keyof typeof Ionicons.glyphMap {
+  return (value && GOAL_ICONS[value]) || 'heart';
+}
 
 export const HAS_CHILDREN_OPTIONS: Option[] = [
   { value: 'non', label: 'Non' },
@@ -84,37 +99,38 @@ export const INTEREST_OPTIONS: string[] = [
   'Nature',
 ];
 
-// Emoji de chaque centre d'intérêt : les chips du deck et de la fiche en
-// portent tous un, sur la carte du deck comme dans la fiche détaillée.
-export const INTEREST_EMOJI: Record<string, string> = {
-  Musique: '🎵',
-  Gospel: '🙏',
-  Rumba: '🎺',
-  Danse: '💃',
-  Cuisine: '🍲',
-  Voyage: '✈️',
-  Lecture: '📚',
-  Cinéma: '🎬',
-  Séries: '📺',
-  Fitness: '💪',
-  Football: '⚽',
-  Basket: '🏀',
-  Mode: '👗',
-  Beauté: '💄',
-  Photographie: '📷',
-  Art: '🎨',
-  Tech: '💻',
-  'Jeux vidéo': '🎮',
-  Entrepreneuriat: '💼',
-  Église: '⛪',
-  Famille: '👨‍👩‍👧',
-  Brunch: '🥐',
-  Karaoké: '🎤',
-  Nature: '🌿',
+// Pictogramme de chaque centre d'intérêt (jeu MaterialCommunityIcons) : les
+// puces du deck, de la fiche et de l'édition en portent tous un.
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+export const INTEREST_ICON: Record<string, IconName> = {
+  Musique: 'music-note',
+  Gospel: 'hands-pray',
+  Rumba: 'trumpet',
+  Danse: 'human-female-dance',
+  Cuisine: 'pot-steam-outline',
+  Voyage: 'airplane',
+  Lecture: 'book-open-variant',
+  Cinéma: 'movie-open-outline',
+  Séries: 'television-classic',
+  Fitness: 'dumbbell',
+  Football: 'soccer',
+  Basket: 'basketball',
+  Mode: 'hanger',
+  Beauté: 'lipstick',
+  Photographie: 'camera-outline',
+  Art: 'palette-outline',
+  Tech: 'laptop',
+  'Jeux vidéo': 'gamepad-variant-outline',
+  Entrepreneuriat: 'briefcase-outline',
+  Église: 'church',
+  Famille: 'account-group-outline',
+  Brunch: 'coffee-outline',
+  Karaoké: 'microphone-variant',
+  Nature: 'leaf',
 };
 
-export function interestEmoji(interest: string): string {
-  return INTEREST_EMOJI[interest] ?? '✨';
+export function interestIcon(interest: string): IconName {
+  return INTEREST_ICON[interest] ?? 'star-four-points-outline';
 }
 
 export function labelFor(options: Option[], value: string | null | undefined): string | null {

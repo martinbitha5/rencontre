@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { colors, isDark, radius, spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
@@ -34,88 +34,16 @@ export const styles = StyleSheet.create({
     color: colors.text,
     maxWidth: 200,
   },
-  list: { padding: spacing.md, gap: 6, flexGrow: 1 },
   emptyText: {
     textAlign: 'center',
     color: colors.textMuted,
     marginTop: spacing.xl,
     fontSize: 15,
   },
-  msgColMine: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '78%' },
-  msgColTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start', maxWidth: '78%' },
-  // Espace entre deux groupes de parole (6 de gap + 8 = 14).
-  groupGap: { marginTop: 8 },
-  dayRow: { alignItems: 'center', marginVertical: spacing.sm },
-  // Pilule café translucide en clair, voile ivoire en sombre : texte ivoire.
-  dayPill: {
-    backgroundColor: isDark ? 'rgba(246,237,243,0.16)' : 'rgba(72,26,70,0.78)',
-    color: '#F6EDF3',
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  bubble: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  bubbleMine: {
-    backgroundColor: colors.accent,
-    borderBottomRightRadius: 6,
-  },
-  bubbleTheirs: {
-    backgroundColor: colors.cardSolid,
-    borderBottomLeftRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    alignSelf: 'flex-end',
-    marginTop: 2,
-  },
-  metaTime: { fontSize: 11 },
-  // Sur une photo ou une vidéo : petite pastille sombre en bas à droite.
-  mediaMeta: {
-    position: 'absolute',
-    bottom: 9,
-    right: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: radius.full,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  reactionsPill: {
-    flexDirection: 'row',
-    gap: 4,
-    backgroundColor: colors.surface,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginTop: -6,
-    marginHorizontal: 6,
-  },
   reactionText: { fontSize: 13 },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginTop: 2,
-    marginRight: 4,
-  },
   actionOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.55)',
+    backgroundColor: 'rgba(16, 17, 19,.55)',
     justifyContent: 'flex-end',
     padding: spacing.md,
   },
@@ -150,15 +78,6 @@ export const styles = StyleSheet.create({
   },
   actionRowText: { fontSize: 16, color: colors.text },
   actionRowTextDanger: { fontSize: 16, color: colors.danger, fontWeight: '600' },
-  bubbleText: { fontSize: 16, color: colors.text, lineHeight: 22 },
-  // Barre de saisie posée directement sur le fond, sans bandeau.
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.sm,
-  },
   // Bandeau qui remplace le composeur quand le DM initial attend sa réponse.
   // Même gabarit que le composeur pour que la fin de l'écran ne saute pas.
   lockedNotice: {
@@ -174,19 +93,6 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: colors.textMuted,
-  },
-  input: {
-    flex: 1,
-    minHeight: 46,
-    maxHeight: 120,
-    borderRadius: radius.full,
-    backgroundColor: colors.cardSolid,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
   },
   sendBtn: {
     width: 46,
@@ -248,24 +154,6 @@ export const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   recordingLabel: { flex: 1, fontSize: 14, color: colors.textMuted },
-  voiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: 2,
-    minWidth: 120,
-  },
-  voiceText: { fontSize: 14, fontWeight: '600' },
-  attachBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.cardSolid,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   bubbleMedia: { padding: 3, backgroundColor: 'transparent', borderWidth: 0 },
   mediaBubble: {
     width: 210,
@@ -292,4 +180,106 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // ---- Fil de messages, gabarit messagerie ----
+  list: { paddingHorizontal: 10, paddingTop: spacing.sm, paddingBottom: spacing.sm, flexGrow: 1 },
+  // 2 points entre deux bulles d'une même grappe, 10 entre deux grappes.
+  rowGrouped: { marginTop: 2 },
+  rowNewGroup: { marginTop: 10 },
+  // Repère horaire centré, petites capitales grises : « MAR. 12:08 ».
+  stamp: {
+    alignSelf: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    color: colors.textMuted,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  msgLine: { flexDirection: 'row', alignItems: 'flex-end' },
+  msgLineMine: { justifyContent: 'flex-end' },
+  msgLineTheirs: { justifyContent: 'flex-start' },
+  // Réserve la place de la photo sur toute la grappe : les bulles restent
+  // alignées même quand la photo ne s'affiche qu'au pied.
+  avatarCol: { width: 28, marginRight: 8, alignItems: 'center' },
+  tinyFallback: {
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tinyFallbackText: { color: '#ffffff', fontWeight: '700' },
+  msgColMine: { alignItems: 'flex-end', maxWidth: '76%' },
+  msgColTheirs: { alignItems: 'flex-start', maxWidth: '72%' },
+  bubble: { paddingHorizontal: 14, paddingVertical: 9 },
+  bubbleMine: { backgroundColor: colors.accent },
+  // Bulle reçue pleine, sans contour : un gris rosé en clair, un voile en sombre.
+  bubbleTheirs: { backgroundColor: isDark ? 'rgba(255, 225, 234,0.12)' : '#f0f1f4' },
+  bubblePending: { opacity: 0.7 },
+  bubbleText: { fontSize: 16, lineHeight: 21, color: colors.text },
+  bubbleTextMine: { color: '#ffffff' },
+  // Emojis seuls : en grand, sans bulle.
+  emojiBubble: { paddingVertical: 2 },
+  bigEmoji: { fontSize: 40, lineHeight: 50 },
+  reactionsPill: {
+    flexDirection: 'row',
+    gap: 3,
+    backgroundColor: colors.cardSolid,
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: -8,
+    ...(isDark ? {} : { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } }),
+    elevation: 1,
+  },
+  reactionsMine: { alignSelf: 'flex-end', marginRight: 8 },
+  reactionsTheirs: { alignSelf: 'flex-start', marginLeft: 8 },
+  tapTime: { fontSize: 11, color: colors.textMuted, marginTop: 3, marginHorizontal: 6 },
+  seenRow: { alignSelf: 'flex-end', marginTop: 4, marginRight: 2 },
+  statusText: {
+    alignSelf: 'flex-end',
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 4,
+    marginRight: 4,
+  },
+
+  // ---- Note vocale ----
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2 },
+  voicePlay: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  voicePlayMine: { backgroundColor: '#ffffff' },
+  voicePlayTheirs: { backgroundColor: colors.accent },
+  wave: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 26 },
+  waveBar: { width: 3, borderRadius: 1.5 },
+  voiceText: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'], minWidth: 32 },
+
+  // ---- Barre de saisie ----
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  iconBtn: { width: 40, height: 42, alignItems: 'center', justifyContent: 'center' },
+  inputPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 42,
+    borderRadius: 21,
+    backgroundColor: isDark ? 'rgba(255, 225, 234,0.10)' : '#f0f1f4',
+    paddingLeft: 16,
+    paddingRight: 6,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    paddingTop: Platform.OS === 'ios' ? 11 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 11 : 8,
+    fontSize: 16,
+    color: colors.text,
+  },
+  inPillBtn: { width: 34, height: 42, alignItems: 'center', justifyContent: 'center' },
 });

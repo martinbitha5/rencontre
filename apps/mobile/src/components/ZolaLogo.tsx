@@ -114,10 +114,10 @@ function DrawnPath({
 
   useEffect(() => {
     if (instant) return;
-    dash.value = withDelay(
+    dash.set(withDelay(
       index * STAGGER,
       withTiming(0, { duration: drawDuration(len), easing: DRAW_EASE }),
-    );
+    ));
   }, [dash, index, len, instant]);
 
   const props = useAnimatedProps(() => ({ strokeDashoffset: dash.value }));
@@ -142,6 +142,7 @@ export function FingerprintDraw({
   glowColor,
   strokeWidth = 2,
   pulse = false,
+  drawn = false,
 }: {
   size?: number;
   color?: string;
@@ -151,44 +152,51 @@ export function FingerprintDraw({
   // Après formation, respiration douce de la lueur (états d'attente : tant
   // que le chargement derrière n'est pas fini, le logo reste vivant).
   pulse?: boolean;
+  // Logo déjà formé dès la première image (pas de dessin trait par trait).
+  // Sert au démarrage, pour enchaîner sans coupure avec l'écran de
+  // démarrage natif qui montre déjà le logo entier.
+  drawn?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
+  const still = reduceMotion || drawn;
   const glow = glowColor ?? color;
 
-  const dotOpacity = useSharedValue(reduceMotion ? 1 : 0);
+  const dotOpacity = useSharedValue(still ? 1 : 0);
   const flashOpacity = useSharedValue(0);
   const glowOpacity = useSharedValue(reduceMotion ? 0.25 : 0);
-  const tilt = useSharedValue(reduceMotion ? 0 : -14);
-  const zoom = useSharedValue(reduceMotion ? 1 : 0.93);
+  const tilt = useSharedValue(still ? 0 : -14);
+  const zoom = useSharedValue(still ? 1 : 0.93);
 
   useEffect(() => {
     if (reduceMotion) {
       if (pulse) {
-        glowOpacity.value = withRepeat(
+        glowOpacity.set(withRepeat(
           withSequence(
             withTiming(0.45, { duration: 900, easing: Easing.inOut(Easing.quad) }),
             withTiming(0.2, { duration: 900, easing: Easing.inOut(Easing.quad) }),
           ),
           -1,
-        );
+        ));
       }
       return;
     }
-    tilt.value = withTiming(0, { duration: 950, easing: Easing.out(Easing.cubic) });
-    zoom.value = withTiming(1, { duration: 950, easing: Easing.out(Easing.cubic) });
-    glowOpacity.value = withTiming(0.25, { duration: 700, easing: Easing.out(Easing.quad) });
-    dotOpacity.value = withDelay(DOT_AT, withTiming(1, { duration: 140 }));
+    if (!drawn) {
+      tilt.set(withTiming(0, { duration: 950, easing: Easing.out(Easing.cubic) }));
+      zoom.set(withTiming(1, { duration: 950, easing: Easing.out(Easing.cubic) }));
+      dotOpacity.set(withDelay(DOT_AT, withTiming(1, { duration: 140 })));
+    }
+    glowOpacity.set(withTiming(0.25, { duration: 700, easing: Easing.out(Easing.quad) }));
     // L'éclat : le glyphe entier s'illumine brièvement, comme un capteur qui
-    // reconnaît l'empreinte.
-    flashOpacity.value = withDelay(
-      FLASH_AT,
+    // reconnaît l'empreinte. Logo déjà formé : l'éclat vient plus tôt.
+    flashOpacity.set(withDelay(
+      drawn ? 260 : FLASH_AT,
       withSequence(
         withTiming(0.9, { duration: 110, easing: Easing.out(Easing.quad) }),
         withTiming(0, { duration: 320, easing: Easing.in(Easing.quad) }),
       ),
-    );
+    ));
     if (pulse) {
-      glowOpacity.value = withDelay(
+      glowOpacity.set(withDelay(
         LOGO_FORMED_MS,
         withRepeat(
           withSequence(
@@ -197,9 +205,9 @@ export function FingerprintDraw({
           ),
           -1,
         ),
-      );
+      ));
     }
-  }, [reduceMotion, pulse, tilt, zoom, glowOpacity, dotOpacity, flashOpacity]);
+  }, [reduceMotion, drawn, pulse, tilt, zoom, glowOpacity, dotOpacity, flashOpacity]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${tilt.value}deg` }, { scale: zoom.value }],
@@ -236,7 +244,7 @@ export function FingerprintDraw({
             index={i}
             color={color}
             strokeWidth={strokeWidth}
-            instant={reduceMotion}
+            instant={still}
           />
         ))}
         <AnimatedPath

@@ -4,35 +4,38 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { photoUrl, sendDirectMessage } from '@/services/api';
 import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
 import { PAYMENTS_ENABLED } from '@/config/features';
-import { CoinIcon } from '@/components/coins';
 import { haptic } from '@/utils/haptics';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useWallet } from '@/providers/wallet';
-import { brandRamp, colors } from '@/theme';
+import { colors, flame, keyboardAppearance } from '@/theme';
 import type { DirectMessageResult } from '@/types';
 
-// Écran d'envoi du premier message : PLEIN ÉCRAN, pas une petite carte. La
-// photo du profil habille tout le fond (floutée), le portrait net trône au
-// centre, et l'écriture devient un moment à part entière. Les informations
-// affichées restent simples : à qui on écrit, ce que ça coûte, une seule
-// règle dite avec des mots de tous les jours.
+// Écran d'envoi du premier message, plein écran et clair : en-tête avec retour
+// et titre centré, la carte du destinataire, un grand champ encadré qui
+// signale le minimum de caractères, le compteur, la règle de contenu, puis le
+// coût et le bouton d'envoi en bas.
 //
 // La logique est inchangée : mêmes règles de contenu, même envoi, même
 // contrat (target / onClose / onResult) pour les écrans qui l'utilisent.
+//
+// Les marges de la fenêtre viennent du provider racine, qui traverse la
+// Modal : sur Android à barre d'état translucide, une SafeAreaView native ne
+// les recevait pas et le bouton de sortie passait sous la barre d'état.
 
 interface Target {
   user_id: string;
@@ -43,6 +46,12 @@ interface Target {
 }
 
 const DM_MAX = 150;
+// Un « salut » d'une lettre ne lance pas une conversation : deux au minimum.
+const DM_MIN = 2;
+
+// Largeur maximale de la colonne de contenu : sur tablette ou en paysage,
+// le formulaire reste une colonne lisible au centre au lieu de s'étirer.
+const COLUMN_MAX = 480;
 
 // Un premier DM ne doit pas permettre de partager des coordonnées : pas de
 // chiffres (numéros de téléphone), pas de caractères spéciaux (@, handles,
@@ -83,7 +92,32 @@ export function DirectMessageModal({
   // Android edge-to-edge : le champ et le bouton Envoyer doivent remonter
   // au-dessus du clavier (iOS reste sur le KeyboardAvoidingView).
   const keyboardInset = useKeyboardInset();
+  // Marges de la fenêtre, lues dans le contexte du provider racine : elles
+  // valent dans une Modal là où la SafeAreaView native ne les voit pas. Si
+  // même elles sont nulles sur Android (anciens appareils), la hauteur de la
+  // barre d'état sert de plancher, puisque la Modal passe dessous.
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0,
+  );
+  // Clavier ouvert : le portrait et le sous-titre s'effacent, le champ prend
+  // toute la hauteur libre. Ce qu'on écrit reste visible en entier, sans
+  // avoir à faire défiler quoi que ce soit.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const subs = [
+      Keyboard.addListener(showEvent, () => setKeyboardOpen(true)),
+      Keyboard.addListener(hideEvent, () => setKeyboardOpen(false)),
+    ];
+    return () => subs.forEach((s) => s.remove());
+  }, []);
+  const showHero = !keyboardOpen;
+
   const [draft, setDraft] = useState('');
+  const [focused, setFocused] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contentError = dmContentError(draft.trim());
@@ -100,7 +134,7 @@ export function DirectMessageModal({
 
   const send = async () => {
     const content = draft.trim();
-    if (!content || !target || sending || dmContentError(content)) return;
+    if (content.length < DM_MIN || !target || sending || dmContentError(content)) return;
     setSending(true);
     setError(null);
     try {
@@ -119,312 +153,316 @@ export function DirectMessageModal({
     }
   };
 
+  // Fermer range d'abord le clavier : sinon, sur Android, il reste parfois
+  // affiché une fraction de seconde au-dessus de l'écran de dessous.
+  const close = () => {
+    if (sending) return;
+    Keyboard.dismiss();
+    onClose();
+  };
+
   const photoPath = target?.photos?.[0]?.path ?? null;
   const shownError = contentError ?? error;
+
+  const trimmed = draft.trim();
+  const tooShort = trimmed.length < DM_MIN;
+  const canSend = !tooShort && contentError === null && !sending;
+  const left = DM_MAX - draft.length;
 
   return (
     <Modal
       visible={target !== null}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={close}
       statusBarTranslucent
     >
-      <View style={styles.screen}>
-        {/* Fond : la photo du profil, floutée et assombrie. L'écran est un
-            tête-à-tête, pas un formulaire. */}
-        {photoPath ? (
-          <Image
-            source={{ uri: photoUrl(photoPath) }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            blurRadius={40}
-          />
-        ) : (
-          <LinearGradient
-            colors={brandRamp}
-            start={{ x: 0.1, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-        <LinearGradient
-          colors={['rgba(23,18,23,0.55)', 'rgba(23,18,23,0.75)', 'rgba(23,18,23,0.92)']}
-          style={StyleSheet.absoluteFill}
-        />
-
-        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={[
-              styles.flex,
-              Platform.OS === 'android' && keyboardInset > 0
-                ? { paddingBottom: keyboardInset }
-                : null,
-            ]}
-          >
-            <View style={styles.topBar}>
-              <Pressable
-                onPress={() => {
-                  haptic.tap();
-                  onClose();
-                }}
-                hitSlop={12}
-                style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Ionicons name="close" size={22} color="#ffffff" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.content}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+      {/* Les marges vivent sur cette vue, pas sur le KeyboardAvoidingView :
+          en mode padding, il écrase le paddingBottom qu'on lui donne. */}
+      <View
+        style={[
+          styles.screen,
+          {
+            paddingTop: topInset,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[
+            styles.flex,
+            Platform.OS === 'android' && keyboardInset > 0 ? { paddingBottom: keyboardInset } : null,
+          ]}
+        >
+          {/* En-tête : retour à gauche, titre centré. */}
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => {
+                haptic.tap();
+                close();
+              }}
+              hitSlop={12}
+              disabled={sending}
+              accessibilityRole="button"
+              accessibilityLabel="Retour"
+              style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.5 }]}
             >
-              {/* Portrait net dans un anneau dégradé, posé sur le fond flouté. */}
-              <View style={styles.avatarRing}>
-                <LinearGradient
-                  colors={['#9B3F7A', '#C7963C']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.avatarClip}>
-                  {photoPath ? (
-                    <Image
-                      source={{ uri: photoUrl(photoPath) }}
-                      style={styles.avatar}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarFallback]}>
-                      <Ionicons name="person" size={38} color="rgba(255,255,255,0.8)" />
-                    </View>
-                  )}
+              <Ionicons name="chevron-back" size={28} color={colors.text} />
+            </Pressable>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              Envoyer un DM
+            </Text>
+            <View style={styles.headerBtn} />
+          </View>
+
+          <View style={[styles.body, styles.column]}>
+            {/* À qui l'on écrit. La carte s'efface quand le clavier monte :
+                le champ garde la place. */}
+            {showHero && (
+              <View style={styles.recipient}>
+                {photoPath ? (
+                  <Image
+                    source={{ uri: photoUrl(photoPath) }}
+                    style={styles.avatar}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Ionicons name="person" size={24} color={colors.primary} />
+                  </View>
+                )}
+                <View style={styles.recipientText}>
+                  <Text style={styles.recipientName} numberOfLines={1}>
+                    {target?.display_name}
+                  </Text>
+                  <Text style={styles.recipientHint} numberOfLines={1}>
+                    Ton message arrive dans ses DMs
+                  </Text>
+                </View>
+                <View style={styles.recipientBadge}>
+                  <Ionicons name="chatbubble-ellipses" size={18} color={colors.primary} />
                 </View>
               </View>
+            )}
 
-              <Text style={styles.title}>Un premier mot pour {target?.display_name}</Text>
-              <Text style={styles.subtitle}>
-                Parle avec ton cœur et reste courtois(e). Si {target?.display_name} répond,
-                le match se crée et votre conversation commence.
-              </Text>
+            <Text style={styles.lead}>
+              Écris un message direct à {target?.display_name}. Parle avec ton cœur et surtout,
+              sois poli(e).
+            </Text>
 
-              <View style={styles.inputCard}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Écris quelque chose de sympa…"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  value={draft}
-                  onChangeText={setDraft}
-                  multiline
-                  maxLength={DM_MAX}
-                  autoFocus
-                />
-                <Text style={styles.counter}>
-                  {draft.length}/{DM_MAX}
-                </Text>
-              </View>
+            <View
+              style={[
+                styles.field,
+                focused && styles.fieldFocused,
+                shownError ? styles.fieldError : null,
+              ]}
+            >
+              <TextInput
+                keyboardAppearance={keyboardAppearance}
+                style={styles.input}
+                placeholder="Écris quelque chose de sympa"
+                placeholderTextColor={colors.textMuted}
+                value={draft}
+                onChangeText={setDraft}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                multiline
+                maxLength={DM_MAX}
+                autoFocus
+                scrollEnabled
+              />
+              {tooShort && <Text style={styles.minHint}>Min. {DM_MIN}</Text>}
+            </View>
 
+            <Text style={[styles.meta, left <= 15 && styles.metaWarn]}>
+              {left} caractère{left > 1 ? 's' : ''} restant{left > 1 ? 's' : ''}
+            </Text>
+
+            {shownError ? (
+              <Text style={styles.error}>{shownError}</Text>
+            ) : (
               <View style={styles.ruleRow}>
-                <Ionicons name="shield-checkmark-outline" size={15} color="rgba(255,255,255,0.65)" />
+                <Ionicons name="shield-checkmark-outline" size={15} color={colors.textMuted} />
                 <Text style={styles.ruleText}>
-                  Pas de numéro ni de réseaux sociaux : juste des mots.
+                  Pas de numéro ni de réseaux sociaux, juste des mots.
                 </Text>
               </View>
+            )}
+          </View>
 
-              {!!shownError && <Text style={styles.error}>{shownError}</Text>}
-            </ScrollView>
+          <View style={[styles.footer, styles.column]}>
+            {/* Le coût, dit en une phrase. Rien à payer tant que l'app est
+                gratuite. */}
+            <Text style={styles.cost}>
+              {!PAYMENTS_ENABLED
+                ? 'Ce DM est gratuit.'
+                : freeLeft !== null && freeLeft > 0
+                  ? `Ce DM est offert. Encore ${freeLeft} message${freeLeft > 1 ? 's' : ''} offert${freeLeft > 1 ? 's' : ''}.`
+                  : `Ce DM te coûtera ${formatCoins(costs.dm_cost)} ${COIN_NAME_PLURAL}.`}
+            </Text>
 
-            <View style={styles.footer}>
-              {/* En mode gratuit, écrire en premier ne coûte rien et ne
-                  consomme aucun quota : on l'annonce d'un mot, sans compteur
-                  ni pièce. */}
-              <View style={styles.costRow}>
-                {!PAYMENTS_ENABLED ? (
-                  <>
-                    <View style={styles.freePill}>
-                      <Text style={styles.freePillText}>Offert</Text>
-                    </View>
-                    <Text style={styles.costText}>Le premier message est gratuit</Text>
-                  </>
-                ) : freeLeft !== null && freeLeft > 0 ? (
-                  <>
-                    <View style={styles.freePill}>
-                      <Text style={styles.freePillText}>Offert</Text>
-                    </View>
-                    <Text style={styles.costText}>
-                      Encore {freeLeft} message{freeLeft > 1 ? 's' : ''} offert
-                      {freeLeft > 1 ? 's' : ''}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <CoinIcon size={15} />
-                    <Text style={styles.costText}>
-                      {formatCoins(costs.dm_cost)} {COIN_NAME_PLURAL}
-                    </Text>
-                  </>
-                )}
-              </View>
-
-              <Pressable
-                onPress={() => {
-                  haptic.impact();
-                  send();
-                }}
-                disabled={!draft.trim() || contentError !== null || sending}
-                style={({ pressed }) => [
-                  styles.sendBtn,
-                  (!draft.trim() || contentError !== null) && { opacity: 0.4 },
-                  pressed && { transform: [{ scale: 0.98 }] },
-                ]}
-              >
+            <Pressable
+              onPress={() => {
+                haptic.impact();
+                send();
+              }}
+              disabled={!canSend}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer le message"
+              style={({ pressed }) => [
+                styles.sendBtn,
+                !canSend && !sending && styles.sendBtnOff,
+                pressed && { transform: [{ scale: 0.98 }] },
+              ]}
+            >
+              {(canSend || sending) && (
                 <LinearGradient
-                  colors={[colors.accent, colors.accentPressed]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  colors={flame}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 1, y: 0 }}
                   style={StyleSheet.absoluteFill}
                 />
-                {sending ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <>
-                    <Text style={styles.sendText}>Envoyer</Text>
-                    <Ionicons name="paper-plane" size={17} color="#ffffff" />
-                  </>
-                )}
-              </Pressable>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+              )}
+              {sending ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <>
+                  <Text style={[styles.sendText, !canSend && styles.sendTextOff]}>Envoyer</Text>
+                  <Ionicons
+                    name="paper-plane"
+                    size={17}
+                    color={canSend ? '#ffffff' : colors.textMuted}
+                  />
+                </>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#171217' },
-  safe: { flex: 1 },
+  screen: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  topBar: {
+  header: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  closeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
-  content: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  avatarRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    padding: 3,
-    overflow: 'hidden',
-    marginBottom: 18,
-  },
-  avatarClip: { flex: 1, borderRadius: 45, overflow: 'hidden' },
-  avatar: { width: '100%', height: '100%' },
-  avatarFallback: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 25,
+  headerBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 20,
     fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-    maxWidth: 320,
+    color: colors.primaryDeep,
+    letterSpacing: -0.2,
   },
-  subtitle: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    maxWidth: 320,
-    marginTop: 8,
-    marginBottom: 22,
-  },
-  inputCard: {
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  // Colonne bornée en largeur : tablette et paysage compris.
+  column: { width: '100%', maxWidth: COLUMN_MAX, alignSelf: 'center' },
+  body: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
+  recipient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.inputBg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 20,
-    padding: 16,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 16,
   },
-  input: {
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  avatarFallback: {
+    backgroundColor: colors.selected,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recipientText: { flex: 1, minWidth: 0 },
+  recipientName: { fontSize: 16, fontWeight: '800', color: colors.text },
+  recipientHint: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  recipientBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.selected,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lead: { fontSize: 15, lineHeight: 22, color: colors.textMuted, marginBottom: 14 },
+  // Le champ prend la hauteur libre (bornée) ; il défile à l'intérieur
+  // seulement si le message dépasse encore.
+  field: {
+    flex: 1,
     minHeight: 120,
-    maxHeight: 200,
+    maxHeight: 240,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 32,
+    backgroundColor: colors.background,
+  },
+  fieldFocused: { borderColor: colors.primary },
+  fieldError: { borderColor: colors.danger },
+  input: {
+    flex: 1,
     fontSize: 17,
     lineHeight: 24,
-    color: '#ffffff',
+    color: colors.text,
     textAlignVertical: 'top',
   },
-  counter: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-    textAlign: 'right',
-    marginTop: 6,
+  minHint: {
+    position: 'absolute',
+    right: 14,
+    bottom: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  meta: {
+    marginTop: 8,
+    paddingHorizontal: 4,
+    fontSize: 13,
+    color: colors.textMuted,
     fontVariant: ['tabular-nums'],
   },
+  metaWarn: { color: colors.danger, fontWeight: '700' },
   ruleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 12,
+    marginTop: 10,
+    paddingHorizontal: 4,
+    minHeight: 20,
   },
-  ruleText: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
+  ruleText: { color: colors.textMuted, fontSize: 13, flexShrink: 1 },
+  // L'erreur prend la place de la règle : même hauteur, rien ne saute.
   error: {
-    color: '#F08078',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 12,
-    maxWidth: 320,
+    color: colors.danger,
+    fontSize: 13,
+    marginTop: 10,
+    paddingHorizontal: 4,
+    minHeight: 20,
   },
-  footer: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 10,
-    gap: 12,
-  },
-  costRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  freePill: {
-    backgroundColor: 'rgba(95,201,138,0.2)',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  freePillText: { color: '#5FC98A', fontSize: 12, fontWeight: '800' },
-  costText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' },
-  // Coin signature Velours : l'angle bas droit est plus petit que les autres.
+  footer: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10, gap: 12 },
+  cost: { textAlign: 'center', fontSize: 14, fontWeight: '600', color: colors.textMuted },
   sendBtn: {
     height: 56,
-    borderRadius: 18,
-    borderBottomRightRadius: 8,
+    borderRadius: 999,
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
+  sendBtnOff: { backgroundColor: colors.surface },
   sendText: { fontSize: 16, fontWeight: '800', color: '#ffffff' },
+  sendTextOff: { color: colors.textMuted },
 });

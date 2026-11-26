@@ -1,19 +1,63 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { getMyVerification, getVerificationChallenge, submitVerification } from '@/services/api';
-import { Button, Centered, ScreenHeader } from '@/components/ui';
-import { colors } from '@/theme';
-import type { VerificationState } from '@/types';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, Mask, Rect } from 'react-native-svg';
+import {
+  getMyPhotos,
+  getMyVerification,
+  getVerificationChallenge,
+  photoUrl,
+  submitVerification,
+} from '@/services/api';
+import { GlassSurface, Reveal } from '@/components/motion';
+import {
+  Button,
+  Centered,
+  HeaderBackButton,
+  ScreenHeader,
+  VerifiedBadge,
+} from '@/components/ui';
+import { ZolaMark } from '@/components/ZolaLogo';
+import { showToast } from '@/components/TopToast';
+import { SITE } from '@/config/support';
+import { PoseCard } from './PoseCard';
+import { GestureImage } from '@/components/GestureArt';
+import { useAuth } from '@/providers/auth';
+import { cacheGet, cacheSet } from '@/utils/cache';
+import { haptic } from '@/utils/haptics';
+import { colors, isDark, photoScrim, spacing } from '@/theme';
+import { ageFromBirthDate, type MyPhoto, type VerificationState } from '@/types';
 import { styles } from './VerifyProfile.styles';
+import { safeBack } from '@/utils/safeBack';
 
 // Le geste est tiré au sort PAR LE SERVEUR et assigné au compte : deux
 // personnes n'ont pas le même, et relancer l'application ne le change pas.
-// C'est tout l'intérêt du procédé — une photo récupérée ailleurs ne peut pas
+// C'est tout l'intérêt du procédé, une photo récupérée ailleurs ne peut pas
 // répondre à une consigne qu'on ne pouvait pas connaître à l'avance.
 // Les codes viennent de draw_gesture() (migration 031) ; cette table ne sert
 // qu'à les afficher.
@@ -33,12 +77,22 @@ const UNKNOWN_GESTURE = { label: 'le geste demandé', icon: 'help-circle-outline
 const gestureFor = (code: string | null | undefined) =>
   (code && GESTURES[code]) || UNKNOWN_GESTURE;
 
-const gestureLabel = (code: string | null) => gestureFor(code).label;
+type Step = 'intro' | 'pose' | 'camera' | 'preview' | 'sent';
 
-type Step = 'intro' | 'camera' | 'preview' | 'sent';
+// Date d'envoi d'une demande, en français court : « 14 sept., 17:36 ».
+function formatSentAt(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString(
+    'fr-FR',
+    { hour: '2-digit', minute: '2-digit' },
+  )}`;
+}
 
 export default function VerifyProfile() {
   const router = useRouter();
+  const { profile } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<VerificationState | null>(null);
   const [step, setStep] = useState<Step>('intro');
@@ -46,6 +100,9 @@ export default function VerifyProfile() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const camera = useRef<CameraView>(null);
+  // Ma première photo : le héros montre MA carte, badge compris, telle que
+  // les autres la verront. Lue d'abord dans le cache, corrigée par le réseau.
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
 
   // Le geste vient du serveur, jamais d'un tirage local.
   const [gestureCode, setGestureCode] = useState<string | null>(null);
@@ -66,11 +123,21 @@ export default function VerifyProfile() {
 
   useEffect(() => {
     load();
+    cacheGet<MyPhoto[]>('my-photos').then((cached) => {
+      if (cached?.[0]) setPhotoPath((prev) => prev ?? cached[0].storage_path);
+    });
+    getMyPhotos()
+      .then((fresh) => {
+        setPhotoPath(fresh[0]?.storage_path ?? null);
+        cacheSet('my-photos', fresh);
+      })
+      .catch(() => {});
   }, [load]);
 
   const takeShot = async () => {
     if (!camera.current || !ready || busy) return;
     setBusy(true);
+    haptic.impact();
     try {
       const photo = await camera.current.takePictureAsync({ base64: true, quality: 0.5 });
       if (!photo?.base64) throw new Error('no_image');
@@ -90,7 +157,12 @@ export default function VerifyProfile() {
       await submitVerification(shot.base64);
       setShot(null);
       setStep('sent');
-      await load();
+      showToast({
+        tone: 'pending',
+        text: 'On a bien reçu ta photo. On te prévient très vite !',
+      });
+      safeBack(router);
+      load();
     } catch (e) {
       const raw = String((e as { message?: string })?.message ?? '');
       const message = raw.includes('no_profile_photo')
@@ -106,10 +178,27 @@ export default function VerifyProfile() {
     }
   };
 
+  const start = async () => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert(
+          'Caméra refusée',
+          'La vérification a besoin de la caméra. Tu peux l’autoriser dans les réglages du téléphone.',
+        );
+        return;
+      }
+    }
+    setStep('camera');
+  };
+
+  const name = profile?.display_name ?? '';
+  const age = profile?.birth_date ? ageFromBirthDate(profile.birth_date) : null;
+
   if (!state) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScreenHeader title="Vérifier mon profil" />
+        <ScreenHeader title="Vérification" left={<HeaderBackButton />} />
         <Centered>
           <ActivityIndicator size="large" color={colors.primary} />
         </Centered>
@@ -121,39 +210,71 @@ export default function VerifyProfile() {
   if (state.is_verified) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScreenHeader title="Vérifier mon profil" />
-        <View style={styles.statusWrap}>
-          <View style={[styles.statusIcon, { backgroundColor: colors.accent }]}>
-            <Ionicons name="checkmark" size={54} color={colors.primaryDeep} />
-          </View>
-          <Text style={styles.statusTitle}>Profil vérifié</Text>
-          <Text style={styles.statusText}>
-            Le badge apparaît sur ton profil. Il montre aux autres que la personne sur les
-            photos est bien toi, et tu reçois nettement plus de réponses.
-          </Text>
-          <Button title="Revenir au profil" onPress={() => router.back()} />
-        </View>
+        <HeaderWash />
+        <ScreenHeader title="Vérification" left={<HeaderBackButton />} />
+        <ScrollView contentContainerStyle={styles.statusContent} showsVerticalScrollIndicator={false}>
+          <Reveal index={0}>
+            <MiniCard photoPath={photoPath} name={name} age={age} verified tag="Vérifié" />
+          </Reveal>
+          <Reveal index={1}>
+            <Text style={styles.statusTitle}>Profil vérifié</Text>
+          </Reveal>
+          <Reveal index={2}>
+            <Text style={styles.statusText}>
+              Le badge bleu est sur ta fiche, partout où ton nom apparaît. Il dit aux autres que
+              la personne sur les photos est bien toi, et tu reçois nettement plus de réponses.
+            </Text>
+          </Reveal>
+        </ScrollView>
+        <Footer>
+          <Button title="Revenir au profil" variant="secondary" onPress={() => safeBack(router)} />
+        </Footer>
       </SafeAreaView>
     );
   }
 
   // ---------- Demande en cours ----------
   if (state.status === 'pending' || step === 'sent') {
+    const sentAt = formatSentAt(state.created_at);
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScreenHeader title="Vérifier mon profil" />
-        <View style={styles.statusWrap}>
-          <View style={[styles.statusIcon, { backgroundColor: colors.surface }]}>
-            <Ionicons name="hourglass-outline" size={48} color={colors.primary} />
-          </View>
-          <Text style={styles.statusTitle}>Demande envoyée</Text>
-          <Text style={styles.statusText}>
-            Notre équipe compare ton selfie à tes photos de profil. La réponse arrive
-            généralement en moins de 24 heures. Ton selfie est supprimé dès que la
-            vérification est faite.
-          </Text>
-          <Button title="Revenir au profil" onPress={() => router.back()} />
-        </View>
+        <HeaderWash />
+        <ScreenHeader title="Vérification" left={<HeaderBackButton />} />
+        <ScrollView contentContainerStyle={styles.statusContent} showsVerticalScrollIndicator={false}>
+          <Reveal index={0} style={[styles.statusIcon, { backgroundColor: colors.washFrom }]}>
+            <Ionicons name="hourglass-outline" size={46} color={colors.selectedInk} />
+          </Reveal>
+          <Reveal index={1}>
+            <Text style={styles.statusTitle}>Selfie bien reçu</Text>
+          </Reveal>
+          <Reveal index={2}>
+            <Text style={styles.statusText}>
+              Notre équipe le compare à tes photos de profil. On te prévient dès que c’est fait,
+              en général sous 24 heures.
+            </Text>
+          </Reveal>
+          <Reveal index={3} style={[styles.progress, styles.column]}>
+            <ProgressRow
+              state="done"
+              title="Selfie envoyé"
+              detail={sentAt ? `Le ${sentAt}` : 'À l’instant'}
+            />
+            <ProgressRow
+              state="current"
+              title="Examen par l’équipe"
+              detail="Comparaison avec tes photos de profil et le geste demandé."
+            />
+            <ProgressRow
+              state="todo"
+              title="Badge bleu sur ta fiche"
+              detail="Dès validation, sans rien faire de plus. Le selfie est ensuite supprimé."
+              last
+            />
+          </Reveal>
+        </ScrollView>
+        <Footer>
+          <Button title="Revenir au profil" variant="secondary" onPress={() => safeBack(router)} />
+        </Footer>
       </SafeAreaView>
     );
   }
@@ -161,77 +282,100 @@ export default function VerifyProfile() {
   // ---------- Caméra ----------
   if (step === 'camera') {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScreenHeader title="Selfie de vérification" />
-        <View style={styles.gestureStrip}>
-          <Ionicons name={gesture.icon} size={20} color={colors.primary} />
-          <Text style={styles.gestureStripText}>{gesture.label}</Text>
-        </View>
+      <CameraStep
+        granted={!!permission?.granted}
+        requestPermission={requestPermission}
+        cameraRef={camera}
+        ready={ready}
+        busy={busy}
+        onReady={() => setReady(true)}
+        onShoot={takeShot}
+        onBack={() => setStep('intro')}
+        gestureCode={gestureCode}
+        gestureLabel={gesture.label}
+      />
+    );
+  }
 
-        <View style={styles.cameraArea}>
-          <View style={styles.cameraBox}>
-            {permission?.granted ? (
-              <CameraView
-                ref={camera}
-                style={styles.camera}
-                facing="front"
-                onCameraReady={() => setReady(true)}
-              />
-            ) : (
-              <View style={styles.permissionBox}>
-                <Ionicons name="camera-outline" size={36} color={colors.primary} />
-                <Text style={styles.permissionText}>
-                  Autorise la caméra pour prendre ton selfie de vérification.
-                </Text>
-                <Button title="Autoriser la caméra" onPress={requestPermission} />
-              </View>
-            )}
-          </View>
+  // ---------- Vérifie et valide : le modèle et le selfie côte à côte ----------
+  if (step === 'preview' && shot) {
+    const retake = () => {
+      haptic.tap();
+      setShot(null);
+      setStep('camera');
+    };
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.flowTop}>
+          <Pressable onPress={retake} hitSlop={12} accessibilityLabel="Retour">
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </Pressable>
         </View>
-
-        {permission?.granted && (
-          <View style={styles.shutterRow}>
-            <Pressable
-              style={({ pressed }) => [styles.shutter, pressed && { opacity: 0.85 }]}
-              onPress={takeShot}
-              disabled={busy || !ready}
-            >
-              {busy ? (
-                <ActivityIndicator color={colors.primaryDeep} />
-              ) : (
-                <View style={styles.shutterInner} />
-              )}
+        <ScrollView contentContainerStyle={styles.flowContent} showsVerticalScrollIndicator={false}>
+          <Reveal index={0} style={styles.pair}>
+            <PoseCard gesture={gestureCode} width={128} badge={false} />
+            <Image source={{ uri: shot.uri }} style={styles.pairShot} contentFit="cover" />
+          </Reveal>
+          <Reveal index={1}>
+            <Text style={styles.flowTitle}>Vérifie et valide ta photo</Text>
+          </Reveal>
+          <Reveal index={2} style={styles.bullets}>
+            <Bullet text="Ton visage est net et on voit bien le geste, comme sur le modèle." />
+            <Bullet text="Notre équipe compare ce selfie avec les photos de ton profil." />
+            <Bullet text="Il n'est jamais montré aux autres et il est supprimé après l'examen." />
+          </Reveal>
+          <Reveal index={3} style={styles.flowActions}>
+            <PrimaryButton title="Accepter et envoyer" onPress={send} loading={busy} />
+            <Pressable onPress={retake} disabled={busy} style={styles.flowSecondary} hitSlop={8}>
+              <Text style={styles.flowSecondaryText}>Recommencer</Text>
             </Pressable>
-            <Text style={styles.shutterHint}>
-              {ready ? 'Cadre bien ton visage, puis prends la photo.' : 'Caméra en préparation…'}
-            </Text>
-          </View>
-        )}
+          </Reveal>
+          <HelpLinks />
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // ---------- Aperçu avant envoi ----------
-  if (step === 'preview' && shot) {
+  // ---------- Prends cette pose ----------
+  if (step === 'pose') {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScreenHeader title="Vérifie ta photo" />
-        <ScrollView contentContainerStyle={styles.previewContent}>
-          <Image source={{ uri: shot.uri }} style={styles.preview} contentFit="cover" />
-          <View style={styles.checklist}>
-            <Check text="Ton visage est net et entièrement visible" />
-            <Check text={`On voit clairement : ${gesture.label.toLowerCase()}`} />
-            <Check text="Pas de lunettes de soleil, pas de casquette baissée" />
-          </View>
-          <Button title={busy ? 'Envoi…' : 'Envoyer pour vérification'} onPress={send} loading={busy} />
-          <Button
-            title="Reprendre la photo"
-            variant="ghost"
-            onPress={() => {
-              setShot(null);
-              setStep('camera');
-            }}
-          />
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.flowTop}>
+          <Pressable
+            onPress={() => setStep('intro')}
+            hitSlop={12}
+            accessibilityLabel="Fermer"
+          >
+            <Ionicons name="close" size={26} color={colors.text} />
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.flowContent} showsVerticalScrollIndicator={false}>
+          <Reveal index={0} style={styles.poseHero}>
+            <PoseCard gesture={gestureCode} width={170} />
+            <View style={styles.poseLabel}>
+              <GestureImage code={gestureCode} size={26} />
+              <Text style={styles.poseLabelText}>{gesture.label}</Text>
+            </View>
+          </Reveal>
+          <Reveal index={1}>
+            <Text style={[styles.flowTitle, styles.center]}>Prends cette pose et fais un selfie</Text>
+          </Reveal>
+          <Reveal index={2}>
+            <Text style={styles.flowText}>
+              On vérifie que ce selfie correspond bien aux photos de ton profil. Il ne sera visible
+              par aucun autre membre.
+            </Text>
+          </Reveal>
+          <Reveal index={3} style={styles.tips}>
+            <Text style={styles.tipsTitle}>Pour que ta vérification réussisse</Text>
+            <Bullet text="Ton visage doit être bien visible, sans lunettes de soleil." />
+            <Bullet text={`Fais exactement le même geste : ${gesture.label.toLowerCase()}.`} />
+            <Bullet text="Mets-toi dans un endroit bien éclairé." />
+          </Reveal>
+          <Reveal index={4} style={styles.flowActions}>
+            <PrimaryButton title="Prendre la photo" icon="camera" onPress={start} />
+          </Reveal>
+          <HelpLinks />
         </ScrollView>
       </SafeAreaView>
     );
@@ -239,107 +383,441 @@ export default function VerifyProfile() {
 
   // ---------- Introduction ----------
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScreenHeader title="Vérifier mon profil" />
-      <ScrollView contentContainerStyle={styles.introContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <View style={styles.heroBadge}>
-            <Ionicons name="shield-checkmark" size={30} color={colors.primaryDeep} />
-          </View>
-          <Text style={styles.heroTitle}>Montre que c’est bien toi</Text>
-          <Text style={styles.heroText}>
-            Un badge vérifié sur ton profil, et les autres savent qu’ils parlent à une vraie
-            personne. Les profils vérifiés reçoivent beaucoup plus de réponses.
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={styles.flowTop}>
+        <HeaderBackButton />
+      </View>
+      <ScrollView contentContainerStyle={styles.introFlow} showsVerticalScrollIndicator={false}>
+        <Reveal index={0} style={styles.introHero}>
+          <MiniCard photoPath={photoPath} name={name} age={age} verified tag="Vérifié" tilt />
+        </Reveal>
+        <Reveal index={1}>
+          <Text style={styles.flowTitle}>Confirme ton profil avec une photo vérifiée</Text>
+        </Reveal>
+        <Reveal index={2}>
+          <Text style={styles.flowText}>
+            Le badge bleu montre aux autres membres que ton profil est authentique. Ça prend une
+            minute.
           </Text>
-        </View>
+        </Reveal>
 
         {state.status === 'rejected' && (
-          <View style={styles.rejected}>
-            <Text style={styles.rejectedTitle}>Demande refusée</Text>
-            <Text style={styles.rejectedText}>
-              {state.reject_reason || 'Le selfie ne permettait pas de te reconnaître.'}
-            </Text>
-            <Text style={styles.rejectedText}>Tu peux recommencer dès maintenant.</Text>
-          </View>
+          <Reveal index={3} style={styles.rejected}>
+            <Ionicons name="alert-circle" size={22} color={colors.danger} />
+            <View style={styles.rejectedBody}>
+              <Text style={styles.rejectedTitle}>Dernière tentative refusée</Text>
+              <Text style={styles.rejectedText}>
+                {state.reject_reason || 'Le selfie ne permettait pas de te reconnaître.'} Tu peux
+                recommencer dès maintenant.
+              </Text>
+            </View>
+          </Reveal>
         )}
-
-        <View style={styles.steps}>
-          <Step n="1" title="Prends un selfie" text="Face à la caméra, dans un endroit éclairé." />
-          <Step
-            n="2"
-            title="Reproduis le geste"
-            text={`Celui tiré au sort pour toi : ${gesture.label.toLowerCase()}.`}
-          />
-          <Step
-            n="3"
-            title="On compare, on valide"
-            text="Notre équipe compare avec tes photos de profil, sous 24 heures."
-          />
-        </View>
-
-        <View style={styles.gestureCard}>
-          <View style={styles.gestureIcon}>
-            <Ionicons name={gesture.icon} size={34} color={colors.primaryDeep} />
-          </View>
-          <View style={styles.gestureTexts}>
-            <Text style={styles.gestureLabel}>Ton geste</Text>
-            <Text style={styles.gestureValue}>{gesture.label}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.privacy}>
-          Ce selfie ne sera jamais publié ni montré aux autres abonnés. Seule notre équipe le
-          voit, et il est supprimé dès que la vérification est faite.
-        </Text>
 
         {!state.has_photo && (
-          <Text style={styles.warning}>
-            Ajoute d’abord au moins une photo à ton profil : sans elle, il n’y a rien à
-            comparer.
-          </Text>
+          <Reveal index={3} style={styles.warningCard}>
+            <Ionicons name="image-outline" size={22} color={colors.accent} />
+            <Text style={styles.warningText}>
+              Ajoute d’abord une photo à ton profil, sinon il n’y a rien à comparer.
+            </Text>
+            <Pressable onPress={() => router.push('/(tabs)/profile/edit')} hitSlop={8}>
+              <Text style={styles.warningLink}>Ajouter</Text>
+            </Pressable>
+          </Reveal>
         )}
+      </ScrollView>
 
-        <Button
-          title="Commencer"
+      <View style={styles.introFooter}>
+        <Pressable onPress={() => safeBack(router)} hitSlop={10} style={styles.flowSecondary}>
+          <Text style={styles.flowSecondaryText}>Ignorer</Text>
+        </Pressable>
+        <PrimaryButton
+          title="Vérification photo"
+          icon="checkmark-circle"
           disabled={!state.has_photo}
-          onPress={async () => {
-            if (!permission?.granted) {
-              const res = await requestPermission();
-              if (!res.granted) {
-                Alert.alert(
-                  'Caméra refusée',
-                  'La vérification a besoin de la caméra. Tu peux l’autoriser dans les réglages du téléphone.',
-                );
-                return;
-              }
-            }
-            setStep('camera');
+          onPress={() => {
+            haptic.tap();
+            setStep('pose');
           }}
         />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
-function Step({ n, title, text }: { n: string; title: string; text: string }) {
+// Bouton plein de la marque, en pilule.
+function PrimaryButton({
+  title,
+  onPress,
+  loading,
+  disabled,
+  icon,
+}: {
+  title: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+}) {
   return (
-    <View style={styles.step}>
-      <View style={styles.stepNum}>
-        <Text style={styles.stepNumText}>{n}</Text>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [
+        styles.primary,
+        (disabled || loading) && { opacity: 0.45 },
+        pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+      ]}
+      accessibilityRole="button"
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.textOnPrimary} />
+      ) : (
+        <>
+          {!!icon && <Ionicons name={icon} size={20} color={colors.textOnPrimary} />}
+          <Text style={styles.primaryText}>{title}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+function Bullet({ text }: { text: string }) {
+  return (
+    <View style={styles.bulletRow}>
+      <View style={styles.bulletDot} />
+      <Text style={styles.bulletText}>{text}</Text>
+    </View>
+  );
+}
+
+// Les trois liens d'aide du bas : confidentialité, raison d'être, contact.
+function HelpLinks() {
+  const open = (page: string) => WebBrowser.openBrowserAsync(`${SITE}/${page}`).catch(() => {});
+  const rows: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void }[] = [
+    {
+      label: 'Consulter la politique de confidentialité',
+      icon: 'chevron-forward',
+      onPress: () => open('confidentialite.html'),
+    },
+    {
+      label: 'Pourquoi est-ce nécessaire ?',
+      icon: 'chevron-forward',
+      onPress: () =>
+        Alert.alert(
+          'Pourquoi vérifier ?',
+          'La vérification prouve que la personne sur les photos est bien toi. Elle protège tout le monde contre les faux profils, et les profils vérifiés reçoivent plus de réponses.',
+        ),
+    },
+    { label: 'Obtenir de l’aide', icon: 'information-circle', onPress: () => open('contact.html') },
+  ];
+  return (
+    <View style={styles.links}>
+      {rows.map((r, i) => (
+        <Pressable
+          key={r.label}
+          onPress={r.onPress}
+          style={({ pressed }) => [styles.linkRow, i < rows.length - 1 && styles.linkBorder, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.linkText}>{r.label}</Text>
+          <Ionicons name={r.icon} size={18} color={colors.textMuted} />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Voile rose derrière l'en-tête et filigrane d'empreinte : la signature des
+// écrans d'accueil du profil, reprise ici.
+// ---------------------------------------------------------------------------
+function HeaderWash() {
+  return (
+    <>
+      <LinearGradient
+        colors={[colors.washFrom, colors.background]}
+        style={[styles.headerGrad, { height: 320 }]}
+        pointerEvents="none"
+      />
+      <View style={styles.watermark} pointerEvents="none">
+        <ZolaMark
+          size={260}
+          color={isDark ? 'rgba(255, 225, 234,0.06)' : 'rgba(16, 17, 19,0.06)'}
+          strokeWidth={1.6}
+        />
       </View>
-      <View style={styles.stepTexts}>
-        <Text style={styles.stepTitle}>{title}</Text>
-        <Text style={styles.stepText}>{text}</Text>
+    </>
+  );
+}
+
+// Pied fixe en verre, comme l'écran Incognito : le bouton reste sous le pouce
+// quelle que soit la longueur de la page.
+function Footer({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <GlassSurface intensity={60} style={styles.footer}>
+      <View style={[styles.footerInner, { paddingBottom: spacing.md + insets.bottom }]}>
+        {children}
+      </View>
+    </GlassSurface>
+  );
+}
+
+// Ma carte Rencontres en miniature, avec le badge bleu : ce que les autres
+// verront une fois la vérification faite. Même grammaire que la vraie carte
+// (cadre crème, coin signature, voile, nom centré).
+function MiniCard({
+  photoPath,
+  name,
+  age,
+  verified,
+  tag,
+  tilt,
+}: {
+  photoPath: string | null;
+  name: string;
+  age: number | null;
+  verified: boolean;
+  tag: string;
+  tilt?: boolean;
+}) {
+  return (
+    <View style={[styles.miniCardWrap, tilt && styles.miniCardTilt]}>
+      <View style={styles.miniPhotoFrame}>
+        {photoPath ? (
+          <Image
+            source={{ uri: photoUrl(photoPath) }}
+            style={styles.miniPhoto}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={styles.miniNoPhoto}>
+            <Text style={styles.miniInitial}>{name?.[0]?.toUpperCase() ?? '?'}</Text>
+          </View>
+        )}
+        <LinearGradient colors={photoScrim} style={styles.miniInfo}>
+          <View style={styles.miniNameRow}>
+            <Text style={styles.miniName} numberOfLines={1}>
+              {name || 'Toi'}
+              {age ? `, ${age}` : ''}
+            </Text>
+            {verified && <VerifiedBadge size={18} />}
+          </View>
+          <Text style={styles.miniPlace} numberOfLines={1}>
+            République démocratique du Congo
+          </Text>
+        </LinearGradient>
+      </View>
+      <View style={styles.miniTag}>
+        <Ionicons name="checkmark-circle" size={12} color="#ffffff" />
+        <Text style={styles.miniTagText}>{tag}</Text>
       </View>
     </View>
   );
 }
 
-function Check({ text }: { text: string }) {
+// Ligne de la timeline d'attente : faite, en cours (point qui respire), à
+// venir.
+function ProgressRow({
+  state,
+  title,
+  detail,
+  last,
+}: {
+  state: 'done' | 'current' | 'todo';
+  title: string;
+  detail: string;
+  last?: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (state !== 'current' || reduceMotion) return;
+    pulse.set(withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 0 }),
+      ),
+      -1,
+    ));
+  }, [state, reduceMotion, pulse]);
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: 0.45 * (1 - pulse.value),
+    transform: [{ scale: 1 + pulse.value * 1.1 }],
+  }));
+
   return (
-    <View style={styles.checkRow}>
-      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-      <Text style={styles.checkText}>{text}</Text>
+    <View style={styles.progressRow}>
+      <View style={styles.progressRail}>
+        {state === 'current' && <Animated.View style={[styles.progressPulse, pulseStyle]} />}
+        <View
+          style={[
+            styles.progressDot,
+            state === 'done' && styles.progressDotDone,
+            state === 'current' && styles.progressDotCurrent,
+          ]}
+        >
+          {state === 'done' && <Ionicons name="checkmark" size={16} color="#ffffff" />}
+          {state === 'current' && <Ionicons name="time" size={15} color="#ffffff" />}
+        </View>
+        {!last && (
+          <View style={[styles.progressLine, state === 'done' && styles.progressLineDone]} />
+        )}
+      </View>
+      <View style={[styles.progressTexts, last && styles.progressTextsLast]}>
+        <Text style={[styles.progressTitle, state === 'todo' && styles.progressTitleMuted]}>
+          {title}
+        </Text>
+        <Text style={styles.progressDetail}>{detail}</Text>
+      </View>
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Prise de vue : plein écran sombre, caméra frontale dans un cadre à coin
+// signature, guide ovale pour le visage, consigne du geste posée sur l'image,
+// déclencheur blanc. Le bouton de sortie est en haut à gauche, toujours sous
+// l'encoche.
+// ---------------------------------------------------------------------------
+function CameraStep({
+  granted,
+  requestPermission,
+  cameraRef,
+  ready,
+  busy,
+  onReady,
+  onShoot,
+  onBack,
+  gestureCode,
+  gestureLabel,
+}: {
+  granted: boolean;
+  requestPermission: () => Promise<{ granted: boolean }>;
+  cameraRef: React.RefObject<CameraView | null>;
+  ready: boolean;
+  busy: boolean;
+  onReady: () => void;
+  onShoot: () => void;
+  onBack: () => void;
+  gestureCode: string | null;
+  gestureLabel: string;
+}) {
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setBox({ w: Math.round(width), h: Math.round(height) });
+  };
+  // Ovale du visage : centré, un peu au-dessus du milieu pour laisser la
+  // place à la main qui fait le geste en dessous ou à côté.
+  const cx = box.w / 2;
+  const cy = box.h * 0.42;
+  const rx = Math.min(box.w * 0.34, 150);
+  const ry = rx * 1.3;
+
+  return (
+    <SafeAreaView style={styles.cameraScreen} edges={['top', 'bottom']}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.cameraTop}>
+        <Pressable
+          onPress={() => {
+            haptic.tap();
+            onBack();
+          }}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          style={({ pressed }) => [styles.darkPill, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name="chevron-back" size={20} color="#ffffff" />
+          <Text style={styles.darkPillText}>Retour</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.cameraArea}>
+        <View style={styles.cameraBox} onLayout={onLayout}>
+          {granted ? (
+            <>
+              <CameraView
+                ref={cameraRef}
+                style={styles.camera}
+                facing="front"
+                onCameraReady={onReady}
+              />
+              {box.w > 0 && (
+                <Svg
+                  width={box.w}
+                  height={box.h}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                >
+                  <Defs>
+                    <Mask id="faceHole">
+                      <Rect x={0} y={0} width={box.w} height={box.h} fill="#ffffff" />
+                      <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="#000000" />
+                    </Mask>
+                  </Defs>
+                  <Rect
+                    x={0}
+                    y={0}
+                    width={box.w}
+                    height={box.h}
+                    fill="rgba(16, 17, 19,0.55)"
+                    mask="url(#faceHole)"
+                  />
+                  <Ellipse
+                    cx={cx}
+                    cy={cy}
+                    rx={rx}
+                    ry={ry}
+                    stroke="rgba(255,255,255,0.9)"
+                    strokeWidth={2}
+                    strokeDasharray="10 8"
+                    fill="none"
+                  />
+                </Svg>
+              )}
+              <View style={styles.gestureFloating}>
+                <GestureImage code={gestureCode} size={34} />
+                <Text style={styles.gestureFloatingText} numberOfLines={2}>
+                  {gestureLabel}
+                </Text>
+              </View>
+              <Text style={styles.faceHint}>Place ton visage dans l’ovale</Text>
+            </>
+          ) : (
+            <View style={styles.permissionBox}>
+              <Ionicons name="camera-outline" size={40} color="#ffffff" />
+              <Text style={styles.permissionText}>
+                Autorise la caméra pour prendre ton selfie de vérification.
+              </Text>
+              <Button title="Autoriser la caméra" onPress={() => void requestPermission()} />
+            </View>
+          )}
+        </View>
+      </View>
+
+      {granted && (
+        <View style={styles.shutterRow}>
+          <Pressable
+            style={({ pressed }) => [styles.shutter, pressed && { opacity: 0.85 }]}
+            onPress={onShoot}
+            disabled={busy || !ready}
+            accessibilityRole="button"
+            accessibilityLabel="Prendre la photo"
+          >
+            {busy ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <View style={[styles.shutterInner, !ready && { opacity: 0.4 }]} />
+            )}
+          </Pressable>
+          <Text style={styles.shutterHint}>
+            {ready ? 'Visage net, geste bien visible, puis déclenche.' : 'Caméra en préparation…'}
+          </Text>
+        </View>
+      )}
+    </SafeAreaView>
   );
 }

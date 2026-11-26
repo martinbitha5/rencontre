@@ -220,7 +220,7 @@ export default function Rewards() {
             style={styles.card}
             onPress={() => router.push('/incognito')}
             accessibilityRole="button"
-            accessibilityLabel="Deviens invisible, mode Incognito"
+            accessibilityLabel="Deviens invisible"
           >
             <View style={styles.cardIcon}>
               <Ionicons name="eye-off-outline" size={22} color={colors.primary} />
@@ -228,7 +228,7 @@ export default function Rewards() {
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>Deviens invisible</Text>
               <Text style={styles.cardText}>
-                Passe en mode Incognito : ton profil sort du fil Rencontres et ton statut en
+                Passe en mode Invisible : ton profil sort du fil Rencontres et ton statut en
                 ligne reste privé.
               </Text>
             </View>

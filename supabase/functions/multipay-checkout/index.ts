@@ -120,6 +120,12 @@ interface Settings {
   webBase: string;
 }
 
+interface ExistingOrder {
+  txn_ref: string;
+  checkout_method: 'browser' | 'wallet_initializing' | 'wallet';
+  status: 'pending' | 'success' | 'failed' | 'cancelled';
+}
+
 function resolveSettings(config: MultipayConfig): Settings {
   const mode = setting(config, 'MULTIPAY_MODE', 'TEST').toUpperCase();
   return {
@@ -378,11 +384,21 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'method_not_allowed' }, 405);
   }
 
-  let body: { kind?: string; itemId?: string; operator?: string; phone?: string };
+  let body: {
+    kind?: string;
+    itemId?: string;
+    operator?: string;
+    phone?: string;
+    idempotencyKey?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return json({ error: 'invalid_json' }, 400);
+  }
+
+  if (!body.idempotencyKey || !/^[a-z0-9_-]{20,100}$/i.test(body.idempotencyKey)) {
+    return json({ error: 'invalid_idempotency_key' }, 400);
   }
 
   // Opérateur et numéro : exigés pour un achat de boutique, tolérés absents
@@ -426,11 +442,21 @@ Deno.serve(async (req: Request) => {
   if ('error' in resolved) return json({ error: resolved.error }, resolved.status);
   const order = resolved.order;
 
+  const canPushWallet =
+    settings.walletPush &&
+    settings.mode === 'LIVE' &&
+    !!settings.clientId &&
+    !!settings.secretKey &&
+    !!body.operator &&
+    !!body.phone;
+
   // Référence de transaction : unique et non devinable (elle sert aussi de
   // clé de consultation du statut côté client).
   const txnRef = 'ZOLA' + crypto.randomUUID().replace(/-/g, '').slice(0, 24).toUpperCase();
 
-  const { error: insertError } = await admin.from('payment_orders').insert({
+  const { data: inserted, error: insertError } = await admin
+    .from('payment_orders')
+    .insert({
     user_id: user.id,
     kind: order.kind,
     item_id: order.itemId,
@@ -442,9 +468,37 @@ Deno.serve(async (req: Request) => {
     phone: body.phone ?? null,
     customer_email: user.email ?? null,
     txn_ref: txnRef,
-  });
+    idempotency_key: body.idempotencyKey,
+    checkout_method: canPushWallet ? 'wallet_initializing' : 'browser',
+    })
+    .select('txn_ref')
+    .maybeSingle();
+
   if (insertError) {
+    if (insertError.code === '23505') {
+      const { data: existing, error: existingError } = await admin
+        .from('payment_orders')
+        .select('txn_ref, checkout_method, status')
+        .eq('user_id', user.id)
+        .eq('idempotency_key', body.idempotencyKey)
+        .maybeSingle<ExistingOrder>();
+
+      if (!existingError && existing) {
+        if (existing.status !== 'pending' || existing.checkout_method !== 'browser') {
+          return json({ reference: existing.txn_ref, pushed: true, alreadyStarted: true });
+        }
+        return json({
+          reference: existing.txn_ref,
+          checkoutUrl: `${settings.webBase}/payer?ref=${existing.txn_ref}`,
+          alreadyStarted: true,
+        });
+      }
+    }
     console.error('payment_orders insert failed', insertError);
+    return json({ error: 'order_creation_failed' }, 500);
+  }
+
+  if (!inserted) {
     return json({ error: 'order_creation_failed' }, 500);
   }
 
@@ -454,18 +508,23 @@ Deno.serve(async (req: Request) => {
   // ici n'est jamais bloquant : la commande existe déjà, le rail navigateur
   // peut toujours la régler.
   if (
-    settings.walletPush &&
-    settings.mode === 'LIVE' &&
-    settings.clientId &&
-    settings.secretKey &&
-    body.operator &&
-    body.phone
+    canPushWallet
   ) {
     const pushed = await pushWalletPayment(settings, order, txnRef, body.operator, body.phone);
     if (pushed) {
+      await admin
+        .from('payment_orders')
+        .update({ checkout_method: 'wallet' })
+        .eq('txn_ref', txnRef)
+        .eq('status', 'pending');
       return json({ reference: txnRef, pushed: true });
     }
     console.error('wallet push failed, falling back to browser checkout', txnRef);
+    await admin
+      .from('payment_orders')
+      .update({ checkout_method: 'browser' })
+      .eq('txn_ref', txnRef)
+      .eq('status', 'pending');
   }
 
   // Rail 2 : la page /payer du site Zola (checkout web Interswitch).

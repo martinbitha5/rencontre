@@ -3,32 +3,26 @@ import { colors, radius, spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingTop: 0 },
-  sectionCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  switchRow: {
+  content: { paddingBottom: spacing.xl },
+  // Ligne pleine largeur sur fond clair, séparée de la suivante par un filet.
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    minHeight: 54,
     paddingHorizontal: spacing.md,
-    paddingVertical: 14,
-    backgroundColor: colors.card,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  switchRowIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  switchRowLabel: { fontSize: 16, fontWeight: '600', color: colors.text },
-  switchRowDetail: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  rowPressed: { backgroundColor: colors.surface },
+  rowLabel: { flex: 1, fontSize: 16, fontWeight: '500', color: colors.text },
+  rowHint: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  rowDetail: { fontSize: 14, color: colors.textMuted },
+  rowDanger: { color: colors.danger, fontWeight: '600' },
+  // Bande grise entre deux groupes de réglages.
+  gap: { height: 14, backgroundColor: colors.surface },
   themeOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -59,27 +53,10 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
-  accountZone: {
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-    marginBottom: spacing.xl,
-  },
-  signOutLink: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.danger,
-    textDecorationLine: 'underline',
-  },
-  deleteLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.danger,
-    textDecorationLine: 'underline',
-  },
   footer: {
     fontSize: 12,
     color: colors.textMuted,
-    marginTop: spacing.sm,
+    textAlign: 'center',
+    marginTop: spacing.lg,
   },
 });

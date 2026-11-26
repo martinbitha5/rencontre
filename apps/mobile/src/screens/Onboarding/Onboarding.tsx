@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { Easing, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   deletePhoto,
@@ -30,59 +31,78 @@ import {
   HeightSlider,
   OnboardingHeader,
   OptionCard,
-  SegmentPills,
+  SkipLink,
   StepBadge,
 } from './OnboardingKit';
 import { OnboardingWelcome } from './OnboardingWelcome';
 import { useAuth } from '@/providers/auth';
 import { detectCity } from '@/utils/cityGeo';
 import { haptic } from '@/utils/haptics';
-import { pickPhotoMessage, pickProfilePhoto } from '@/services/photoPicker';
+import { pickPhotoMessage, pickProfilePhoto, type PhotoSource } from '@/services/photoPicker';
+import { PhotoSourceSheet } from '@/components/PhotoSourceSheet';
 import {
   EDUCATION_OPTIONS,
   FREQUENCY_OPTIONS,
   GOAL_OPTIONS,
+  goalIcon,
   HAS_CHILDREN_OPTIONS,
   INTEREST_OPTIONS,
+  interestIcon,
   LANGUAGE_OPTIONS,
   RELIGION_OPTIONS,
   WANTS_CHILDREN_OPTIONS,
 } from '@/profileOptions';
-import { colors } from '@/theme';
+import { colors, keyboardAppearance, onLight } from '@/theme';
 import type { City, Gender, MyPhoto } from '@/types';
 import { styles } from './Onboarding.styles';
+import { onIntroDone } from '@/utils/introState';
+import type { InputHandle } from '@/utils/useFocusWhenShown';
 
-// L'inscription se fait en deux temps : d'abord ce qui est indispensable
-// pour exister dans le deck, ensuite ce qui remplit la fiche « Plus d'infos ».
-// Les étapes de la seconde moitié se passent d'un geste : personne ne doit
-// être bloqué, mais un profil vide n'intéresse personne non plus.
+// Une question par écran. D'abord ce qui est indispensable pour exister dans
+// le deck (jusqu'aux photos), ensuite ce qui remplit la fiche « Plus d'infos ».
+// Les étapes de la seconde moitié se passent d'un geste (« Ignorer ») :
+// personne ne doit être bloqué, mais un profil vide n'intéresse personne.
 const STEPS = [
   'name',
   'birthdate',
   'gender',
+  'lookingFor',
   'goal',
   'city',
   'photos',
-  'about',
-  'lifestyle',
-  'children',
-  'background',
+  'height',
+  'job',
+  'education',
+  'smoking',
+  'drinking',
+  'wantsChildren',
+  'hasChildren',
+  'religion',
+  'languages',
   'interests',
   'bio',
 ] as const;
 type Step = (typeof STEPS)[number];
 
-// Étapes que l'on peut sauter : elles enrichissent le profil sans être
-// nécessaires au fonctionnement de l'app. Les centres d'intérêt n'en font
-// PAS partie : ce sont eux qui lancent les conversations, un profil sans
-// aucun centre d'intérêt n'accroche personne.
-const OPTIONAL_STEPS: Step[] = ['about', 'lifestyle', 'children', 'background', 'bio'];
+// Étapes que l'on peut sauter. Les centres d'intérêt n'en font PAS partie :
+// ce sont eux qui lancent les conversations.
+const OPTIONAL_STEPS: Step[] = [
+  'height',
+  'job',
+  'education',
+  'smoking',
+  'drinking',
+  'wantsChildren',
+  'hasChildren',
+  'religion',
+  'languages',
+  'bio',
+];
 
 // Nombre minimum de centres d'intérêt à choisir pour continuer.
 const MIN_INTERESTS = 5;
 
-// Chaque étape a sa personnalité : une icône, un titre, un sous-titre. C'est
-// la pastille d'icône qui change d'une question à l'autre et donne le rythme.
+// Chaque étape a son icône, son titre et sa ligne d'explication.
 const STEP_META: Record<
   Step,
   { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string }
@@ -90,72 +110,124 @@ const STEP_META: Record<
   name: {
     icon: 'person',
     title: "Comment tu t'appelles ?",
-    subtitle: "C'est le prénom que les autres verront.",
+    subtitle: "C'est le prénom que les autres verront sur ton profil.",
   },
   birthdate: {
     icon: 'calendar',
-    title: 'Ta date de naissance',
-    subtitle: 'Seul ton âge sera affiché sur ton profil.',
+    title: 'Quelle est ta date de naissance ?',
+    subtitle: 'On affiche seulement ton âge, jamais la date.',
   },
   gender: {
     icon: 'male-female',
-    title: 'Toi, et qui tu cherches',
-    subtitle: 'Ces réponses déterminent les profils qui te seront proposés.',
+    title: 'Quel genre te correspond le mieux ?',
+    subtitle: 'Tu pourras le modifier plus tard dans ton profil.',
+  },
+  lookingFor: {
+    icon: 'eye',
+    title: 'Quels profils veux-tu voir ?',
+    subtitle: 'On te montre les bonnes personnes. Tu pourras changer ta réponse plus tard.',
   },
   goal: {
     icon: 'heart',
-    title: 'Ce que tu recherches',
-    subtitle: 'Affiché sur ton profil, pour croiser des personnes du même avis.',
+    title: 'Que recherches-tu ?',
+    subtitle: 'Sois honnête, ça aide à croiser des personnes du même avis. Tu pourras changer à tout moment.',
   },
   city: {
     icon: 'location',
     title: 'Où vis-tu ?',
-    subtitle: 'Ta ville est vérifiée avec ta position.',
+    subtitle: 'On te montre les personnes près de chez toi. Ta position exacte reste privée.',
   },
   photos: {
     icon: 'camera',
-    title: 'Tes photos',
-    subtitle: "Au moins une, jusqu'à six. La première est ta photo principale.",
+    title: 'Choisis tes photos',
+    subtitle: "Ajoute au moins une photo pour commencer, jusqu'à six.",
   },
-  about: {
+  height: {
+    icon: 'resize',
+    title: 'Combien mesures-tu ?',
+    subtitle: 'Affiché sur ta fiche, sous tes photos.',
+  },
+  job: {
     icon: 'briefcase',
-    title: 'Ton profil',
-    subtitle: 'Ces informations apparaissent sur ta fiche, sous tes photos.',
+    title: 'Que fais-tu dans la vie ?',
+    subtitle: 'Ton métier, ou ce qui occupe tes journées.',
   },
-  lifestyle: {
+  education: {
+    icon: 'school',
+    title: "Quel est ton niveau d'études ?",
+    subtitle: 'Une info de plus pour faire connaissance.',
+  },
+  smoking: {
+    icon: 'leaf',
+    title: 'Est-ce que tu fumes ?',
+    subtitle: 'Une réponse claire évite bien des malentendus.',
+  },
+  drinking: {
     icon: 'wine',
-    title: 'Ton mode de vie',
-    subtitle: 'Tabac et alcool : deux réponses qui évitent bien des malentendus.',
+    title: 'Est-ce que tu bois ?',
+    subtitle: 'Une réponse claire évite bien des malentendus.',
   },
-  children: {
+  wantsChildren: {
+    icon: 'happy',
+    title: 'Veux-tu des enfants ?',
+    subtitle: 'Un sujet qui compte pour beaucoup de monde.',
+  },
+  hasChildren: {
     icon: 'people',
-    title: 'Les enfants',
-    subtitle: 'Un sujet qui compte pour beaucoup de monde, autant être clair.',
+    title: 'As-tu déjà des enfants ?',
+    subtitle: 'Affiché sur ta fiche, si tu le souhaites.',
   },
-  background: {
-    icon: 'earth',
-    title: 'Religion et langues',
-    subtitle: 'Ce qui aide à se comprendre dès le premier message.',
+  religion: {
+    icon: 'book',
+    title: 'As-tu une religion ?',
+    subtitle: 'Pour croiser des personnes qui partagent tes valeurs.',
+  },
+  languages: {
+    icon: 'chatbubbles',
+    title: 'Quelles langues parles-tu ?',
+    subtitle: 'Choisis-en autant que tu veux.',
   },
   interests: {
     icon: 'color-palette',
-    title: "Tes centres d'intérêt",
-    subtitle: 'Choisis ce qui te ressemble : ce sont souvent eux qui lancent la conversation.',
+    title: "Quels sont tes centres d'intérêt ?",
+    subtitle: `Choisis-en au moins ${MIN_INTERESTS}. Ce sont souvent eux qui lancent la conversation.`,
   },
   bio: {
     icon: 'create',
-    title: 'Quelques mots sur toi',
-    subtitle: 'La touche personnelle qui donne envie de répondre.',
+    title: 'Ce qui te rend unique',
+    subtitle: 'Quelques mots sur toi, qui donnent envie de répondre.',
   },
 };
 
-// Icône de chaque intention : la carte porte son caractère.
-const GOAL_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  relation_serieuse: 'heart',
-  mariage: 'diamond',
-  amitie: 'people',
-  rien_de_serieux: 'happy',
-  je_me_laisse_surprendre: 'sparkles',
+
+// Une phrase sous chaque intention, pour dire ce qu'elle veut dire.
+const GOAL_HINTS: Record<string, string> = {
+  relation_serieuse: "J'ai envie d'une histoire qui dure.",
+  mariage: 'Je cherche la personne avec qui construire un foyer.',
+  amitie: 'Je veux faire de nouvelles connaissances, on verra bien.',
+  rien_de_serieux: "J'ai envie de sortir et de passer de bons moments.",
+  je_me_laisse_surprendre: 'Pas de plan précis, je laisse venir.',
+};
+
+// Libellés des réponses fermées, à la première personne comme sur la fiche.
+const SMOKING_LABELS: Record<string, string> = {
+  jamais: 'Non, jamais',
+  parfois: "À l'occasion",
+  souvent: 'Oui, souvent',
+};
+const DRINKING_LABELS: Record<string, string> = {
+  jamais: 'Jamais',
+  parfois: "À l'occasion",
+  souvent: 'Souvent',
+};
+const WANTS_CHILDREN_LABELS: Record<string, string> = {
+  oui: "J'aimerais en avoir un jour",
+  non: "Je ne veux pas d'enfants",
+  peut_etre: 'Je ne sais pas encore',
+};
+const HAS_CHILDREN_LABELS: Record<string, string> = {
+  oui: "Oui, j'ai des enfants",
+  non: "Non, je n'en ai pas",
 };
 
 const BIO_MAX = 500;
@@ -165,27 +237,12 @@ const MAX_AGE = 100;
 const HEIGHT_MIN = 100;
 const HEIGHT_MAX = 250;
 
-// Bornes de la roue de date : on ne peut pas choisir une date qui donnerait
-// moins de 18 ans, la règle est portée par le sélecteur lui-même.
-const today = new Date();
-const MAX_DATE = new Date(
-  today.getFullYear() - MIN_AGE,
-  today.getMonth(),
-  today.getDate(),
-);
-const MIN_DATE = new Date(
-  today.getFullYear() - MAX_AGE,
-  today.getMonth(),
-  today.getDate(),
-);
-// Date d'ouverture de la roue : 25 ans, l'âge médian de l'app.
-const DEFAULT_DATE = new Date(today.getFullYear() - 25, today.getMonth(), today.getDate());
-
-const DATE_FMT = new Intl.DateTimeFormat('fr-FR', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
+// Les trois cases de la date de naissance.
+const DATE_FIELDS = [
+  { key: 'day', label: 'Jour', placeholder: 'JJ', max: 2 },
+  { key: 'month', label: 'Mois', placeholder: 'MM', max: 2 },
+  { key: 'year', label: 'Année', placeholder: 'AAAA', max: 4 },
+] as const;
 
 function profileSaveError(e: unknown): string {
   const err = e as { message?: string } | null;
@@ -203,14 +260,13 @@ function profileSaveError(e: unknown): string {
   return msg ? `Enregistrement refusé : ${msg}` : "Impossible d'enregistrer le profil. Réessaie.";
 }
 
-// Libellé de section à l'intérieur d'une étape (Je suis / Tabac / Religion...).
-function SectionLabel({ children }: { children: string }) {
-  return <Text style={styles.sectionLabel}>{children}</Text>;
-}
-
 export default function Onboarding() {
   const { refreshProfile } = useAuth();
   const [stepIndex, setStepIndex] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  // Prénom : le clavier s'ouvre une fois l'écran posé et l'intro terminée,
+  // pas au montage (sur Android, il sortait puis se refermait).
+  const nameRef = useRef<InputHandle>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // 'form' : le parcours. 'done' : profil enregistré, place à la célébration.
@@ -219,8 +275,13 @@ export default function Onboarding() {
   const [phase, setPhase] = useState<'form' | 'done'>('form');
 
   const [name, setName] = useState('');
-  const [birthDate, setBirthDate] = useState<Date | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Date de naissance saisie en trois cases (jour, mois, année), au clavier
+  // numérique. Le passage d'une case à la suivante est automatique.
+  const [bDay, setBDay] = useState('');
+  const [bMonth, setBMonth] = useState('');
+  const [bYear, setBYear] = useState('');
+  const monthRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const yearRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [gender, setGender] = useState<Gender | null>(null);
   const [lookingFor, setLookingFor] = useState<Gender | null>(null);
   const [goal, setGoal] = useState<string | null>(null);
@@ -244,10 +305,25 @@ export default function Onboarding() {
   const [interests, setInterests] = useState<string[]>([]);
   const [detectedCity, setDetectedCity] = useState<City | null>(null);
   const detectionStarted = useRef(false);
+  // La personne a touché à la ville : la détection de position, si elle
+  // répond en retard, ne doit plus écraser son choix.
+  const cityTouched = useRef(false);
   const cityConfirmed = useRef(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const step: Step = STEPS[stepIndex];
+
+  useEffect(() => {
+    if (step !== 'name') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = onIntroDone(() => {
+      timer = setTimeout(() => nameRef.current?.focus(), 450);
+    });
+    return () => {
+      stop();
+      if (timer) clearTimeout(timer);
+    };
+  }, [step]);
   const meta = STEP_META[step];
 
   useEffect(() => {
@@ -261,15 +337,21 @@ export default function Onboarding() {
     detectCity(cities).then((det) => {
       if (!det) return;
       setDetectedCity(det);
-      setCityId((current) => current ?? det.id);
+      if (!cityTouched.current) setCityId((current) => current ?? det.id);
     });
   }, [step, cities]);
 
-  // Sur iOS la roue est posée dans la page ; sur Android le sélecteur est une
-  // boîte de dialogue système qui s'ouvre à la demande.
-  useEffect(() => {
-    if (step === 'birthdate' && Platform.OS === 'ios') setPickerOpen(true);
-  }, [step]);
+  // Date valide seulement si les trois cases forment un vrai jour du
+  // calendrier (le 31 février est refusé).
+  const birthDate = useMemo(() => {
+    if (bYear.length !== 4 || !bDay || !bMonth) return null;
+    const d = Number(bDay);
+    const m = Number(bMonth);
+    const y = Number(bYear);
+    const date = new Date(y, m - 1, d);
+    if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+    return date;
+  }, [bDay, bMonth, bYear]);
 
   const normalize = (s: string) =>
     s
@@ -280,7 +362,13 @@ export default function Onboarding() {
   const citySuggestions = useMemo(() => {
     if (cityId) return [];
     const q = normalize(cityQuery.trim());
-    if (q.length < 2) return [];
+    // Rien de tapé : toutes les villes, celle de la position en tête. On
+    // choisit d'un toucher, sans avoir à deviner l'orthographe.
+    if (q.length < 2) {
+      return [...cities].sort((a, b) =>
+        a.id === detectedCity?.id ? -1 : b.id === detectedCity?.id ? 1 : 0,
+      );
+    }
     const isSubsequence = (needle: string, hay: string) => {
       let i = 0;
       for (const ch of hay) if (ch === needle[i]) i++;
@@ -292,7 +380,14 @@ export default function Onboarding() {
         return n.includes(q) || (q.length >= 3 && isSubsequence(q, n));
       })
       .slice(0, 6);
-  }, [cityQuery, cityId, cities]);
+  }, [cityQuery, cityId, cities, detectedCity]);
+
+  // Changer de ville : on repart d'un champ vide, la liste complète revient.
+  const changeCity = () => {
+    cityTouched.current = true;
+    setCityId(null);
+    setCityQuery('');
+  };
 
   const chosenCity = cities.find((c) => c.id === cityId) ?? null;
 
@@ -310,18 +405,21 @@ export default function Onboarding() {
       case 'name':
         return name.trim().length >= 2 ? null : 'Entre ton prénom (2 caractères minimum).';
       case 'birthdate':
-        if (!birthDate) return 'Choisis ta date de naissance.';
+        if (!birthDate) return 'Entre une date de naissance valide.';
         if (age !== null && age < MIN_AGE) return 'Zola est réservé aux 18 ans et plus.';
+        if (age !== null && age > MAX_AGE) return 'Vérifie ton année de naissance.';
         return null;
       case 'gender':
-        return gender && lookingFor ? null : 'Complète les deux réponses.';
+        return gender ? null : 'Choisis ton genre.';
+      case 'lookingFor':
+        return lookingFor ? null : 'Choisis les profils que tu veux voir.';
       case 'goal':
         return goal ? null : 'Choisis ce que tu recherches.';
       case 'city':
         return cityId ? null : 'Choisis ta ville dans la liste.';
       case 'photos':
         return photos.length >= 1 ? null : 'Ajoute au moins une photo.';
-      case 'about': {
+      case 'height': {
         if (height === '') return null;
         const h = Number(height);
         return Number.isFinite(h) && h >= HEIGHT_MIN && h <= HEIGHT_MAX
@@ -341,6 +439,9 @@ export default function Onboarding() {
   };
 
   const goTo = (index: number) => {
+    // Le sens du glissement suit le sens de la marche : on avance, la
+    // question suivante arrive de la droite ; on revient, de la gauche.
+    setDirection(index >= stepIndex ? 1 : -1);
     setStepIndex(index);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
@@ -428,10 +529,17 @@ export default function Onboarding() {
 
   // Ajout d'une photo : chaque issue a désormais son message, plus aucune
   // sortie muette.
-  const addPhoto = async () => {
+  // Toucher une case vide ouvre d'abord le choix : galerie ou appareil photo.
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const openPhotoSource = () => {
+    if (photos.length >= MAX_PHOTOS || uploading) return;
+    setSourceOpen(true);
+  };
+
+  const addPhoto = async (source: PhotoSource) => {
     if (photos.length >= MAX_PHOTOS || uploading) return;
     setError(null);
-    const picked = await pickProfilePhoto();
+    const picked = await pickProfilePhoto(source);
     if (picked.status !== 'ok') {
       const message = pickPhotoMessage(picked);
       if (message) setError(message);
@@ -491,7 +599,10 @@ export default function Onboarding() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View key={step}>
+          <Animated.View
+            key={step}
+            entering={(direction === 1 ? FadeInRight : FadeInLeft).duration(260).easing(Easing.out(Easing.cubic))}
+          >
             <View style={styles.titleBlock}>
               <StepBadge icon={meta.icon} />
               <Text style={styles.title}>{meta.title}</Text>
@@ -502,119 +613,92 @@ export default function Onboarding() {
               {step === 'name' && (
                 <View style={styles.nameBlock}>
                   <TextInput
+                    keyboardAppearance={keyboardAppearance}
                     style={styles.nameField}
                     placeholder="Ton prénom"
                     placeholderTextColor={colors.textMuted}
                     value={name}
                     onChangeText={setName}
                     maxLength={50}
-                    autoFocus
+                    ref={nameRef}
                     autoCapitalize="words"
                     autoCorrect={false}
+                    returnKeyType="next"
+                    onSubmitEditing={next}
                   />
                   <FocusLine active={name.trim().length >= 2} />
-                  <Text style={styles.nameHint}>
-                    {name.trim().length >= 2
-                      ? 'Parfait, ça sonne bien.'
-                      : 'Au moins 2 caractères.'}
-                  </Text>
                 </View>
               )}
 
               {step === 'birthdate' && (
                 <>
-                  {/* Roue de date native : on fait défiler jour, mois et année,
-                      et la borne des 18 ans est portée par le sélecteur. */}
-                  {Platform.OS === 'ios' ? (
-                    <View style={styles.wheelCard}>
-                      <DateTimePicker
-                        value={birthDate ?? DEFAULT_DATE}
-                        mode="date"
-                        display="spinner"
-                        locale="fr-FR"
-                        maximumDate={MAX_DATE}
-                        minimumDate={MIN_DATE}
-                        textColor={colors.text}
-                        onChange={(_, d) => d && setBirthDate(d)}
-                        style={styles.wheel}
-                      />
-                    </View>
-                  ) : (
-                    <>
-                      <Pressable
-                        style={({ pressed }) => [styles.dateField, pressed && { opacity: 0.85 }]}
-                        onPress={() => {
-                          haptic.tap();
-                          setPickerOpen(true);
-                        }}
-                      >
-                        <Ionicons name="calendar-outline" size={20} color={colors.accent} />
-                        <Text style={birthDate ? styles.dateValue : styles.datePlaceholder}>
-                          {birthDate ? DATE_FMT.format(birthDate) : 'Choisir ma date'}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                      </Pressable>
-                      {pickerOpen && (
-                        <DateTimePicker
-                          value={birthDate ?? DEFAULT_DATE}
-                          mode="date"
-                          display="spinner"
-                          maximumDate={MAX_DATE}
-                          minimumDate={MIN_DATE}
-                          onChange={(event, d) => {
-                            setPickerOpen(false);
-                            if (event.type === 'set' && d) setBirthDate(d);
-                          }}
-                        />
-                      )}
-                    </>
+                  <View style={styles.dateRow}>
+                    {DATE_FIELDS.map((f) => {
+                      const value = f.key === 'day' ? bDay : f.key === 'month' ? bMonth : bYear;
+                      const set = f.key === 'day' ? setBDay : f.key === 'month' ? setBMonth : setBYear;
+                      const ref = f.key === 'month' ? monthRef : f.key === 'year' ? yearRef : undefined;
+                      const nextRef = f.key === 'day' ? monthRef : f.key === 'month' ? yearRef : undefined;
+                      return (
+                        <View key={f.key} style={[styles.dateCol, f.max === 4 && styles.dateColWide]}>
+                          <Text style={styles.dateLabel}>{f.label}</Text>
+                          <TextInput
+                            ref={ref}
+                            keyboardAppearance={keyboardAppearance}
+                            style={[styles.dateBox, value.length > 0 && styles.dateBoxOn]}
+                            value={value}
+                            placeholder={f.placeholder}
+                            placeholderTextColor={colors.textMuted}
+                            keyboardType="number-pad"
+                            maxLength={f.max}
+                            autoFocus={f.key === 'day'}
+                            onChangeText={(t) => {
+                              const digits = t.replace(/[^0-9]/g, '');
+                              set(digits);
+                              if (digits.length === f.max) nextRef?.current?.focus();
+                            }}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                  {birthDate && age !== null && age >= MIN_AGE && age <= MAX_AGE && (
+                    <Text style={styles.ageHint}>Tu as {age} ans. On affichera seulement ton âge.</Text>
                   )}
-
-                  {birthDate && age !== null && (
-                    <View style={styles.ageRow}>
-                      <View style={styles.agePill}>
-                        <Text style={styles.agePillText}>{age} ans</Text>
-                      </View>
-                      <Text style={styles.ageDate}>{DATE_FMT.format(birthDate)}</Text>
-                    </View>
-                  )}
+                  <View style={styles.privacyRow}>
+                    <Ionicons name="lock-closed" size={14} color={colors.textMuted} />
+                    <Text style={styles.privacyText}>On ne se sert de cette info pour rien d&apos;autre.</Text>
+                  </View>
                 </>
               )}
 
               {step === 'gender' && (
-                <>
-                  <SectionLabel>Je suis</SectionLabel>
-                  <View style={styles.tileRow}>
-                    <ChoiceTile
-                      icon="male"
-                      label="Un homme"
-                      selected={gender === 'homme'}
-                      onPress={() => setGender('homme')}
-                    />
-                    <ChoiceTile
-                      icon="female"
-                      label="Une femme"
-                      selected={gender === 'femme'}
-                      onPress={() => setGender('femme')}
-                    />
-                  </View>
+                <View style={styles.pillStack}>
+                  <ChoiceTile
+                    label="Je suis un homme"
+                    selected={gender === 'homme'}
+                    onPress={() => setGender('homme')}
+                  />
+                  <ChoiceTile
+                    label="Je suis une femme"
+                    selected={gender === 'femme'}
+                    onPress={() => setGender('femme')}
+                  />
+                </View>
+              )}
 
-                  <SectionLabel>Je recherche</SectionLabel>
-                  <View style={styles.tileRow}>
-                    <ChoiceTile
-                      icon="male"
-                      label="Un homme"
-                      selected={lookingFor === 'homme'}
-                      onPress={() => setLookingFor('homme')}
-                    />
-                    <ChoiceTile
-                      icon="female"
-                      label="Une femme"
-                      selected={lookingFor === 'femme'}
-                      onPress={() => setLookingFor('femme')}
-                    />
-                  </View>
-                </>
+              {step === 'lookingFor' && (
+                <View style={styles.cardStack}>
+                  <OptionCard
+                    label="Je veux voir des profils d'hommes"
+                    selected={lookingFor === 'homme'}
+                    onPress={() => setLookingFor('homme')}
+                  />
+                  <OptionCard
+                    label="Je veux voir des profils de femmes"
+                    selected={lookingFor === 'femme'}
+                    onPress={() => setLookingFor('femme')}
+                  />
+                </View>
               )}
 
               {step === 'goal' && (
@@ -622,8 +706,9 @@ export default function Onboarding() {
                   {GOAL_OPTIONS.map((o) => (
                     <OptionCard
                       key={o.value}
-                      icon={GOAL_ICONS[o.value] ?? 'heart'}
+                      icon={goalIcon(o.value)}
                       label={o.label}
+                      hint={GOAL_HINTS[o.value]}
                       selected={goal === o.value}
                       onPress={() => setGoal(o.value)}
                     />
@@ -634,17 +719,21 @@ export default function Onboarding() {
               {step === 'city' && (
                 <>
                   <View style={styles.searchField}>
-                    <Ionicons name="search" size={18} color={colors.accent} />
+                    <Ionicons name="search" size={18} color={colors.textMuted} />
                     <TextInput
+                      keyboardAppearance={keyboardAppearance}
                       style={styles.searchInput}
                       placeholder="Ta ville"
                       placeholderTextColor={colors.textMuted}
-                      value={
-                        chosenCity
-                          ? `${chosenCity.name}, République démocratique du Congo`
-                          : cityQuery
-                      }
+                      value={chosenCity ? chosenCity.name : cityQuery}
+                      // Toucher le champ quand une ville est déjà choisie le
+                      // vide : on tape directement la nouvelle ville, au lieu
+                      // d'ajouter des lettres au bout de l'ancienne.
+                      onFocus={() => {
+                        if (chosenCity) changeCity();
+                      }}
                       onChangeText={(t) => {
+                        cityTouched.current = true;
                         setCityId(null);
                         setCityQuery(t);
                       }}
@@ -654,10 +743,8 @@ export default function Onboarding() {
                     {(!!chosenCity || cityQuery.length > 0) && (
                       <Pressable
                         hitSlop={10}
-                        onPress={() => {
-                          setCityId(null);
-                          setCityQuery('');
-                        }}
+                        onPress={changeCity}
+                        accessibilityLabel="Effacer la ville"
                       >
                         <Ionicons name="close-circle" size={18} color={colors.textMuted} />
                       </Pressable>
@@ -667,36 +754,18 @@ export default function Onboarding() {
                   {citySuggestions.length > 0 && (
                     <View style={styles.cardStack}>
                       {citySuggestions.map((c) => (
-                        <Pressable
+                        <OptionCard
                           key={c.id}
-                          style={({ pressed }) => [
-                            styles.cityCard,
-                            pressed && { opacity: 0.85 },
-                          ]}
+                          icon={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
+                          label={c.name}
+                          hint={`${c.province}${detectedCity?.id === c.id ? ' · ta position' : ''}`}
                           onPress={() => {
-                            haptic.select();
+                            cityTouched.current = true;
                             setCityId(c.id);
                             setCityQuery(c.name);
                             Keyboard.dismiss();
                           }}
-                        >
-                          <View style={styles.cityIcon}>
-                            <Ionicons
-                              name={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
-                              size={16}
-                              color={colors.accent}
-                            />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.cityName}>{c.name}</Text>
-                            <Text style={styles.cityHint}>
-                              {c.province} · République démocratique du Congo
-                            </Text>
-                          </View>
-                          {detectedCity?.id === c.id && (
-                            <Text style={styles.cityDetected}>Position</Text>
-                          )}
-                        </Pressable>
+                        />
                       ))}
                     </View>
                   )}
@@ -708,24 +777,22 @@ export default function Onboarding() {
                   )}
 
                   {!!chosenCity && (
-                    <View style={styles.noteRow}>
-                      <Ionicons
-                        name={
-                          detectedCity?.id === chosenCity.id
-                            ? 'shield-checkmark'
-                            : 'information-circle-outline'
-                        }
-                        size={17}
-                        color={
-                          detectedCity?.id === chosenCity.id ? colors.success : colors.textMuted
-                        }
-                      />
-                      <Text style={styles.note}>
-                        {detectedCity?.id === chosenCity.id
+                    <OptionCard
+                      icon={detectedCity?.id === chosenCity.id ? 'navigate' : 'location'}
+                      label={chosenCity.name}
+                      hint={
+                        detectedCity?.id === chosenCity.id
                           ? 'Ville confirmée par ta position.'
-                          : `${chosenCity.name} · ${chosenCity.province}`}
-                      </Text>
-                    </View>
+                          : `${chosenCity.province} · République démocratique du Congo`
+                      }
+                      selected
+                      onPress={changeCity}
+                    />
+                  )}
+                  {!!chosenCity && (
+                    <Pressable onPress={changeCity} hitSlop={8} style={styles.changeCity}>
+                      <Text style={styles.changeCityText}>Changer de ville</Text>
+                    </Pressable>
                   )}
                 </>
               )}
@@ -733,232 +800,221 @@ export default function Onboarding() {
               {step === 'photos' && (
                 <>
                   <View style={styles.photoGrid}>
-                    {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
-                      const photo = photos[i];
-                      if (photo) {
+                    {Array.from({ length: Math.max(2, Math.min(MAX_PHOTOS, photos.length + 1)) }).map(
+                      (_, i) => {
+                        const photo = photos[i];
+                        if (photo) {
+                          return (
+                            <View key={photo.id} style={styles.photoCell}>
+                              <Image
+                                source={{ uri: photoUrl(photo.storage_path) }}
+                                style={styles.photoImg}
+                                contentFit="cover"
+                              />
+                              {i === 0 && (
+                                <View style={styles.mainTag}>
+                                  <Ionicons name="star" size={11} color="#ffffff" />
+                                  <Text style={styles.mainTagText}>Principale</Text>
+                                </View>
+                              )}
+                              <Pressable
+                                style={styles.photoRemove}
+                                onPress={() => removePhoto(photo)}
+                                hitSlop={12}
+                                accessibilityLabel="Retirer cette photo"
+                              >
+                                <Ionicons name="close" size={16} color={onLight.ink} />
+                              </Pressable>
+                            </View>
+                          );
+                        }
+                        const isNext = i === photos.length;
                         return (
-                          <View key={photo.id} style={styles.photoCell}>
-                            <Image
-                              source={{ uri: photoUrl(photo.storage_path) }}
-                              style={styles.photoImg}
-                              contentFit="cover"
-                            />
-                            {i === 0 && (
-                              <View style={styles.mainTag}>
-                                <Ionicons name="star" size={9} color="#ffffff" />
-                                <Text style={styles.mainTagText}>Principale</Text>
-                              </View>
-                            )}
-                            <Pressable
-                              style={styles.photoRemove}
-                              onPress={() => removePhoto(photo)}
-                              // Pastille de 23 pt : le hitSlop porte la cible
-                              // tactile à ~47 pt.
-                              hitSlop={12}
-                            >
-                              <Ionicons name="close" size={14} color="#ffffff" />
-                            </Pressable>
-                          </View>
-                        );
-                      }
-                      const isNext = i === photos.length;
-                      return (
-                        <View
-                          key={`empty-${i}`}
-                          style={[styles.photoCell, styles.photoEmpty, isNext && styles.photoNext]}
-                        >
                           <Pressable
-                            style={styles.photoEmptyPress}
-                            onPress={addPhoto}
+                            key={`empty-${i}`}
+                            style={({ pressed }) => [
+                              styles.photoCell,
+                              styles.photoEmpty,
+                              !isNext && styles.photoEmptyIdle,
+                              pressed && { transform: [{ scale: 0.98 }] },
+                            ]}
+                            onPress={openPhotoSource}
                             disabled={!isNext || uploading}
+                            accessibilityLabel="Ajouter une photo"
                           >
                             {isNext && uploading ? (
-                              <Text style={styles.photoUploading}>…</Text>
+                              <ActivityIndicator color={colors.primary} />
                             ) : (
-                              <Ionicons
-                                name="add"
-                                size={26}
-                                color={isNext ? colors.accent : colors.border}
-                              />
+                              <>
+                                <Ionicons name="camera" size={30} color={colors.textMuted} />
+                                <View style={[styles.photoPlus, isNext && styles.photoPlusNext]}>
+                                  <Ionicons
+                                    name="add"
+                                    size={20}
+                                    color={isNext ? '#ffffff' : onLight.ink}
+                                  />
+                                </View>
+                              </>
                             )}
                           </Pressable>
-                        </View>
-                      );
-                    })}
+                        );
+                      },
+                    )}
                   </View>
-                  <View style={styles.photoDots}>
-                    {Array.from({ length: MAX_PHOTOS }).map((_, i) => (
-                      <View
-                        key={i}
-                        style={[styles.photoDot, i < photos.length && styles.photoDotOn]}
-                      />
-                    ))}
-                    <Text style={styles.note}>
-                      {uploading
-                        ? '  Envoi en cours…'
-                        : `  ${photos.length} photo${photos.length > 1 ? 's' : ''} sur ${MAX_PHOTOS}`}
-                    </Text>
-                  </View>
+                  <Text style={styles.note}>
+                    {uploading
+                      ? 'Envoi en cours…'
+                      : `${photos.length} photo${photos.length > 1 ? 's' : ''} sur ${MAX_PHOTOS}. La première est ta photo principale.`}
+                  </Text>
                 </>
               )}
 
-              {step === 'about' && (
-                <>
-                  <SectionLabel>Taille</SectionLabel>
-                  <View style={styles.heightCard}>
-                    <View style={styles.heightReadout}>
-                      <Text style={styles.heightValue}>{height === '' ? '—' : height}</Text>
-                      <Text style={styles.heightUnit}> cm</Text>
-                      {height !== '' && (
-                        <Pressable
-                          hitSlop={10}
-                          onPress={() => {
-                            haptic.tap();
-                            setHeight('');
-                          }}
-                          style={styles.heightClear}
-                        >
-                          <Text style={styles.heightClearText}>Effacer</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                    <HeightSlider
-                      min={HEIGHT_MIN}
-                      max={HEIGHT_MAX}
-                      value={height === '' ? null : Number(height)}
-                      onChange={(v) => setHeight(String(v))}
+              {step === 'height' && (
+                <View style={styles.heightBlock}>
+                  <View style={styles.heightReadout}>
+                    <Text style={styles.heightValue}>{height === '' ? '-' : `${height} cm`}</Text>
+                    {height !== '' && (
+                      <Pressable hitSlop={10} onPress={() => setHeight('')}>
+                        <Text style={styles.heightClearText}>Effacer</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                  <HeightSlider
+                    min={HEIGHT_MIN}
+                    max={HEIGHT_MAX}
+                    value={height === '' ? null : Number(height)}
+                    onChange={(v) => setHeight(String(v))}
+                  />
+                </View>
+              )}
+
+              {step === 'job' && (
+                <View style={styles.nameBlock}>
+                  <TextInput
+                    keyboardAppearance={keyboardAppearance}
+                    style={styles.lineField}
+                    placeholder="Ton métier"
+                    placeholderTextColor={colors.textMuted}
+                    value={job}
+                    onChangeText={setJob}
+                    maxLength={80}
+                    autoFocus
+                    returnKeyType="next"
+                    onSubmitEditing={next}
+                  />
+                  <FocusLine active={job.trim().length > 0} />
+                </View>
+              )}
+
+              {step === 'education' && (
+                <View style={styles.cardStack}>
+                  {EDUCATION_OPTIONS.map((o) => (
+                    <OptionCard
+                      key={o.value}
+                      label={o.label}
+                      selected={education === o.value}
+                      onPress={() => setEducation(education === o.value ? null : o.value)}
                     />
-                    <View style={styles.heightBounds}>
-                      <Text style={styles.heightBound}>{HEIGHT_MIN} cm</Text>
-                      <Text style={styles.heightBound}>{HEIGHT_MAX} cm</Text>
-                    </View>
-                  </View>
+                  ))}
+                </View>
+              )}
 
-                  <SectionLabel>Profession</SectionLabel>
-                  <View style={styles.inputCard}>
-                    <Ionicons name="briefcase-outline" size={18} color={colors.accent} />
-                    <TextInput
-                      style={styles.inputCardField}
-                      placeholder="Ton métier"
-                      placeholderTextColor={colors.textMuted}
-                      value={job}
-                      onChangeText={setJob}
-                      maxLength={80}
+              {step === 'smoking' && (
+                <View style={styles.cardStack}>
+                  {FREQUENCY_OPTIONS.map((o) => (
+                    <OptionCard
+                      key={o.value}
+                      label={SMOKING_LABELS[o.value] ?? o.label}
+                      selected={smoking === o.value}
+                      onPress={() => setSmoking(smoking === o.value ? null : o.value)}
                     />
-                  </View>
-
-                  <SectionLabel>Études</SectionLabel>
-                  <View style={styles.chipWrap}>
-                    {EDUCATION_OPTIONS.map((o) => (
-                      <BounceChip
-                        key={o.value}
-                        label={o.label}
-                        active={education === o.value}
-                        onPress={() => setEducation(education === o.value ? null : o.value)}
-                      />
-                    ))}
-                  </View>
-                </>
+                  ))}
+                </View>
               )}
 
-              {step === 'lifestyle' && (
-                <>
-                  <SectionLabel>Tabac</SectionLabel>
-                  <SegmentPills
-                    options={FREQUENCY_OPTIONS}
-                    value={smoking}
-                    onChange={(v) => setSmoking(smoking === v ? null : v)}
-                  />
-
-                  <SectionLabel>Alcool</SectionLabel>
-                  <SegmentPills
-                    options={FREQUENCY_OPTIONS}
-                    value={drinking}
-                    onChange={(v) => setDrinking(drinking === v ? null : v)}
-                  />
-                </>
+              {step === 'drinking' && (
+                <View style={styles.cardStack}>
+                  {FREQUENCY_OPTIONS.map((o) => (
+                    <OptionCard
+                      key={o.value}
+                      label={DRINKING_LABELS[o.value] ?? o.label}
+                      selected={drinking === o.value}
+                      onPress={() => setDrinking(drinking === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
               )}
 
-              {step === 'children' && (
-                <>
-                  <SectionLabel>{"J'ai des enfants"}</SectionLabel>
-                  <View style={styles.tileRow}>
-                    {HAS_CHILDREN_OPTIONS.map((o) => (
-                      <ChoiceTile
-                        key={o.value}
-                        icon={o.value === 'oui' ? 'people' : 'person'}
-                        label={o.label}
-                        selected={hasChildren === o.value}
-                        onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
-                      />
-                    ))}
-                  </View>
-
-                  <SectionLabel>Je veux des enfants</SectionLabel>
-                  <SegmentPills
-                    options={WANTS_CHILDREN_OPTIONS}
-                    value={wantsChildren}
-                    onChange={(v) => setWantsChildren(wantsChildren === v ? null : v)}
-                  />
-                </>
+              {step === 'wantsChildren' && (
+                <View style={styles.cardStack}>
+                  {WANTS_CHILDREN_OPTIONS.map((o) => (
+                    <OptionCard
+                      key={o.value}
+                      label={WANTS_CHILDREN_LABELS[o.value] ?? o.label}
+                      selected={wantsChildren === o.value}
+                      onPress={() => setWantsChildren(wantsChildren === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
               )}
 
-              {step === 'background' && (
-                <>
-                  <SectionLabel>Religion</SectionLabel>
-                  <View style={styles.chipWrap}>
-                    {RELIGION_OPTIONS.map((r) => (
-                      <BounceChip
-                        key={r}
-                        label={r}
-                        active={religion === r}
-                        onPress={() => setReligion(religion === r ? null : r)}
-                      />
-                    ))}
-                  </View>
+              {step === 'hasChildren' && (
+                <View style={styles.cardStack}>
+                  {HAS_CHILDREN_OPTIONS.map((o) => (
+                    <OptionCard
+                      key={o.value}
+                      label={HAS_CHILDREN_LABELS[o.value] ?? o.label}
+                      selected={hasChildren === o.value}
+                      onPress={() => setHasChildren(hasChildren === o.value ? null : o.value)}
+                    />
+                  ))}
+                </View>
+              )}
 
-                  <SectionLabel>Langues parlées</SectionLabel>
-                  <View style={styles.chipWrap}>
-                    {LANGUAGE_OPTIONS.map((l) => (
-                      <BounceChip
-                        key={l}
-                        label={l}
-                        active={languages.includes(l)}
-                        onPress={() =>
-                          setLanguages((prev) =>
-                            prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l],
-                          )
-                        }
-                      />
-                    ))}
-                  </View>
-                </>
+              {step === 'religion' && (
+                <View style={styles.cardStack}>
+                  {RELIGION_OPTIONS.map((r) => (
+                    <OptionCard
+                      key={r}
+                      label={r}
+                      selected={religion === r}
+                      onPress={() => setReligion(religion === r ? null : r)}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {step === 'languages' && (
+                <View style={styles.cardStack}>
+                  {LANGUAGE_OPTIONS.map((l) => (
+                    <OptionCard
+                      key={l}
+                      multi
+                      label={l}
+                      selected={languages.includes(l)}
+                      onPress={() =>
+                        setLanguages((prev) =>
+                          prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l],
+                        )
+                      }
+                    />
+                  ))}
+                </View>
               )}
 
               {step === 'interests' && (
                 <>
-                  {/* Compteur : il passe au vert quand le minimum est atteint. */}
-                  <View style={styles.interestHead}>
-                    {interests.length >= MIN_INTERESTS ? (
-                      <View style={[styles.countPill, styles.countPillDone]}>
-                        <Ionicons name="checkmark" size={14} color="#ffffff" />
-                        <Text style={styles.countPillDoneText}>
-                          {interests.length} {"choisis, c'est parfait"}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.countPill}>
-                        <Text style={styles.countPillText}>
-                          {interests.length}/{MIN_INTERESTS} minimum
-                        </Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.interestCount}>
+                    {interests.length >= MIN_INTERESTS
+                      ? `${interests.length} choisis, c'est parfait.`
+                      : `${interests.length} sur ${MIN_INTERESTS} minimum`}
+                  </Text>
                   <View style={styles.chipWrap}>
                     {INTEREST_OPTIONS.map((o) => (
                       <BounceChip
                         key={o}
                         label={o}
+                        icon={interestIcon(o)}
                         active={interests.includes(o)}
                         onPress={() =>
                           setInterests((prev) =>
@@ -972,10 +1028,11 @@ export default function Onboarding() {
               )}
 
               {step === 'bio' && (
-                <View style={styles.bioCard}>
+                <View style={styles.nameBlock}>
                   <TextInput
+                    keyboardAppearance={keyboardAppearance}
                     style={styles.bioField}
-                    placeholder="Ce qui te fait vibrer, ce que tu cherches…"
+                    placeholder="Dis-le avec tes propres mots…"
                     placeholderTextColor={colors.textMuted}
                     value={bio}
                     onChangeText={setBio}
@@ -983,47 +1040,47 @@ export default function Onboarding() {
                     multiline
                     textAlignVertical="top"
                   />
-                  <View style={styles.bioFoot}>
-                    <View style={styles.bioTrack}>
-                      <View
-                        style={[styles.bioFill, { width: `${(bio.length / BIO_MAX) * 100}%` }]}
-                      />
-                    </View>
-                    <Text style={styles.bioCount}>
-                      {bio.length}/{BIO_MAX}
-                    </Text>
-                  </View>
+                  <FocusLine active={bio.trim().length > 0} />
+                  <Text style={styles.bioCount}>{BIO_MAX - bio.length} caractères</Text>
                 </View>
               )}
             </View>
-          </View>
+          </Animated.View>
         </ScrollView>
 
         <View style={styles.footer}>
           {!!error && <Text style={styles.error}>{error}</Text>}
-          <GradientButton
-            title={isLast ? 'Terminer' : 'Continuer'}
-            icon={isLast ? 'checkmark' : 'arrow-forward'}
-            onPress={next}
-            loading={saving}
-            disabled={validateStep() !== null}
-          />
-          {/* Les étapes de complétion se passent d'un geste, sauf la dernière
-              qui porte le bouton d'enregistrement. */}
           {OPTIONAL_STEPS.includes(step) && !isLast && (
-            <Pressable
+            <SkipLink
               onPress={() => {
                 setError(null);
                 goTo(stepIndex + 1);
               }}
-              hitSlop={8}
-              style={styles.skipBtn}
-            >
-              <Text style={styles.skipText}>Passer cette étape</Text>
-            </Pressable>
+            />
+          )}
+          {step === 'photos' && photos.length === 0 ? (
+            <GradientButton
+              title="Ajouter des photos"
+              icon="images"
+              onPress={openPhotoSource}
+              loading={uploading}
+            />
+          ) : (
+            <GradientButton
+              title={isLast ? 'Terminer' : 'Continuer'}
+              onPress={next}
+              loading={saving}
+              disabled={validateStep() !== null}
+            />
           )}
         </View>
       </KeyboardAvoidingView>
+
+      <PhotoSourceSheet
+        visible={sourceOpen}
+        onClose={() => setSourceOpen(false)}
+        onPick={(source) => void addPhoto(source)}
+      />
     </SafeAreaView>
   );
 }

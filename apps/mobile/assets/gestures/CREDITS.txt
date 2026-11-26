@@ -1,0 +1,14 @@
+Illustrations des gestes de vérification
+
+Source : Fluent Emoji de Microsoft, style 3D, teinte de peau Medium-Dark.
+https://github.com/microsoft/fluentui-emoji
+Licence : MIT, Copyright (c) Microsoft Corporation.
+Téléchargées le 25/11/2026.
+
+main_ouverte.png   Hand with fingers splayed
+pouce_leve.png     Thumbs up
+signe_v.png        Victory hand
+main_joue.png      Raised back of hand
+paume_face.png     Raised hand (sert aussi pour main_sur_tete)
+trois_doigts.png   Ok hand
+index_leve.png     Index pointing up

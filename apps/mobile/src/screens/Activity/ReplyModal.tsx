@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { sendMessage } from '@/services/api';
 import { Button } from '@/components/ui';
-import { colors, radius, sigCorner, spacing } from '@/theme';
+import { colors, radius, sigCorner, spacing, keyboardAppearance } from '@/theme';
 import type { MatchSummary } from '@/types';
 
 // Répondre à une invitation DM reçue.
@@ -99,6 +99,7 @@ export function ReplyModal({
           </View>
 
           <TextInput
+            keyboardAppearance={keyboardAppearance}
             style={styles.input}
             placeholder="Ta réponse"
             placeholderTextColor={colors.textMuted}
@@ -131,7 +132,7 @@ export function ReplyModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(23,18,23,.6)',
+    backgroundColor: 'rgba(16, 17, 19,.6)',
     justifyContent: 'center',
     padding: spacing.lg,
   },

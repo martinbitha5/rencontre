@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -344,7 +344,9 @@ export default function Activity() {
   const withdrawDm = (item: MatchSummary) => {
     Alert.alert(
       "Supprimer l'invitation",
-      `Ton DM envoyé à ${item.display_name} sera retiré et ne sera plus visible. Les pièces utilisées ne sont pas remboursées.`,
+      `Ton DM envoyé à ${item.display_name} sera retiré et ne sera plus visible.${
+        PAYMENTS_ENABLED ? ' Les pièces utilisées ne sont pas remboursées.' : ''
+      }`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -418,7 +420,7 @@ export default function Activity() {
   // l'onglet actif se cale sur la page affichée.
   // ------------------------------------------------------------------
   const { width } = useWindowDimensions();
-  const pagerRef = useRef<ScrollView>(null);
+  const pagerRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const didInitScroll = useRef(false);
 
   const syncSection = useCallback((index: number) => {
@@ -612,7 +614,7 @@ export default function Activity() {
                       name={item.display_name}
                       verified={item.is_verified}
                     />
-                    {/* Seule zone active de la carte avec la corbeille : le nom
+                    {/* Seule zone active de la carte avec « Retirer » : le nom
                         mène à la FICHE, jamais à la conversation. Consulter
                         quelqu'un et lui écrire sont deux choses distinctes, et
                         seule la seconde se paie. Le message, lui, reste inerte. */}
@@ -629,31 +631,41 @@ export default function Activity() {
                         Envoyé {timeAgo(item.last_message_at ?? item.matched_at)}
                       </Text>
                     </Pressable>
-                  </View>
-                  <Text style={styles.sentMessage}>{item.last_message ?? 'Message envoyé'}</Text>
-                  <View style={styles.sentFooter}>
-                    {/* Double coche grise = distribué, rose = lu. */}
-                    <View style={styles.sentStatus}>
-                      <Text
-                        style={[
-                          styles.sentStatusText,
-                          item.sent_read === true && { color: colors.accent },
-                        ]}
-                      >
-                        {item.sent_read === true ? 'Message lu' : 'Message reçu'}
-                      </Text>
+                    {/* État de lecture en pastille : rose plein quand c'est lu. */}
+                    <View style={[styles.sentChip, item.sent_read === true && styles.sentChipRead]}>
                       <Ionicons
-                        name="checkmark-done"
-                        size={16}
-                        color={item.sent_read === true ? colors.accent : colors.textMuted}
+                        name={item.sent_read === true ? 'checkmark-done' : 'checkmark'}
+                        size={14}
+                        color={item.sent_read === true ? colors.textOnAccent : colors.textMuted}
                       />
+                      <Text
+                        style={[styles.sentChipText, item.sent_read === true && styles.sentChipTextRead]}
+                      >
+                        {item.sent_read === true ? 'Lu' : 'Distribué'}
+                      </Text>
+                    </View>
+                  </View>
+                  {/* Le message tel qu'il est parti : une bulle comme dans la
+                      conversation, alignée à droite. */}
+                  <View style={styles.sentBubble}>
+                    <Text style={styles.sentBubbleText}>{item.last_message ?? 'Message envoyé'}</Text>
+                  </View>
+                  <View style={styles.sentFooter}>
+                    <View style={styles.sentWaiting}>
+                      <Ionicons name="hourglass-outline" size={14} color={colors.textMuted} />
+                      <Text style={styles.sentStatusText} numberOfLines={1}>
+                        {item.sent_read === true ? 'Vu, en attente de réponse' : 'En attente de lecture'}
+                      </Text>
                     </View>
                     <Pressable
-                      style={({ pressed }) => [styles.trashBtn, pressed && { opacity: 0.7 }]}
+                      style={({ pressed }) => [styles.withdrawBtn, pressed && { opacity: 0.6 }]}
                       onPress={() => withdrawDm(item)}
-                      hitSlop={6}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Retirer le message envoyé à ${item.display_name}`}
                     >
-                      <Ionicons name="trash" size={20} color={colors.danger} />
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                      <Text style={styles.withdrawText}>Retirer</Text>
                     </Pressable>
                   </View>
                 </View>

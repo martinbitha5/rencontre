@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, InteractionManager, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { archiveMatch, getMessages, getMyMatches, photoUrl } from '@/services/api';
 import { cacheGet, cacheSet } from '@/utils/cache';
@@ -12,6 +12,7 @@ import { ZolaMark } from '@/components/ZolaLogo';
 import { realtimeChannel, supabase } from '@/services/supabase';
 import { colors } from '@/theme';
 import { timeAgo, type MatchSummary } from '@/types';
+import { afterInteractions } from '@/utils/afterInteractions';
 import { styles } from './Matches.styles';
 
 export default function Matches() {
@@ -29,7 +30,7 @@ export default function Matches() {
     if (prefetchedChats.current) return;
     prefetchedChats.current = true;
     const targets = list.filter((m) => m.last_message && !m.is_archived).slice(0, 8);
-    InteractionManager.runAfterInteractions(() => {
+    afterInteractions(() => {
       for (const m of targets) {
         getMessages(m.match_id)
           .then((msgs) => cacheSet(`messages:${m.match_id}`, msgs.slice(-50)))
@@ -260,7 +261,7 @@ export default function Matches() {
           onRefresh={load}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListFooterComponent={
-            <Text style={styles.endText}>Fin de la liste 🎉</Text>
+            <Text style={styles.endText}>{"Tu as tout vu pour l'instant"}</Text>
           }
           renderItem={({ item }) => (
             <Pressable

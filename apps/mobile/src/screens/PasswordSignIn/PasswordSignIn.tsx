@@ -7,6 +7,7 @@ import { Button, ErrorText, Input, StepIntro } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
 import { colors } from '@/theme';
 import { styles } from './PasswordSignIn.styles';
+import { safeBack } from '@/utils/safeBack';
 
 // Connexion de secours par mot de passe, pour qui n'a pas accès à ses e-mails
 // (les comptes historiques créés avec un mot de passe fonctionnent aussi).
@@ -33,7 +34,7 @@ export default function PasswordSignIn() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
+      <Pressable onPress={() => safeBack(router, '/(auth)/welcome')} hitSlop={10} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <KeyboardAvoidingView

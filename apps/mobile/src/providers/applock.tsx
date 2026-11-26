@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import React, {
   createContext,
@@ -22,6 +23,12 @@ import { AppState, type AppStateStatus } from 'react-native';
 // via expo-secure-store, jamais dans AsyncStorage.
 
 const CODE_KEY = 'zola.applock.code';
+// Marqueur d'installation, volontairement dans AsyncStorage : sur iPhone, le
+// trousseau SURVIT à la désinstallation de l'app, AsyncStorage non. Un code
+// trouvé dans le trousseau sans ce marqueur vient donc d'une installation
+// précédente (ou d'un ancien essai dans Expo Go) : on l'efface, sinon un
+// téléphone « neuf » s'ouvrait sur un code que personne ne connaît.
+const INSTALL_KEY = 'zola.installed';
 // Délai de grâce : revenir dans l'app après un aller-retour très court (ouvrir
 // l'appareil photo, une notification) ne redemande pas le code.
 const GRACE_MS = 30_000;
@@ -34,6 +41,9 @@ interface AppLockState {
   removeCode: (currentCode: string) => Promise<boolean>;
   unlock: (code: string) => Promise<boolean>;
   lockNow: () => void;
+  // Efface le code sans le connaître : réservé à la déconnexion (se
+  // reconnecter prouve qu'on est bien le titulaire du compte).
+  forgetCode: () => Promise<void>;
 }
 
 const AppLockContext = createContext<AppLockState | undefined>(undefined);
@@ -48,6 +58,16 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        const installed = await AsyncStorage.getItem(INSTALL_KEY).catch(() => '1');
+        if (!installed) {
+          // Mise à jour de l'app (et non réinstallation) : la session Supabase
+          // est toujours dans AsyncStorage, le code de l'utilisateur est
+          // légitime et on le garde.
+          const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
+          const hasSession = keys.some((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+          if (!hasSession) await SecureStore.deleteItemAsync(CODE_KEY).catch(() => {});
+          await AsyncStorage.setItem(INSTALL_KEY, '1').catch(() => {});
+        }
         const stored = await SecureStore.getItemAsync(CODE_KEY);
         setHasCode(!!stored);
         setLocked(!!stored);
@@ -110,9 +130,15 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     if (hasCode) setLocked(true);
   }, [hasCode]);
 
+  const forgetCode = useCallback(async () => {
+    await SecureStore.deleteItemAsync(CODE_KEY).catch(() => {});
+    setHasCode(false);
+    setLocked(false);
+  }, []);
+
   return (
     <AppLockContext.Provider
-      value={{ hasCode, locked, ready, setCode, removeCode, unlock, lockNow }}
+      value={{ hasCode, locked, ready, setCode, removeCode, unlock, lockNow, forgetCode }}
     >
       {children}
     </AppLockContext.Provider>

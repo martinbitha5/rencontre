@@ -21,7 +21,7 @@ export default function AppLock() {
   const [first, setFirst] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Le code secret est l'un des avantages vendus avec l'abonnement Incognito.
+  // Le code secret est l'un des avantages vendus avec l'abonnement Invisible.
   // Tant que l'app est gratuite, il est ouvert à tout le monde : le mur
   // d'abonnement n'aurait plus de porte de sortie.
   const subscribed =
@@ -125,9 +125,9 @@ export default function AppLock() {
         {!subscribed && !hasCode ? (
           <View style={styles.locked}>
             <Text style={styles.lockedText}>
-              Le code secret fait partie de l'abonnement Incognito.
+              Le code secret fait partie de l'abonnement Invisible.
             </Text>
-            <Button title="Voir l'offre Incognito" onPress={() => router.push('/incognito')} />
+            <Button title="Voir l'offre Invisible" onPress={() => router.push('/incognito')} />
           </View>
         ) : hasCode ? (
           <Button

@@ -12,7 +12,9 @@ import {
   getFavorites,
   getLikers,
   getMyEvents,
+  isEventOverError,
   removeFavorite,
+  sendEventSwipe,
   sendSwipe,
   updateSearchFilters,
 } from '@/services/api';
@@ -23,7 +25,7 @@ import { PAYMENTS_ENABLED } from '@/config/features';
 import { haptic } from '@/utils/haptics';
 import { onPartyAccessChanged } from '@/utils/partySignal';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
-import { ZolaMark, FingerprintDraw } from '@/components/ZolaLogo';
+import { FingerprintDraw } from '@/components/ZolaLogo';
 import { PressableScale } from '@/components/motion';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { SwipeDeck, type SwipeDeckHandle } from './SwipeDeck';
@@ -154,12 +156,15 @@ export default function Discover() {
       const feed = await fetchFeed(20);
       setProfiles(feed);
       lastLoadedAt.current = Date.now();
-    } catch {
-      // le feed peut être vide en cas d'erreur réseau, l'utilisateur peut rafraîchir
+    } catch (error) {
+      // La soirée s'est fermée depuis la dernière lecture : on la relit, ce
+      // qui fait retomber le fil sur Rencontres. Toute autre erreur laisse un
+      // paquet vide que l'utilisateur peut rafraîchir.
+      if (isEventOverError(error)) syncEvent();
     } finally {
       setLoading(false);
     }
-  }, [fetchFeed]);
+  }, [fetchFeed, syncEvent]);
 
   // Premier affichage (une fois la soirée connue), et bascule automatique
   // quand la soirée en cours change (elle commence ou se termine).
@@ -212,7 +217,11 @@ export default function Discover() {
         });
       }
       try {
-        const result = await sendSwipe(profile.user_id, liked);
+        // En soirée, la décision est rangée dans la soirée : un recalage
+        // s'effacera avec elle et ne touche pas l'historique de Rencontres.
+        const result = eventId
+          ? await sendEventSwipe(eventId, profile.user_id, liked)
+          : await sendSwipe(profile.user_id, liked);
         if (result.status === 'limit_reached') {
           setLimitReached(result.limit);
           // le swipe n'a pas été compté : on remet le profil dans le paquet
@@ -230,12 +239,18 @@ export default function Discover() {
           haptic.warning();
           setMissedLiker(profile.display_name);
         }
-      } catch {
+      } catch (error) {
+        if (isEventOverError(error)) {
+          // La soirée vient de se terminer : rien n'a été enregistré, le fil
+          // repasse sur Rencontres de lui-même.
+          syncEvent();
+          return;
+        }
         // en cas d'échec réseau on remet la carte
         setProfiles((prev) => [profile, ...prev]);
       }
     },
-    [consumeLike],
+    [consumeLike, eventId, syncEvent],
   );
 
   // Recharge quand le paquet devient petit
@@ -258,7 +273,17 @@ export default function Discover() {
 
   const top = profiles[0];
 
-  const onDmResult = (result: DirectMessageResult, target: { user_id: string; display_name: string }) => {
+  // En soirée, la flèche de retour ouvre l'historique DE LA SOIRÉE : ce qu'on
+  // y a passé se revoit là, et nulle part ailleurs.
+  const historyRoute =
+    eventId && activeEvent
+      ? {
+          pathname: '/history' as const,
+          params: { eventId, eventName: activeEvent.name },
+        }
+      : ('/history' as const);
+
+  const onDmResult =(result: DirectMessageResult, target: { user_id: string; display_name: string }) => {
     setDmTarget(null);
     if (result.status === 'insufficient_coins') {
       apply({ balance: result.balance });
@@ -321,16 +346,14 @@ export default function Discover() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Filigrane Velours : l'empreinte du logo, à peine visible, déborde du
-          bord droit de l'écran. Décoratif uniquement, jamais interactif. */}
-      <View style={styles.watermark} pointerEvents="none">
-        <ZolaMark size={84} color={colors.primaryDeep} />
-      </View>
+      {/* En-tête : titre et accroche à gauche, raccourcis à droite. */}
       <View style={styles.header}>
-        <Text style={styles.brand}>Zola</Text>
-        {/* Conteneur solde + boutons carrés : crème posé sur l'ivoire, coin
-            signature en bas à droite. Mêmes actions qu'avant, seul
-            l'habillage change. */}
+        <View style={styles.headerText}>
+          <Text style={styles.brand}>{activeEvent ? 'Ce soir' : 'Rencontres'}</Text>
+          <Text style={styles.tagline} numberOfLines={2}>
+            Like, matche et commence à discuter. Qui sait où ça peut mener ?
+          </Text>
+        </View>
         <View style={styles.headerGroup}>
           {/* Solde et recharge : masqués tant que l'app est gratuite. */}
           {PAYMENTS_ENABLED && (
@@ -348,25 +371,52 @@ export default function Discover() {
             </Pressable>
           )}
           <Pressable
-            onPress={() => router.push('/history')}
-            hitSlop={4}
-            style={styles.headerBtn}
+            onPress={() => router.push(historyRoute)}
+            hitSlop={8}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
             accessibilityRole="button"
-            accessibilityLabel="Historique des profils vus"
+            accessibilityLabel={
+              eventId ? 'Profils passés pendant la soirée' : 'Historique des profils vus'
+            }
           >
-            <Ionicons name="arrow-undo-outline" size={20} color={colors.primaryDeep} />
+            <Ionicons name="arrow-undo" size={22} color={colors.text} />
           </Pressable>
           <Pressable
-            onPress={() => router.push('/(tabs)/profile/preferences')}
-            hitSlop={4}
-            style={styles.headerBtn}
+            onPress={() => router.push('/preferences')}
+            hitSlop={8}
+            style={({ pressed }) => [styles.headerBtn, pressed && { opacity: 0.6 }]}
             accessibilityRole="button"
             accessibilityLabel="Préférences de recherche"
           >
-            <Ionicons name="search" size={20} color={colors.primaryDeep} />
+            <Ionicons name="options-outline" size={24} color={colors.text} />
           </Pressable>
         </View>
       </View>
+
+      {/* Bandeau de soirée : le paquet ne montre que les personnes présentes,
+          et ce qu'on y décide reste dans la soirée. Le bandeau dit où l'on
+          est, et mène à l'historique du soir. */}
+      {activeEvent && (
+        <Pressable
+          style={styles.eventBanner}
+          onPress={() => router.push(historyRoute)}
+          accessibilityRole="button"
+          accessibilityLabel={`Soirée ${activeEvent.name}, voir les profils passés`}
+        >
+          <View style={styles.eventIcon}>
+            <Ionicons name="ticket" size={14} color={colors.textOnAccent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eventName} numberOfLines={1}>
+              {activeEvent.name}
+            </Text>
+            <Text style={styles.eventHint} numberOfLines={1}>
+              Les personnes présentes, et rien d’autre
+            </Text>
+          </View>
+          <Text style={styles.eventAction}>Ce soir</Text>
+        </Pressable>
+      )}
 
       {/* Compteur de likes : montré uniquement quand il reste peu de likes à un
           compte non vérifié. Un compte vérifié n'a pas de quota, donc pas de
@@ -418,7 +468,7 @@ export default function Discover() {
           />
         </Centered>
       ) : (
-        <>
+        <View style={styles.stage}>
           {/* Le paquet arrive en fondu : transition fluide depuis l'animation
               du logo, pas d'apparition sèche. */}
           <Animated.View entering={FadeIn.duration(350)} style={styles.deck}>
@@ -431,8 +481,9 @@ export default function Discover() {
               onToggleFavorite={toggleFavorite}
             />
           </Animated.View>
-          {/* Les trois seules décisions possibles : Passer, DM, Like. Le geste
-              sur la carte ne fait que feuilleter les photos. */}
+          {/* Les trois décisions : Passer, DM, Like. Le glissement de la carte
+              fait aussi Passer (gauche) ou Like (droite) ; toucher ses bords
+              feuillette les photos. */}
           <Animated.View entering={FadeIn.duration(350)} style={styles.actions}>
             <PressableScale
               style={styles.actionBtn}
@@ -447,7 +498,7 @@ export default function Discover() {
               accessibilityLabel="Passer ce profil"
             >
               <View style={styles.actionInner}>
-                <Ionicons name="close" size={32} color={onLight.ink} />
+                <Ionicons name="close" size={30} color={onLight.ink} />
               </View>
             </PressableScale>
             <PressableScale
@@ -458,7 +509,7 @@ export default function Discover() {
               accessibilityLabel="Envoyer un message direct"
             >
               <View style={styles.actionInner}>
-                <Ionicons name="chatbubble-ellipses" size={28} color={colors.textOnPrimary} />
+                <Ionicons name="chatbubble-ellipses" size={24} color={onLight.ink} />
                 {/* Pastille de coût : rien à signaler quand écrire est libre. */}
                 {PAYMENTS_ENABLED && (
                   <View style={styles.msgCostBadge}>
@@ -480,11 +531,11 @@ export default function Discover() {
               accessibilityLabel="Liker ce profil"
             >
               <View style={styles.actionInner}>
-                <Ionicons name="heart" size={30} color={colors.textOnAccent} />
+                <Ionicons name="heart" size={28} color={onLight.ink} />
               </View>
             </PressableScale>
           </Animated.View>
-        </>
+        </View>
       )}
 
       {/* Vue profil complète avant de se décider */}
@@ -584,8 +635,10 @@ export default function Discover() {
             </View>
             <Text style={styles.matchTitle}>Oups !</Text>
             <Text style={styles.matchText}>
-              {missedLiker} t’avait liké, et tu viens de passer. Ce profil reste dans ton
-              historique.
+              {missedLiker} t’avait liké, et tu viens de passer.{' '}
+              {eventId
+                ? 'Ce profil reste dans l’historique de la soirée, tant qu’elle dure.'
+                : 'Ce profil reste dans ton historique.'}
             </Text>
             <Button title="Continuer" onPress={() => setMissedLiker(null)} />
           </View>

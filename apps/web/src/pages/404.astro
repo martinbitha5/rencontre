@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page introuvable | Zola</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preload" href="/fonts/montserrat-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/theme.css">
+  <style is:inline>
+    main {
+      min-height: calc(100vh - 64px - 180px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 60px 24px; text-align: center;
+    }
+    .box { max-width: 520px; }
+    .code { font-size: .78rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+    h1 { font-size: clamp(1.7rem, 4.5vw, 2.4rem); font-weight: 900; line-height: 1.15; margin-bottom: 14px; }
+    p { color: var(--muted); margin-bottom: 26px; }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/">ZOLA</a>
+      <a class="back" href="/">Accueil</a>
+    </div>
+  </nav>
+
+  <main>
+    <div class="box">
+      <div class="code">Erreur 404</div>
+      <h1>Cette page n'existe pas.</h1>
+      <p>Le lien est peut-être incomplet, ou la page a été déplacée. Le blog et l'accueil, eux, sont bien là.</p>
+      <div class="btn-row" style="justify-content: center;">
+        <a class="btn" href="/">Retour à l'accueil</a>
+        <a class="btn ghost" href="/blog">Voir le blog</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="/blog">Blog</a>
+      <a href="/faq">F.A.Q</a>
+      <a href="/conditions">Conditions générales</a>
+      <a href="/confidentialite">Confidentialité</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+</body>
+</html>

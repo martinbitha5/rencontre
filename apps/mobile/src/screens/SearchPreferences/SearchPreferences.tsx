@@ -1,34 +1,46 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getCities, updateMyProfile, updateSearchFilters } from '@/services/api';
 import { CoinIcon, InsufficientCoinsModal } from '@/components/coins';
 import { RangeSlider } from './RangeSlider';
-import { Button, ScreenHeader, Segmented, VerifiedBadge } from '@/components/ui';
+import {
+  Button,
+  HeaderBackButton,
+  ScreenHeader,
+  Segmented,
+  VerifiedBadge,
+} from '@/components/ui';
 import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
 import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { useWallet } from '@/providers/wallet';
-import { GOAL_OPTIONS, RELIGION_OPTIONS } from '@/profileOptions';
+import { GOAL_OPTIONS, goalIcon, RELIGION_OPTIONS } from '@/profileOptions';
 import { colors, spacing } from '@/theme';
 import type { City, Gender } from '@/types';
 import { styles } from './SearchPreferences.styles';
+import { safeBack } from '@/utils/safeBack';
 
 type TriState = 'oui' | 'non' | null;
 
 // Le corail doux des toggles : assez teinté pour se lire activé, assez clair
 // pour rester léger.
-const TOGGLE_PINK = '#9B3F7A';
+const TOGGLE_PINK = '#fd267a';
 
 // Une icône par intention, posée dans la carte de sélection.
-const GOAL_ICONS: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
-  mariage: { name: 'heart', color: '#9B3F7A' },
-  relation_serieuse: { name: 'ribbon', color: '#C2568C' },
-  amitie: { name: 'people', color: '#3B7D75' },
-  rien_de_serieux: { name: 'flash', color: '#6A4A86' },
-  je_me_laisse_surprendre: { name: 'sparkles', color: '#C7963C' },
+const GOAL_COLORS: Record<string, string> = {
+  relation_serieuse: '#fd267a',
+  mariage: '#e6175f',
+  amitie: '#3B7D75',
+  rien_de_serieux: '#ff6036',
+  je_me_laisse_surprendre: '#C7963C',
 };
+const GOAL_ICONS: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> =
+  Object.fromEntries(
+    Object.entries(GOAL_COLORS).map(([k, color]) => [k, { name: goalIcon(k), color }]),
+  );
 
 // Badge de coût en pièces, posé sur le coin d'une carte premium. Un seul
 // endroit à neutraliser pour que les trois filtres autrefois payants se
@@ -133,6 +145,7 @@ function MultiChips({
 // Filtres de recherche, structure : ville + tout le pays, filtre DM,
 // âge, intentions, sexe, enfants, en ligne, religions, fumeurs.
 export default function SearchPreferences() {
+  const router = useRouter();
   const { profile, refreshProfile } = useAuth();
   const { costs, apply } = useWallet();
   const [insufficientCost, setInsufficientCost] = useState<number | null>(null);
@@ -231,11 +244,14 @@ export default function SearchPreferences() {
       apply({ balance: result.balance });
       await refreshProfile();
       setCityPickerOpen(false);
+      // Une fois enregistré, l'écran se referme de lui-même : on revient là
+      // d'où l'on venait (Rencontres ou Paramètres) sans chercher la sortie.
       Alert.alert(
         'Filtres enregistrés',
         result.charged > 0
           ? `Ton deck Rencontres est mis à jour (${result.charged} pièces débitées).`
           : 'Ton deck Rencontres est mis à jour.',
+        [{ text: 'OK', onPress: () => safeBack(router) }],
       );
     } catch {
       Alert.alert('Erreur', "Impossible d'enregistrer.");
@@ -246,7 +262,9 @@ export default function SearchPreferences() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScreenHeader title="Filtres" />
+      {/* Retour explicite : l'écran s'ouvre depuis Rencontres comme depuis
+          Paramètres, on doit pouvoir en sortir sans passer par les onglets. */}
+      <ScreenHeader title="Filtres" left={<HeaderBackButton />} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
           Affine ta recherche pour voir les profils qui te correspondent le mieux.

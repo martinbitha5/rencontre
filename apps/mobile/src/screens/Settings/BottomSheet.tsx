@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { colors, glass, isDark, isIOS, m3, radius, shadows, spacing } from '@/theme';
 
 // Feuille qui glisse depuis le bas, pour tous les choix importants de l'app
@@ -42,16 +43,20 @@ export function BottomSheet({
   const progress = useSharedValue(0);
   // Glissement du doigt pendant le drag, en points.
   const drag = useSharedValue(0);
+  // Clavier ouvert (champ texte dans la feuille) : la feuille remonte d'autant.
+  // Sans ça, collée en bas de l'écran, elle disparaissait entièrement sous le
+  // clavier et toucher « Description » semblait ne rien faire.
+  const keyboardInset = useKeyboardInset();
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      drag.value = 0;
-      progress.value = withSpring(1, { damping: 24, stiffness: 260, mass: 0.9 });
+      drag.set(0);
+      progress.set(withSpring(1, { damping: 24, stiffness: 260, mass: 0.9 }));
     } else {
-      progress.value = withTiming(0, { duration: 200 }, (finished) => {
+      progress.set(withTiming(0, { duration: 200 }, (finished) => {
         if (finished) runOnJS(setMounted)(false);
-      });
+      }));
     }
   }, [visible, progress, drag]);
 
@@ -60,13 +65,13 @@ export function BottomSheet({
   const pan = Gesture.Pan()
     .activeOffsetY([-12, 12])
     .onUpdate((e) => {
-      drag.value = Math.max(e.translationY, 0);
+      drag.set(Math.max(e.translationY, 0));
     })
     .onEnd((e) => {
       if (e.translationY > 110 || e.velocityY > 700) {
         runOnJS(onClose)();
       } else {
-        drag.value = withSpring(0, { damping: 24, stiffness: 260 });
+        drag.set(withSpring(0, { damping: 24, stiffness: 260 }));
       }
     });
 
@@ -89,7 +94,7 @@ export function BottomSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         </Animated.View>
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, sheetStyle]}>
+          <Animated.View style={[styles.sheet, { marginBottom: keyboardInset }, sheetStyle]}>
             {/* iOS : la feuille est une plaque de verre — flou réel sous une
                 teinte dense pour rester lisible, reflet sur l'arête. Android :
                 surface tonique opaque, c'est le langage des bottom sheets M3. */}
@@ -119,8 +124,8 @@ export function BottomSheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(23,18,23,.55)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(16, 17, 19,.55)',
   },
   sheet: {
     // iOS : fond quasi transparent, le flou et la teinte peints par-dessus
@@ -140,7 +145,7 @@ const styles = StyleSheet.create({
     ...(isIOS ? null : shadows.floating),
   },
   sheetTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: glass.tintStrong,
   },
   sheetHighlight: {

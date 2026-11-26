@@ -97,7 +97,7 @@ export default function Transactions() {
               <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
               <Text style={styles.secureText}>Transactions sécurisées</Text>
             </View>
-          ) : null
+          ) : undefined
         }
         renderItem={({ item, index }) => {
           const meta = KIND_META[item.kind] ?? {

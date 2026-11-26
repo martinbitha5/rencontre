@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrcFlag, PackIcon } from '@/components/brand';
 import { HeaderBackButton, ScreenHeader } from '@/components/ui';
@@ -63,7 +63,7 @@ export default function Recharge() {
                   <PackIcon id={pack.icon} size={26} />
                   <Text style={styles.packName}>
                     {pack.name}
-                    {pack.validityDays ? '*' : ''}
+                    {pack.validityDays && Platform.OS === 'web' ? '*' : ''}
                   </Text>
                   {/* Emplacement toujours rendu, même vide : les prix
                       restent alignés d'une carte à l'autre. */}
@@ -77,20 +77,28 @@ export default function Recharge() {
                   <Text style={styles.packCoins}>
                     {formatCoins(pack.coins)} {COIN_NAME_PLURAL}
                   </Text>
-                  <Text style={styles.packPrice}>{pack.priceCdfLabel}</Text>
-                  <Text style={styles.packPriceUsd}>ou {pack.price}</Text>
+                  <Text style={styles.packPrice}>
+                    {Platform.OS === 'web' ? pack.priceCdfLabel : 'Prix du store'}
+                  </Text>
+                  <Text style={styles.packPriceUsd}>
+                    {Platform.OS === 'web' ? `ou ${pack.price}` : 'Affiché avant confirmation'}
+                  </Text>
                 </View>
               </Pressable>
             </Reveal>
           ))}
         </View>
 
-        {COIN_PACKS.filter((p) => p.validityDays).map((p) => (
-          <Text key={p.id} style={styles.footnote}>
-            (*) Les {COIN_NAME_PLURAL} du pack {p.name} sont valables {p.validityDays} jours et
-            sont dépensées en premier.
-          </Text>
-        ))}
+        {Platform.OS === 'web' ? (
+          COIN_PACKS.filter((p) => p.validityDays).map((p) => (
+            <Text key={p.id} style={styles.footnote}>
+              (*) Avec MultiPay, les {COIN_NAME_PLURAL} du pack {p.name} sont valables{' '}
+              {p.validityDays} jours et sont dépensées en premier.
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.footnote}>Les pièces achetées via le store n’expirent pas.</Text>
+        )}
 
         <Text style={styles.explain}>
           La {COIN_NAME} est la monnaie interne de Zola : un simple solde rechargeable,
@@ -113,7 +121,9 @@ export default function Recharge() {
           <Text style={styles.buyText}>Continuer</Text>
         </Pressable>
         <Text style={styles.soon}>
-          Paiement local par Mobile Money, ou international via {"l'App Store"} et Google Play.
+          {Platform.OS === 'web'
+            ? 'Paiement local par Mobile Money.'
+            : 'Paiement sécurisé via le store de ton appareil.'}
         </Text>
       </ScrollView>
     </SafeAreaView>

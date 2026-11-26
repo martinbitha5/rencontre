@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { haptic } from '@/utils/haptics';
 import { FingerprintDraw, LOGO_FORMED_MS } from '@/components/ZolaLogo';
-import { brandRamp, onDark } from '@/theme';
+import { flame } from '@/theme';
 
 // Page de bienvenue : la célébration de fin d'inscription. L'empreinte se
 // dessine (la même signature que l'intro de l'app), le prénom apparaît, trois
@@ -58,7 +58,7 @@ function Particle({
   const t = useSharedValue(0);
 
   useEffect(() => {
-    t.value = withDelay(
+    t.set(withDelay(
       delay,
       withRepeat(
         withTiming(1, {
@@ -69,7 +69,7 @@ function Particle({
         -1,
         true,
       ),
-    );
+    ));
   }, [t, delay, duration]);
 
   const st = useAnimatedStyle(() => ({
@@ -102,19 +102,19 @@ export function OnboardingWelcome({
 
   useEffect(() => {
     haptic.success();
-    haloOpacity.value = withDelay(
+    haloOpacity.set(withDelay(
       400,
       withSequence(
-        withTiming(0.3, { duration: 700, easing: Easing.out(Easing.quad) }),
+        withTiming(0.2, { duration: 700, easing: Easing.out(Easing.quad) }),
         withRepeat(
           withSequence(
-            withTiming(0.16, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
-            withTiming(0.3, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
+            withTiming(0.1, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
+            withTiming(0.2, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
           ),
           -1,
         ),
       ),
-    );
+    ));
   }, [haloOpacity]);
 
   const haloStyle = useAnimatedStyle(() => ({ opacity: haloOpacity.value }));
@@ -135,9 +135,9 @@ export function OnboardingWelcome({
 
   return (
     <LinearGradient
-      colors={brandRamp}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
+      colors={flame}
+      start={{ x: 0, y: 1 }}
+      end={{ x: 1, y: 0 }}
       style={pc.fill}
     >
       {PARTICLES.map((p) => (
@@ -147,7 +147,7 @@ export function OnboardingWelcome({
 
       <SafeAreaView style={pc.safe} edges={['top', 'bottom']}>
         <View style={pc.center}>
-          <FingerprintDraw size={130} color="#ffffff" glowColor="#f0704f" strokeWidth={2} pulse />
+          <FingerprintDraw size={130} color="#ffffff" glowColor="#ffffff" strokeWidth={2} pulse />
 
           <Animated.Text
             entering={FadeInDown.duration(420)
@@ -175,7 +175,7 @@ export function OnboardingWelcome({
                   .reduceMotion(ReduceMotion.System)}
                 style={pc.checkRow}
               >
-                <Ionicons name={c.icon} size={17} color={onDark.brand} />
+                <Ionicons name={c.icon} size={17} color="#ffffff" />
                 <Text style={pc.checkText}>{c.text}</Text>
               </Animated.View>
             ))}
@@ -191,16 +191,16 @@ export function OnboardingWelcome({
           <Pressable
             disabled={entering}
             onPressIn={() => {
-              btnScale.value = withSpring(0.97, { damping: 16, stiffness: 280 });
+              btnScale.set(withSpring(0.97, { damping: 16, stiffness: 280 }));
             }}
             onPressOut={() => {
-              btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
+              btnScale.set(withSpring(1, { damping: 16, stiffness: 280 }));
             }}
             onPress={enter}
             style={[pc.btn, entering && { opacity: 0.7 }]}
           >
             <Text style={pc.btnText}>{entering ? 'Un instant…' : 'Découvrir'}</Text>
-            {!entering && <Ionicons name="arrow-forward" size={18} color="#171217" />}
+            {!entering && <Ionicons name="arrow-forward" size={18} color="#101113" />}
           </Pressable>
         </Animated.View>
       </SafeAreaView>
@@ -219,12 +219,12 @@ const pc = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: '#9B3F7A',
-    shadowColor: '#9B3F7A',
+    backgroundColor: '#ffffff',
+    shadowColor: '#ffffff',
     shadowOpacity: 1,
     shadowRadius: 60,
   },
-  dot: { position: 'absolute', backgroundColor: '#F1CBDD' },
+  dot: { position: 'absolute', backgroundColor: '#ffffff' },
   title: {
     marginTop: 26,
     color: '#ffffff',
@@ -234,7 +234,7 @@ const pc = StyleSheet.create({
     textAlign: 'center',
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.78)',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 16,
     lineHeight: 23,
     textAlign: 'center',
@@ -248,16 +248,16 @@ const pc = StyleSheet.create({
     height: 56,
     borderRadius: 18,
     borderBottomRightRadius: 8,
-    backgroundColor: '#FFFCFE',
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
+    shadowColor: '#7a1033',
+    shadowOpacity: 0.25,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  btnText: { fontSize: 16, fontWeight: '800', color: '#171217' },
+  btnText: { fontSize: 16, fontWeight: '800', color: '#101113' },
 });

@@ -5,7 +5,7 @@ export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: brandSurface },
   safe: { flex: 1, justifyContent: 'space-between', padding: spacing.lg },
   backBtn: { alignSelf: 'flex-start', padding: 2 },
-  hero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  hero: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: spacing.md },
   logo: { marginBottom: spacing.lg },
   title: { color: colors.textOnPrimary, fontSize: 30, fontWeight: '800' },
   tagline: {
@@ -32,5 +32,6 @@ export const styles = StyleSheet.create({
   btnBlack: { backgroundColor: '#000' },
   btnBlackText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   btnLime: { backgroundColor: colors.accent },
+  btnFill: { borderRadius: 999 },
   btnLimeText: { fontSize: 16, fontWeight: '700', color: colors.textOnAccent },
 });

@@ -27,7 +27,7 @@ export const styles = StyleSheet.create({
   boxActive: { borderColor: colors.primary, backgroundColor: colors.card },
   boxFilled: { borderColor: colors.primary },
   boxText: { fontSize: 24, fontWeight: '800', color: colors.text },
-  hiddenInput: { position: 'absolute', opacity: 0, height: 1, width: 1 },
+  hiddenInput: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0, color: 'transparent' },
   resend: {
     textAlign: 'center',
     marginTop: spacing.lg,

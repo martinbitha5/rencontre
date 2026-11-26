@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import {
@@ -17,21 +18,22 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { blockUser, photoUrl, recordProfileView, reportUser } from '@/services/api';
 import { COIN_COLOR, COIN_ON_GOLD } from '@/config/economy';
 import { CoinIcon } from '@/components/coins';
 import { GlassSurface, PressableScale } from '@/components/motion';
 import { VerifiedBadge } from '@/components/ui';
+import { InterestLabel } from '@/components/InterestIcon';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { ReportModal } from '@/components/ReportModal';
 import {
   EDUCATION_OPTIONS,
   FREQUENCY_OPTIONS,
   GOAL_OPTIONS,
+  goalIcon,
   HAS_CHILDREN_OPTIONS,
   WANTS_CHILDREN_OPTIONS,
-  interestEmoji,
   labelFor,
 } from '@/profileOptions';
 import { colors, onLight, photoScrim, radius, shadows, sigCorner, spacing } from '@/theme';
@@ -102,8 +104,16 @@ function StatColumn({
   );
 }
 
-// Vue profil complète, structure fiche : photo de couverture avec badge
-// d'intention, feuille arrondie (à propos, intérêts, stats, infos), actions.
+// Espace laissé entre le haut de l'écran (sous l'encoche) et la feuille quand
+// elle est montée au maximum : une bande de photo reste visible, la fiche ne
+// « décolle » jamais tout à fait de la personne.
+const SHEET_TOP_GAP = 12;
+
+// Vue profil complète, structure fiche : la PHOTO EST FIXE en haut, elle ne
+// défile pas. La feuille arrondie (présence, intention, à propos, stats,
+// infos, sécurité) glisse par-dessus, jusqu'à un niveau haut où elle
+// s'arrête, puis son contenu continue de défiler sous cette ligne. La photo
+// reste donc toujours en fond, comme une couverture.
 export function ProfileDetailModal({
   profile,
   onClose,
@@ -114,8 +124,16 @@ export function ProfileDetailModal({
   likeCost,
   isSelf,
 }: Props) {
-  // Photo ouverte en plein écran (zoom au pincement).
-  const [viewerUri, setViewerUri] = useState<string | null>(null);
+  // Galerie plein écran ouverte sur cette photo (null = fermée).
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // Géométrie de la couverture fixe : au format 3/4 de la largeur, bornée
+  // aux deux tiers de l'écran pour qu'un bout de feuille reste toujours
+  // visible à l'ouverture, même sur un téléphone très étroit.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const coverH = Math.round(Math.min((winW * 4) / 3, winH * 0.66));
+  // Ligne d'arrêt de la feuille : sous l'encoche, plus un petit espace.
+  const sheetTop = insets.top + SHEET_TOP_GAP;
   const [reporting, setReporting] = useState(false);
   // Toutes les photos vivent sur la grande photo du profil : un balayage
   // horizontal dessus passe à la suivante, sans animation, l'image change
@@ -230,7 +248,7 @@ export function ProfileDetailModal({
     .activeOffsetX([-24, 24])
     .failOffsetY([-16, 16])
     .onBegin((e) => {
-      gestureStartX.value = e.absoluteX;
+      gestureStartX.set(e.absoluteX);
     })
     .onEnd((e) => {
       if (gestureStartX.value > 40) return;
@@ -256,71 +274,84 @@ export function ProfileDetailModal({
     <Modal visible transparent={false} animationType="slide" onRequestClose={onClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeToClose}>
-          <SafeAreaView style={styles.safe} edges={['bottom']}>
-            <ScrollView
-              contentContainerStyle={{ paddingBottom: hasActions ? 104 : spacing.lg }}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Photo du profil : toutes les photos vivent ici. Balayer
-                  passe à la suivante (changement sec, sans animation), un
-                  appui ouvre le plein écran zoomable. */}
-              <View>
-                {cover ? (
-                  <GestureDetector gesture={photoSwipe}>
-                    <Pressable onPress={() => setViewerUri(photoUrl(cover.path))}>
-                      <Image
-                        source={{ uri: photoUrl(cover.path) }}
-                        style={styles.cover}
-                        contentFit="cover"
-                      />
-                      {/* Repères : un tiret par photo, comme sur le deck. */}
-                      {photos.length > 1 && (
-                        <View style={styles.coverDashes} pointerEvents="none">
-                          {photos.map((p, i) => (
-                            <View
-                              key={p.id}
-                              style={[
-                                styles.coverDash,
-                                i === shownIndex && styles.coverDashActive,
-                              ]}
-                            />
-                          ))}
-                        </View>
-                      )}
-                    </Pressable>
-                  </GestureDetector>
-                ) : (
-                  <View style={[styles.cover, styles.noPhoto]}>
-                    <Text style={styles.noPhotoText}>
-                      {profile.display_name?.[0]?.toUpperCase() ?? '?'}
-                    </Text>
+          <View style={styles.safe}>
+            {/* Couverture FIXE : la photo ne bouge pas, la feuille glisse
+                dessus. Toutes les photos vivent ici (repères en tirets) ; les
+                gestes (balayer, toucher) sont portés par l'espace transparent
+                de la feuille qui la recouvre, voir plus bas. */}
+            <View style={[styles.coverWrap, { height: coverH }]} pointerEvents="none">
+              {cover ? (
+                <Image
+                  source={{ uri: photoUrl(cover.path) }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={120}
+                />
+              ) : (
+                <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
+                  <Text style={styles.noPhotoText}>
+                    {profile.display_name?.[0]?.toUpperCase() ?? '?'}
+                  </Text>
+                </View>
+              )}
+              {photos.length > 1 && (
+                <View style={[styles.coverDashes, { top: insets.top + spacing.sm }]}>
+                  {photos.map((p, i) => (
+                    <View
+                      key={p.id}
+                      style={[styles.coverDash, i === shownIndex && styles.coverDashActive]}
+                    />
+                  ))}
+                </View>
+              )}
+              {/* Identité posée sur la photo : prénom, âge, badge, ville.
+                  La fiche en dessous ne répète rien de tout ça. */}
+              <LinearGradient colors={photoScrim} style={styles.coverInfo}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>
+                    {profile.display_name}, {age}
+                  </Text>
+                  {profile.is_verified && <VerifiedBadge size={22} />}
+                </View>
+                {!!place && (
+                  <View style={styles.coverMetaRow}>
+                    <Ionicons name="location-outline" size={14} color="rgba(255,255,255,.9)" />
+                    <Text style={styles.coverMeta}>{place}</Text>
                   </View>
                 )}
-                {/* Identité posée sur la photo : prénom, âge, badge, ville.
-                    La fiche en dessous ne répète rien de tout ça. */}
-                <LinearGradient
-                  colors={photoScrim}
-                  style={styles.coverInfo}
-                >
-                  <View style={styles.nameRow}>
-                    <Text style={styles.name}>
-                      {profile.display_name}, {age}
-                    </Text>
-                    {profile.is_verified && <VerifiedBadge size={22} />}
-                  </View>
-                  {!!place && (
-                    <View style={styles.coverMetaRow}>
-                      <Ionicons name="location-outline" size={14} color="rgba(255,255,255,.9)" />
-                      <Text style={styles.coverMeta}>{place}</Text>
-                    </View>
-                  )}
-                </LinearGradient>
-              </View>
+              </LinearGradient>
+            </View>
 
-              {/* Feuille arrondie qui recouvre le bas de la photo. Ordre de
-                  lecture : présence, intention, à propos, stats, l'essentiel,
-                  mode de vie, centres d'intérêt, pays d'origine, sécurité. */}
-              <View style={styles.sheet}>
+            {/* La feuille défile dans une fenêtre qui commence à `sheetTop` :
+                elle monte par-dessus la photo jusqu'à cette ligne, puis son
+                contenu continue de défiler dessous. Au-dessus de la ligne, la
+                photo reste visible. */}
+            <ScrollView
+              style={[styles.scroller, { top: sheetTop }]}
+              contentContainerStyle={{ paddingBottom: (hasActions ? 104 : spacing.lg) + insets.bottom }}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+            >
+              {/* Espace transparent au-dessus de la feuille : c'est lui qui
+                  porte les gestes de la photo. Balayer à l'horizontale change
+                  de photo (le glissement vertical échoue le geste et rend la
+                  main au défilement), toucher ouvre le plein écran. */}
+              <GestureDetector gesture={photoSwipe}>
+                <Pressable
+                  // La feuille mord sur le bas de la photo de la valeur de
+                  // son arrondi, comme avant : l'identité posée sur la photo
+                  // garde sa marge basse pour ne pas passer dessous.
+                  style={{ height: coverH - sheetTop - radius.lg }}
+                  onPress={cover ? () => setViewerIndex(shownIndex) : undefined}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={`Photo de ${profile.display_name}, ouvrir en plein écran`}
+                />
+              </GestureDetector>
+
+              {/* Feuille arrondie. Ordre de lecture : présence, intention,
+                  à propos, stats, l'essentiel, mode de vie, centres
+                  d'intérêt, pays d'origine, sécurité. */}
+              <View style={[styles.sheet, { minHeight: winH - sheetTop }]}>
                 <View style={styles.sheetHandle} />
 
                 {/* 1. Ce qui reste de l'identité : la présence. Le prénom,
@@ -341,7 +372,11 @@ export function ProfileDetailModal({
                     la promesse de la fiche avant tout le reste. */}
                 {!!goal && (
                   <View style={styles.goalPill}>
-                    <Ionicons name="heart" size={14} color={colors.textOnAccent} />
+                    <Ionicons
+                      name={goalIcon(profile.relationship_goal)}
+                      size={14}
+                      color={colors.textOnAccent}
+                    />
                     <Text style={styles.goalPillText}>{goal}</Text>
                   </View>
                 )}
@@ -424,9 +459,7 @@ export function ProfileDetailModal({
                     <View style={styles.chips}>
                       {profile.interests.map((i) => (
                         <View key={i} style={styles.chip}>
-                          <Text style={styles.chipText}>
-                            {interestEmoji(i)} {i}
-                          </Text>
+                          <InterestLabel interest={i} color={colors.text} textStyle={styles.chipText} />
                         </View>
                       ))}
                     </View>
@@ -476,7 +509,7 @@ export function ProfileDetailModal({
             </ScrollView>
 
             <Pressable
-              style={styles.closeBtn}
+              style={[styles.closeBtn, { top: insets.top + spacing.sm }]}
               onPress={onClose}
               hitSlop={12}
               accessibilityRole="button"
@@ -534,9 +567,15 @@ export function ProfileDetailModal({
               onCancel={() => setReporting(false)}
             />
 
-            {/* Plein écran avec zoom au pincement */}
-            <PhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
-          </SafeAreaView>
+            {/* Galerie plein écran : défilement, zoom, glisser pour fermer */}
+            <PhotoViewer
+              uris={viewerIndex === null ? null : photos.map((p) => photoUrl(p.path))}
+              index={viewerIndex ?? 0}
+              // La fiche reprend sur la dernière photo regardée.
+              onIndexChange={setPhotoIndex}
+              onClose={() => setViewerIndex(null)}
+            />
+          </View>
         </GestureDetector>
       </GestureHandlerRootView>
     </Modal>
@@ -545,7 +584,23 @@ export function ProfileDetailModal({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  cover: { width: '100%', aspectRatio: 3 / 4 },
+  // Couverture fixe : collée en haut, la hauteur est posée en ligne.
+  coverWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surface,
+  },
+  // Fenêtre de défilement de la feuille : du niveau d'arrêt jusqu'en bas.
+  // Fond transparent, la photo se voit à travers l'espace du haut.
+  scroller: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+  },
   noPhoto: {
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -580,13 +635,17 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   coverMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   coverMeta: { color: 'rgba(255,255,255,.9)', fontSize: 14 },
+  // La feuille : fond opaque, angles hauts arrondis, ombre vers le haut pour
+  // se détacher de la photo. Sa hauteur minimale (posée en ligne) lui permet
+  // d'atteindre la ligne d'arrêt même quand la fiche est courte.
   sheet: {
     backgroundColor: colors.background,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
-    marginTop: -radius.lg,
     padding: spacing.md,
     paddingTop: spacing.sm,
+    ...shadows.floating,
+    shadowOffset: { width: 0, height: -6 },
   },
   // Petite poignée grise centrée, langage bottom sheet.
   sheetHandle: {
@@ -664,7 +723,6 @@ const styles = StyleSheet.create({
   // même langage que le deck Rencontres.
   coverDashes: {
     position: 'absolute',
-    top: spacing.sm + 2,
     left: spacing.md,
     right: spacing.md,
     flexDirection: 'row',
@@ -699,9 +757,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     maxWidth: '55%',
   },
+  // La position verticale (sous l'encoche) est posée en ligne.
   closeBtn: {
     position: 'absolute',
-    top: spacing.xl + spacing.sm,
     left: spacing.md,
     width: 40,
     height: 40,

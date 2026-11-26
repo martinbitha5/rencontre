@@ -40,7 +40,7 @@ export const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    backgroundColor: 'rgba(23,18,23,.55)',
+    backgroundColor: 'rgba(16, 17, 19,.55)',
   },
   cellName: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
   cellTime: { fontSize: 11, color: 'rgba(255,255,255,.75)', marginTop: 1 },

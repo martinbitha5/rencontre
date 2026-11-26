@@ -3,7 +3,7 @@ import { brandSurface, colors, onDark, onLight, radius, spacing } from '@/theme'
 
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: brandSurface },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,.35)' },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,.35)' },
   safe: { flex: 1, justifyContent: 'space-between', padding: spacing.lg },
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   logo: { marginBottom: spacing.lg },
@@ -25,6 +25,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnLime: { backgroundColor: colors.accent },
+  btnFill: { borderRadius: 999 },
   btnLimeText: { fontSize: 16, fontWeight: '700', color: colors.textOnAccent },
   // Bouton blanc posé sur la vidéo : son encre reste sombre dans les deux
   // thèmes, sans quoi le libellé disparaissait en mode sombre.

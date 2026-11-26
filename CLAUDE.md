@@ -82,10 +82,13 @@ Serveur :
 | `supabase/migrations/052_free_mode.sql` | **la désactivation côté base** |
 | `supabase/rollback/052_free_mode_rollback.sql` | **le retour arrière**, hors de `migrations/` pour ne jamais être appliqué par `db push` |
 
-Portail web (`apps/web/`) : `payer.html`, `paiement-retour.html`,
-`inline-checkout.js` — laissés en ligne, plus rien ne pointe dessus depuis
-l'app. `index.html` et `faq.html` **annoncent encore les tarifs** : à corriger
-au moment de la communication publique (voir §16).
+Portail web (`apps/web/public/` depuis le passage à Astro du 22/11/2026) :
+`payer.html`, `paiement-retour.html`, et `inline-checkout.js` à la racine du dépôt — laissés en ligne, plus rien ne pointe dessus depuis
+l'app. `index.html`, `faq.html` et `conseils.html` (sources dans
+`apps/web/src/pages/*.astro`) ont été alignés sur la
+gratuité le 15/09/2026 (aucun tarif affiché ; le bloc « Gratuit au lancement »
+de l'accueil a été retiré le 22/11/2026) : à la
+réactivation, y remettre la grille de `config/economy.ts`.
 
 ### 6. Composants concernés
 
@@ -156,6 +159,19 @@ forfaits Incognito `3m`, `6m`, `12m`. Ils restent définis dans
 6. présente une entrée en soirée tarifée comme réglable auprès de
    l'organisateur au lieu d'ouvrir un tunnel de paiement.
 
+**Exception, depuis le 25/11/2026 : l'entrée payante en soirée.** Une
+seconde constante, `EVENT_PAYMENTS_ENABLED = true` (même fichier), rouvre le
+seul rail des soirées. Au scan d'une soirée avec `price_cdf > 0`, l'écran Scan
+crée la commande (`multipay-checkout`, kind `event`, sans opérateur ni numéro)
+et ouvre la page `https://zola-rdc.com/payer` dans le navigateur : Mobile
+Money ou carte, sur la page Interswitch. L'accès n'est accordé que par
+`multipay-return` après revérification, la chaîne de confiance est inchangée.
+C'est un service hors app (une place à une soirée réelle), donc hors IAP.
+Mode serveur au moment de l'activation : `MULTIPAY_MODE = TEST`,
+`MULTIPAY_WALLET_PUSH = OFF`. Passer en LIVE est une décision à prendre à part,
+après un achat de bout en bout en TEST (§16, test 10). Pièces et Incognito
+restent gratuits et masqués.
+
 **Serveur** — migration `052_free_mode.sql` : drapeau
 `economy_config.free_mode = 1`, tous les coûts en pièces à 0, quota de DM
 offerts porté à 100 000, `debit_coins()` qui ne journalise plus un débit nul,
@@ -163,15 +179,22 @@ offerts porté à 100 000, `debit_coins()` qui ne journalise plus un débit nul,
 
 ### 12. Comment le réactiver proprement
 
-1. Jouer `supabase/rollback/052_free_mode_rollback.sql` sur la base (il
+1. Vérifier que la migration `055_incognito_expiry.sql` est en base (elle est
+   dormante tant que `free_mode` vaut 1, voir §18).
+2. Jouer `supabase/rollback/052_free_mode_rollback.sql` sur la base (il
    restitue les prix depuis `economy_config_paid_backup` et les deux fonctions
    dans leur version d'origine).
-2. Passer `PAYMENTS_ENABLED` à `true` dans
+3. Jouer `supabase/rollback/incognito_grace_period.sql` juste après : 21 jours
+   d'incognito offerts aux comptes passés incognito pendant la gratuité (§18).
+4. Passer `PAYMENTS_ENABLED` à `true` dans
    `apps/mobile/src/config/features.ts`.
-3. Vérifier que les secrets `MULTIPAY_*` sont toujours en place (environnement
+5. Vérifier que les secrets `MULTIPAY_*` sont toujours en place (environnement
    ou Vault) et que `MULTIPAY_MODE` vaut bien ce qu'on veut (`TEST` d'abord).
-4. Publier une nouvelle version du client.
-5. Dérouler les tests du §16.
+6. Vérifier que la fonction Edge `send-push` déployée connaît les types
+   `incognito_ending` et `incognito_ended` (ajoutés le 14/09/2026 dans
+   `supabase/functions/send-push/index.ts`) ; la redéployer sinon.
+7. Publier une nouvelle version du client.
+8. Dérouler les tests du §16.
 
 **Dans cet ordre** : la base d'abord, le client ensuite. L'inverse laisserait
 des clients gratuits face à une base qui facture de nouveau.
@@ -189,39 +212,69 @@ Edge n'a été supprimé ni modifié dans sa logique.
 - Les quatre fonctions Edge `multipay-*` et leurs secrets.
 - La table `public.economy_config_paid_backup` — sans elle, le retour arrière
   perd la grille exacte.
-- `supabase/rollback/052_free_mode_rollback.sql`.
-- Les migrations 009, 019, 027, 029, 032, 035, 048, 051 (elles portent tout le
-  schéma monétaire).
-- Les pages `apps/web/payer.html` et `paiement-retour.html`.
+- `supabase/rollback/052_free_mode_rollback.sql` et
+  `supabase/rollback/incognito_grace_period.sql`.
+- Les migrations 009, 019, 027, 029, 032, 035, 048, 051, 055 (elles portent
+  tout le schéma monétaire).
+- La migration `060_multipay_checkout_idempotency.sql` (une clé stable par
+   tentative de paiement, unique par utilisateur).
+- La migration `059_revenuecat_purchases.sql` et la fonction Edge
+   `revenuecat-webhook` (crédit IAP idempotent).
+- Les pages `apps/web/public/payer.html` et `paiement-retour.html` (servies telles quelles par Astro).
 
 ### 14. Dépendances à conserver
 
 `expo-web-browser` (ouverture du tunnel de paiement), `expo-linking` (retour
 `zola://checkout-return`), `@supabase/supabase-js` (`functions.invoke`).
 Aucune n'est exclusive au paiement, aucune n'a été retirée du `package.json`.
-
-Le SDK RevenueCat n'est pas encore installé : ne pas l'ajouter tant que le
-rail IAP n'est pas réellement entrepris.
+Le SDK `react-native-purchases` et `expo-dev-client` sont maintenant installés.
+Le service `apps/mobile/src/services/revenuecat.ts` identifie le client avec
+son UUID Supabase, lit les packages du Offering courant, achète via le store et
+expose la restauration. Les prix affichés sur mobile viennent du store; les
+pièces achetées via Apple/Google ne sont pas périssables.
 
 ### 15. Apple In-App Purchase — modifications nécessaires
 
-Le rail des stores n'a jamais été branché. À la réactivation, s'il s'agit de
-vendre depuis iOS/Android :
+Le SDK et le traitement serveur sont intégrés, mais le rail n'est pas prêt à
+vendre. État au 03/11/2026 : RevenueCat contient le projet `Zola rdc`
+(`proj46bcb2de`) et l'app iOS `Zola iOS` (`app440f7507d6`, bundle
+`com.zola.app`). La clé publique iOS est dans le profil EAS production. Les
+identifiants App Store Connect ne sont pas configurés; aucun produit,
+entitlement, Offering ou webhook n'existe encore. L'app Android RevenueCat
+n'est pas créée.
 
-- Les pièces et l'abonnement Incognito sont du **contenu numérique consommé
-  dans l'app** : Apple impose l'IAP, un rail Mobile Money seul y est refusé
-  (App Store Review Guidelines 3.1.1). Le Mobile Money reste légitime pour
-  l'**entrée en soirée** (bien physique / service hors app, 3.1.3(e)) et pour
-  un achat fait depuis le portail web.
-- Prévoir : déclaration des produits dans App Store Connect avec les mêmes
-  identifiants (`decouverte`, `elan`, `envol`, `prestige`, `3m`, `6m`, `12m`),
-  intégration RevenueCat, webhook RevenueCat vers une fonction Edge qui appelle
-  `credit_coins()` / `credit_incognito()` — exactement le rôle que tient
-  `multipay-return` aujourd'hui.
-- Le bouton « Restaurer mes achats » est obligatoire côté iOS.
-- L'abonnement Incognito est vendu sans reconduction automatique : le déclarer
-  en non-renouvelable, ou basculer sur du renouvelable et ajuster la promesse
-  affichée dans `screens/Incognito/`.
+- Les pièces et Incognito sont du **contenu numérique consommé dans l'app** :
+   Apple impose l'IAP sur iOS (App Store Review Guidelines 3.1.1). Google Play
+   Billing doit également être utilisé sur Android. Ne pas proposer MultiPay
+   pour ces achats dans les apps natives; le rail MultiPay des entrées en
+   soirée reste distinct.
+- Dans App Store Connect, créer les packs comme consommables (`decouverte`,
+   `elan`, `envol`, `prestige`) et Incognito comme achats non renouvelables
+   (`3m`, `6m`, `12m`), conformément aux promesses affichées. Les connecter à
+   RevenueCat, créer l'Offering courant et ses packages. Les clés App Store
+   Connect doivent être ajoutées dans le dashboard RevenueCat, pas dans le
+   client ni dans le dépôt.
+- Déployer `supabase/functions/revenuecat-webhook` après avoir appliqué
+   `059_revenuecat_purchases.sql`. Configurer `REVENUECAT_WEBHOOK_AUTH` comme
+   secret Edge Function et le même Bearer token dans l'intégration webhook
+   RevenueCat. La fonction appelle `credit_revenuecat_purchase()`, qui valide
+   uniquement les SKU connus, refuse le crédit tant que `free_mode` vaut 1 et
+   déduplique chaque transaction avant d'appeler `credit_coins()` ou
+   `credit_incognito()`.
+- Les clés SDK publiques locales utilisent
+   `EXPO_PUBLIC_REVENUECAT_IOS_KEY` et
+   `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`. Ne jamais mettre une clé secrète
+   RevenueCat ou le token du webhook dans l'app.
+- Le bouton « Restaurer mes achats » est présent sur iOS. Tester les achats
+   dans un build natif EAS; Expo Go ne fournit pas StoreKit/RevenueCat.
+- Pour Android, créer aussi l'app Play Store `com.zola.app` dans RevenueCat,
+   configurer Google Play et sa clé publique, puis déclarer les mêmes produits
+   et packages avant d'exposer le parcours.
+
+À ce stade, `PAYMENTS_ENABLED` reste `false`, la migration 052 garde `free_mode`
+à 1, et la migration 059 n'est pas encore appliquée en production. Ne pas
+activer le paiement avant la séquence de réactivation du §12, le déploiement du
+webhook et la validation TestFlight/Play Internal Testing.
 
 ### 16. Tests à effectuer après réactivation
 
@@ -245,6 +298,10 @@ Client :
 7. Achat d'un pack en `MULTIPAY_MODE=TEST` de bout en bout : commande créée,
    page de paiement, retour `zola://checkout-return`, solde crédité **une
    seule fois** (idempotence).
+   Rejouer deux fois, y compris en parallèle, la requête avec la même clé
+   `idempotencyKey` : une seule ligne `payment_orders` et la même référence
+   MultiPay doivent être retournées. Une nouvelle tentative après un statut
+   final doit utiliser une nouvelle clé.
 8. Fermeture du navigateur en cours de paiement : la commande **reste
    `pending`**, elle n'est pas annulée (régression connue, voir le commentaire
    de `cancelPayment` dans `services/payments.ts`).
@@ -256,16 +313,71 @@ Client :
 11. Webhook MultiPay reçu deux fois : un seul crédit.
 12. Une fois seulement le rail vérifié en TEST, passer `MULTIPAY_MODE=LIVE` et
     refaire un achat réel du plus petit pack.
+13. Achat sandbox RevenueCat de chaque type de produit : le pack crédite le bon
+   solde une seule fois après le webhook; Incognito prolonge
+   `entitlements.incognito_until` sans l'écraser.
+14. Rejouer le même webhook RevenueCat : aucun double crédit. Vérifier aussi
+   qu'un SKU inconnu est ignoré et qu'un achat ne crédite rien tant que
+   `free_mode = 1`.
+15. Restaurer les achats depuis un second build connecté au même compte Zola;
+   confirmer que l'état Incognito et les achats restaurables sont synchronisés.
+
+Période de grâce Incognito (§18) :
+
+16. Après le script de grâce : tout profil `incognito = true` a une ligne
+    `entitlements.incognito_until` à J+21 ; un abonnement payé qui courait
+    déjà a gardé sa date.
+17. Sur un compte de test, forcer `incognito_until = now() + interval '2 days'`
+    puis mettre à jour `last_active_at` : un push « bientôt fini » part,
+    `incognito_reminded_for` est renseigné, un second `update` ne renvoie
+    pas de push.
+18. Forcer `incognito_until = now() - interval '1 minute'` puis mettre à jour
+    `last_active_at` : `incognito` passe à faux, un push « terminé » part, le
+    profil réapparaît dans le fil des autres.
+19. Le même test avec `free_mode = 1` ne change rien : le trigger est inerte
+    en mode gratuit.
 
 ### 17. Points restés ouverts
 
-- `apps/web/index.html` et `apps/web/faq.html` annoncent toujours les tarifs
-  des packs et de l'Incognito. À aligner sur la gratuité avant toute
-  communication publique — ce sont des pages publiques, la décision est
-  éditoriale.
+- Réglé le 15/09/2026 : `apps/web/index.html`, `faq.html` et `conseils.html`
+  n'annoncent plus aucun tarif et présentent Zola comme l'app des rencontres
+  et des soirées (positionnement du 15/09/2026, voir ARCHITECTURE.md). Les
+  pages contractuelles `conditions.html` et `confidentialite.html` décrivent
+  encore les pièces et l'abonnement Incognito : décision juridique, non
+  touchées.
 - La limite quotidienne de likes des comptes non vérifiés (30) subsiste : elle
   se lève par la vérification du profil, qui est gratuite. Ce n'est pas un mur
   de paiement, elle a donc été conservée volontairement.
 - Les soirées dont `events.price_cdf > 0` restent tarifées en base : mettre ces
   prix à 0 au backoffice si l'entrée doit être libre pendant la période
   gratuite.
+
+### 18. Incognito : ce que deviennent les comptes gratuits à la réactivation
+
+**Le problème.** Le rollback 052 redemande un abonnement pour *activer*
+l'incognito, mais ne touche pas à `profiles.incognito`. Sans rien d'autre, un
+compte passé incognito pendant la gratuité resterait invisible indéfiniment,
+sans payer, tant qu'il ne coupe pas lui-même le mode.
+
+**La décision (14/09/2026).** Offrir **21 jours** de grâce, prévenir, puis
+couper. Pas un mois : trois semaines.
+
+**Les pièces.**
+
+| Pièce | Rôle | Quand |
+| --- | --- | --- |
+| `supabase/migrations/055_incognito_expiry.sql` | trigger `profiles_incognito_expiry` sur `profiles.last_active_at` : coupe l'incognito échu, envoie les deux push. **Inerte tant que `free_mode = 1`.** | poussée avec les migrations, dès maintenant |
+| `supabase/rollback/incognito_grace_period.sql` | pose `incognito_until = now() + 21 jours` sur chaque profil incognito sans abonnement en cours ; rejouable ; refuse de tourner si `free_mode` vaut encore 1 | à la main, le jour J, après le rollback 052 |
+| `send-push` types `incognito_ending` / `incognito_ended` | push « bientôt fini » (3 jours avant, une fois par échéance) et « terminé » | déjà dans le code, à redéployer si besoin |
+| `ProfileHome` carte Incognito | affiche « Abonnement valable jusqu'au … » dès que `PAYMENTS_ENABLED = true` | rien à faire |
+
+**Pourquoi un trigger et pas pg_cron.** Le projet n'a pas de pg_cron (021,
+027) : toutes les expirations sont paresseuses, déclenchées par un passage
+naturel. Ici c'est l'ouverture de l'app, qui touche `last_active_at`. Un
+compte qui n'ouvre plus l'app reste incognito, ce qui est sans conséquence :
+il ne figurerait de toute façon pas en tête d'un fil trié par activité.
+
+**Ce que le trigger ne voit pas, volontairement.** `set_incognito()` et
+`admin_grant_incognito()` écrivent `incognito` sans toucher `last_active_at`.
+Un achat de forfait (`credit_incognito`) repousse `incognito_until`, le
+trigger le lit tel quel à l'ouverture suivante.

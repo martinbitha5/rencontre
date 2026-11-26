@@ -1,0 +1,442 @@
+---
+import { SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase-public.js';
+---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact | Zola, l'app de rencontre de la RDC</title>
+  <link rel="canonical" href="https://zola-rdc.com/contact">
+  <meta property="og:site_name" content="Zola">
+  <meta property="og:locale" content="fr_CD">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://zola-rdc.com/contact">
+  <meta property="og:title" content="Contact | Zola">
+  <meta property="og:description" content="Contacter l'équipe Zola. Partenariats et soirées, support, signalements, sécurité des enfants, données personnelles.">
+  <meta property="og:image" content="https://zola-rdc.com/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="description" content="Contacter l'équipe Zola. Partenariats et soirées pour les bars, restaurants et marques, support, signalements, sécurité des enfants, données personnelles.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' y1='1' x2='1' y2='0'><stop offset='0' stop-color='%23fd267a'/><stop offset='1' stop-color='%23ff6036'/></linearGradient></defs><rect width='24' height='24' rx='5' fill='url(%23g)'/><g fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' transform='translate(3.6 3.6) scale(.7)'><path d='M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4'/><path d='M14 13.12c0 2.38 0 6.38-1 8.88'/><path d='M17.29 21.02c.12-.6.43-2.3.5-3.02'/><path d='M2 12a10 10 0 0 1 18-6'/><path d='M2 16h.01'/><path d='M21.8 16c.2-2 .131-5.354 0-6'/><path d='M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2'/><path d='M8.65 22c.21-.66.45-1.32.57-2'/><path d='M9 6.8a6 6 0 0 1 9 5.2v2'/></g></svg>">
+  <link rel="preload" href="/fonts/montserrat-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="legal.css">
+  <script is:inline type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ContactPage",
+    "url": "https://zola-rdc.com/contact",
+    "name": "Contacter l'équipe Zola",
+    "inLanguage": "fr",
+    "about": {
+      "@type": "Organization",
+      "@id": "https://zola-rdc.com/#organization",
+      "name": "Zola",
+      "legalName": "Goblaire Ltd",
+      "url": "https://zola-rdc.com/",
+      "contactPoint": [
+        { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
+        { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
+        { "@type": "ContactPoint", "contactType": "emergency", "name": "Sécurité des enfants", "email": "securite@zola-rdc.com", "availableLanguage": "fr" },
+        { "@type": "ContactPoint", "contactType": "public relations", "email": "contact@zola-rdc.com", "availableLanguage": "fr" }
+      ]
+    }
+  }
+  </script>
+  <style is:inline>
+    /* ---------- Formulaire de contact ---------- */
+    .cf-wrap {
+      background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg);
+      padding: 28px; margin-bottom: 40px; scroll-margin-top: 84px;
+      box-shadow: 0 14px 34px rgba(253, 38, 122, .06);
+    }
+    .cf-title, .direct-title { border: 0; padding: 0; font-size: 1.25rem; font-weight: 800; margin-bottom: 16px; }
+    .direct-title { font-size: 1.05rem; margin-bottom: 14px; }
+    .topics { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .topics legend { font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .topic { position: relative; cursor: pointer; display: block; }
+    .topic input { position: absolute; opacity: 0; pointer-events: none; }
+    .topic span {
+      display: block; border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px;
+      line-height: 1.35; transition: border-color .12s ease, background .12s ease;
+    }
+    .topic b { display: block; font-size: .95rem; color: var(--heading); }
+    .topic small { display: block; font-size: .8rem; color: var(--muted); margin-top: 2px; }
+    .topic:hover span { border-color: var(--faint); }
+    .topic input:checked + span { border-color: var(--accent); background: var(--accent-soft); }
+    .topic input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cf-rest { margin-top: 22px; }
+    .cf-rest[hidden] { display: none; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 16px; }
+    .field { display: block; font-size: .86rem; font-weight: 700; color: var(--heading); margin-bottom: 14px; line-height: 1.4; }
+    .field .opt { font-weight: 500; color: var(--faint); }
+    .field input, .field select, .field textarea {
+      display: block; width: 100%; margin-top: 6px; font: inherit; font-weight: 500; font-size: 16px;
+      color: var(--text); background: #fff; border: 1.5px solid var(--line); border-radius: 12px;
+      padding: 11px 14px; line-height: 1.4;
+    }
+    .field textarea { resize: vertical; min-height: 140px; }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); }
+    .field.bad input, .field.bad select, .field.bad textarea { border-color: var(--danger); }
+    .field .help { display: block; font-weight: 500; font-size: .78rem; color: var(--muted); margin-top: 5px; }
+    .cf-note { margin: 0 0 18px; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .cf-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
+    .cf-msg { margin: 0; font-size: .9rem; font-weight: 600; color: var(--muted); }
+    .cf-msg.ok { color: var(--ok); }
+    .cf-msg.err { color: var(--danger); }
+    .cf-legal { font-size: .78rem; color: var(--muted); margin: 14px 0 0; }
+    .cf.sent .cf-rest > :not(.cf-foot) { display: none; }
+    .cf.sent .topics { display: none; }
+    .cf.sent #cf-btn { display: none; }
+    @media (max-width: 640px) {
+      .cf-wrap { padding: 20px 16px; border-radius: 20px; }
+      .topics { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .topic span { padding: 10px 12px; }
+      .topic b { font-size: .86rem; }
+      .topic small { font-size: .74rem; }
+      .grid2 { grid-template-columns: 1fr; }
+      .cf-foot .btn { width: 100%; }
+    }
+    @media (max-width: 360px) {
+      .topics { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="/">ZOLA</a>
+    <a class="back" href="/">Accueil</a>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-inner">
+      <span class="kicker">On vous écoute</span>
+      <h1>Contacter l'équipe Zola</h1>
+      <p class="updated">Choisissez votre besoin, votre message arrive directement à la bonne personne. Réponse sous 48 h ouvrées, en français.</p>
+    </div>
+  </div>
+
+  <main>
+    <section class="cf-wrap" id="partenaires" aria-labelledby="cf-title">
+      <h2 id="cf-title" class="cf-title">Écrivez-nous</h2>
+      <form id="cf" class="cf" novalidate>
+        <fieldset class="topics">
+          <legend>Votre besoin</legend>
+          <label class="topic">
+            <input type="radio" name="topic" value="partenariat" required>
+            <span><b>Organiser une soirée</b><small>Bar, restaurant, marque, opérateur</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="support">
+            <span><b>Souci avec mon compte</b><small>Connexion, profil, entrée en soirée</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="signalement">
+            <span><b>Signaler un membre</b><small>Faux profil, arnaque, harcèlement</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="securite">
+            <span><b>Sécurité d'un enfant</b><small>Un mineur, ou un enfant en danger</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="donnees">
+            <span><b>Mes données personnelles</b><small>Accès, correction, effacement</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="presse">
+            <span><b>Presse et médias</b><small>Interview, article, reportage</small></span>
+          </label>
+          <label class="topic">
+            <input type="radio" name="topic" value="autre">
+            <span><b>Une question, une idée</b><small>Tout le reste</small></span>
+          </label>
+        </fieldset>
+
+        <div class="cf-rest" hidden>
+          <div class="cf-note warn" data-for="securite">
+            Ces messages passent avant tout le reste et sont lus par le responsable sécurité en personne. Décrivez ce que vous avez vu, sans joindre d'image.
+          </div>
+          <div class="cf-note notice" data-for="signalement">
+            Depuis l'application, le plus rapide reste le bouton Signaler sur le profil ou dans la conversation. Ce formulaire sert si vous n'y avez plus accès.
+          </div>
+
+          <div class="grid2">
+            <label class="field" data-for="partenariat">Lieu ou marque
+              <input type="text" data-detail="Lieu ou marque" data-required maxlength="120" placeholder="Le Bar Matonge, Vodacom...">
+            </label>
+            <label class="field" data-for="partenariat">Ville
+              <input type="text" data-detail="Ville" data-required maxlength="80" placeholder="Kinshasa">
+            </label>
+            <label class="field" data-for="partenariat">Date envisagée
+              <input type="text" data-detail="Date envisagée" maxlength="80" placeholder="Samedi 12 décembre">
+            </label>
+            <label class="field" data-for="partenariat">Personnes attendues
+              <input type="text" inputmode="numeric" data-detail="Personnes attendues" maxlength="20" placeholder="150">
+            </label>
+
+            <label class="field" data-for="support">Votre téléphone
+              <select data-detail="Appareil">
+                <option value="">Choisir</option>
+                <option>iPhone</option>
+                <option>Android</option>
+              </select>
+            </label>
+
+            <label class="field" data-for="signalement securite">Prénom du profil concerné
+              <input type="text" data-detail="Prénom du profil" maxlength="80">
+            </label>
+            <label class="field" data-for="signalement securite">Ville du profil
+              <input type="text" data-detail="Ville du profil" maxlength="80">
+            </label>
+
+            <label class="field" data-for="donnees">Votre demande
+              <select data-detail="Demande" data-required>
+                <option value="">Choisir</option>
+                <option>Accéder à mes données</option>
+                <option>Corriger mes données</option>
+                <option>Effacer mes données</option>
+                <option>Autre question</option>
+              </select>
+            </label>
+
+            <label class="field" data-for="presse">Média
+              <input type="text" data-detail="Média" data-required maxlength="120" placeholder="Nom du journal, de la radio, de la chaîne">
+            </label>
+          </div>
+
+          <div class="grid2">
+            <label class="field">Votre nom
+              <input type="text" name="name" autocomplete="name" required maxlength="120">
+            </label>
+            <label class="field">Votre e-mail
+              <input type="email" name="email" autocomplete="email" required maxlength="254">
+              <small class="help" data-for="support donnees">Celui de votre compte Zola, on vous retrouve plus vite.</small>
+            </label>
+            <label class="field">Téléphone ou WhatsApp <span class="opt">facultatif</span>
+              <input type="tel" name="phone" autocomplete="tel" maxlength="40" placeholder="+243">
+            </label>
+          </div>
+
+          <label class="field">Votre message
+            <textarea name="message" rows="6" required minlength="10" maxlength="4000"></textarea>
+          </label>
+
+          <!-- Piège à robots : invisible pour un humain, rempli par un robot. -->
+          <div class="hp" aria-hidden="true">
+            <label>Site web <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+          </div>
+
+          <div class="cf-foot">
+            <button class="btn lg" type="submit" id="cf-btn">Envoyer le message</button>
+            <p class="cf-msg" id="cf-msg" role="status" aria-live="polite"></p>
+          </div>
+          <p class="cf-legal">Votre message sert uniquement à vous répondre. Plus de détails dans la <a href="/confidentialite">politique de confidentialité</a>.</p>
+        </div>
+      </form>
+    </section>
+
+    <h2 class="direct-title">Vous préférez l'e-mail ?</h2>
+    <div class="cards">
+      <div class="card" id="partenariats">
+        <h2>Partenariats et soirées</h2>
+        <p>Vous tenez un bar, un restaurant, une salle, ou vous organisez des événements pour une marque ou un opérateur ? Une soirée Zola, c'est du monde qui vient pour se rencontrer et qui reste sur place. Nous créons votre soirée, vous recevez le code QR à afficher à l'entrée, vous fixez l'heure de fin et le prix d'entrée si vous en voulez un, et vous recevez un bilan chiffré à la fin.</p>
+        <p>Écrivez-nous avec le nom du lieu ou de la marque, la ville, et la date que vous avez en tête. On vous rappelle sous 48 h ouvrées.</p>
+        <a class="mail" href="mailto:partenaires@zola-rdc.com?subject=Organiser%20une%20soir%C3%A9e%20Zola">partenaires@zola-rdc.com</a>
+      </div>
+
+      <div class="card" id="contact">
+        <h2>Nous écrire</h2>
+        <p>Une question sur Zola, une idée, une demande de la presse, une proposition de collaboration qui n'est pas une soirée, ou simplement envie de nous dire quelque chose ? C'est ici. On lit tout, et on répond.</p>
+        <a class="mail" href="mailto:contact@zola-rdc.com">contact@zola-rdc.com</a>
+      </div>
+
+      <div class="card">
+        <h2>Support</h2>
+        <p>Un souci avec votre compte, une connexion qui ne passe pas, une entrée en soirée qui n'est pas reconnue. Écrivez-nous depuis l'adresse e-mail de votre compte, on vous retrouve plus vite.</p>
+        <p>Pour une soirée, indiquez le nom de la soirée et l'heure de votre scan.</p>
+        <a class="mail" href="mailto:support@zola-rdc.com">support@zola-rdc.com</a>
+      </div>
+
+      <div class="card">
+        <h2>Signaler un membre</h2>
+        <p>Le plus rapide reste le bouton Signaler présent sur chaque profil et dans chaque conversation. Le signalement arrive directement à notre équipe de modération, avec le contexte.</p>
+        <p>Si vous n'avez plus accès à l'application, écrivez au support en précisant le prénom et la ville du profil concerné.</p>
+      </div>
+
+      <div class="card" id="securite-enfants">
+        <h2>Sécurité des enfants</h2>
+        <p>Vous pensez qu'un mineur est sur Zola, ou qu'un membre s'en prend à un enfant ? Écrivez à l'adresse ci-dessous. Ces messages passent avant tout le reste, ils sont lus par le responsable sécurité en personne, et le compte visé est suspendu le temps de vérifier.</p>
+        <p>Décrivez ce que vous avez vu, avec le prénom et la ville du profil si vous les avez. Ne joignez aucune image, la description suffit. Les autorités et les organismes de protection de l'enfance peuvent utiliser cette même adresse.</p>
+        <a class="mail" href="mailto:securite@zola-rdc.com">securite@zola-rdc.com</a>
+        <p style="margin-top:12px">Le référent est Martin Bitha, responsable sécurité et conformité de Goblaire Ltd. La procédure complète est sur la page <a href="/securite-enfants">sécurité des enfants</a>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Données personnelles</h2>
+        <p>Accès, rectification, effacement, ou question sur la <a href="/confidentialite">politique de confidentialité</a>. Écrivez au support avec « Données personnelles » en objet. Nous répondons sous un mois.</p>
+      </div>
+
+      <div class="card">
+        <h2>Éditeur du service</h2>
+        <p>Zola est un service de Goblaire Ltd, société immatriculée en Angleterre et au pays de Galles sous le numéro 16239328. Détail sur la page <a href="/mentions-legales">mentions légales</a>.</p>
+        <address class="addr">
+          Goblaire Ltd<br>
+          20 Wenlock Road<br>
+          Londres N1 7GU<br>
+          Angleterre
+        </address>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <nav class="foot-nav">
+      <a href="/blog">Blog</a>
+      <a href="/faq">F.A.Q</a>
+      <a href="/conditions">Conditions générales</a>
+      <a href="/confidentialite">Confidentialité</a>
+      <a href="/conseils">Conseils et sécurité</a>
+      <a href="/securite-enfants">Sécurité des enfants</a>
+      <a href="/mentions-legales">Mentions légales</a>
+      <a href="/contact">Contact</a>
+    </nav>
+    <p class="foot-copy">© 2026 Goblaire Ltd. Tous droits réservés.</p>
+  </footer>
+  <script is:inline define:vars={{ SUPABASE_URL, SUPABASE_KEY }}>
+    (function () {
+      var form = document.getElementById('cf');
+      if (!form) return;
+      var rest = form.querySelector('.cf-rest');
+      var btn = document.getElementById('cf-btn');
+      var msg = document.getElementById('cf-msg');
+      var message = form.elements.message;
+
+      var PLACEHOLDER = {
+        partenariat: "Parlez-nous du lieu, du public attendu et de ce que vous imaginez pour la soirée.",
+        support: "Décrivez ce qui se passe, ce que vous avez essayé, et depuis quand.",
+        signalement: "Ce qui s'est passé, quand, et dans quelle conversation si vous le savez.",
+        securite: "Ce que vous avez vu, quand, et tout détail utile pour retrouver le profil.",
+        donnees: "Précisez votre demande. Nous répondons sous un mois.",
+        presse: "Votre sujet, votre angle et votre date de bouclage.",
+        autre: "Votre question ou votre idée."
+      };
+
+      function topic() {
+        var r = form.querySelector('input[name=topic]:checked');
+        return r ? r.value : null;
+      }
+
+      // N'affiche que les champs du besoin choisi.
+      function applyTopic() {
+        var t = topic();
+        if (!t) return;
+        rest.hidden = false;
+        form.querySelectorAll('[data-for]').forEach(function (el) {
+          var on = el.getAttribute('data-for').split(' ').indexOf(t) !== -1;
+          el.hidden = !on;
+          el.style.display = on ? '' : 'none';
+        });
+        message.placeholder = PLACEHOLDER[t] || '';
+        say('');
+      }
+
+      function say(text, tone) {
+        msg.textContent = text;
+        msg.className = 'cf-msg' + (tone ? ' ' + tone : '');
+      }
+
+      function mark(el, bad) {
+        var f = el.closest('.field');
+        if (f) f.classList.toggle('bad', bad);
+      }
+
+      form.addEventListener('change', function (e) {
+        if (e.target.name === 'topic') applyTopic();
+      });
+
+      // Arrivée par un lien précis : le besoin est déjà choisi.
+      var FROM_HASH = { '#partenaires': 'partenariat', '#securite-enfants': 'securite', '#contact': 'autre' };
+      var preset = FROM_HASH[location.hash];
+      if (preset) {
+        var radio = form.querySelector('input[name=topic][value=' + preset + ']');
+        if (radio) { radio.checked = true; applyTopic(); }
+      }
+
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var t = topic();
+        if (!t) { say('Choisissez votre besoin.', 'err'); return; }
+
+        var bad = null;
+        function need(el, ok) { mark(el, !ok); if (!ok && !bad) bad = el; }
+
+        var details = {};
+        form.querySelectorAll('[data-detail]').forEach(function (el) {
+          var box = el.closest('[data-for]');
+          if (box && box.hidden) return;
+          var v = (el.value || '').trim();
+          if (el.hasAttribute('data-required')) need(el, !!v);
+          if (v) details[el.getAttribute('data-detail')] = v;
+        });
+
+        var name = form.elements.name.value.trim();
+        var email = form.elements.email.value.trim();
+        var text = message.value.trim();
+        need(form.elements.name, name.length >= 2);
+        need(form.elements.email, /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email));
+        need(message, text.length >= 10);
+        if (bad) {
+          say(text.length && text.length < 10 && bad === message
+            ? 'Votre message est un peu court.'
+            : 'Il manque une information, elle est en rouge.', 'err');
+          bad.focus();
+          return;
+        }
+
+        btn.disabled = true;
+        say('Envoi en cours...');
+        try {
+          var res = await fetch(SUPABASE_URL + '/rest/v1/rpc/submit_contact_form', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: SUPABASE_KEY,
+              Authorization: 'Bearer ' + SUPABASE_KEY
+            },
+            body: JSON.stringify({
+              p_topic: t,
+              p_name: name,
+              p_email: email,
+              p_message: text,
+              p_phone: form.elements.phone.value.trim() || null,
+              p_details: details,
+              p_website: form.elements.website.value
+            })
+          });
+          if (!res.ok) throw new Error('http ' + res.status);
+          var status = await res.json();
+          if (status === 'ok') {
+            form.classList.add('sent');
+            say('Merci, votre message est bien arrivé. On vous répond sous 48 h ouvrées, à ' + email + '.', 'ok');
+          } else if (status === 'too_many') {
+            say("Vous nous avez déjà écrit plusieurs fois dans l'heure. On lit tout, merci de patienter un peu.", 'err');
+          } else if (status === 'invalid_email') {
+            need(form.elements.email, false);
+            say('Cette adresse e-mail ne semble pas valide.', 'err');
+          } else {
+            say('Il manque une information, vérifiez le formulaire.', 'err');
+          }
+        } catch (e) {
+          say("L'envoi n'a pas abouti. Vérifiez votre connexion et réessayez.", 'err');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

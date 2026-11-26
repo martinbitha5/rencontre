@@ -1,9 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { MobileMoneyOperator } from '@/config/economy';
-import { PAYMENTS_ENABLED } from '@/config/features';
+import { EVENT_PAYMENTS_ENABLED, PAYMENTS_ENABLED } from '@/config/features';
 import { supabase } from '@/services/supabase';
 
 // Mode gratuit (PAYMENTS_ENABLED = false) : aucune de ces fonctions ne touche
-// le réseau. Les fonctions Edge restent déployées, elles ne sont simplement
+// le réseau, sauf pour l'entrée payante d'une soirée quand
+// EVENT_PAYMENTS_ENABLED vaut true (paiement sur le web, voir features.ts).
+// Les fonctions Edge restent déployées, elles ne sont simplement
 // plus sollicitées. Le corps de chaque fonction est conservé tel quel en
 // dessous du garde-fou — remettre l'interrupteur à true suffit à tout
 // rebrancher, il n'y a rien à réécrire.
@@ -30,7 +33,12 @@ import { supabase } from '@/services/supabase';
 
 export type MobileMoneyResult =
   // checkoutUrl null : paiement poussé sur le téléphone, rien à ouvrir.
-  | { status: 'pending'; reference: string; checkoutUrl: string | null }
+  | {
+      status: 'pending';
+      reference: string;
+      checkoutUrl: string | null;
+      alreadyStarted?: boolean;
+    }
   | { status: 'unavailable' }
   | { status: 'error'; message: string };
 
@@ -43,6 +51,46 @@ const CHECKOUT_ERRORS: Record<string, string> = {
   unknown_item: 'Cet article de paiement est introuvable.',
 };
 
+const idempotencyKeyPromises = new Map<string, Promise<string>>();
+
+function idempotencyStorageKey(userId: string, kind: string, itemId: string): string {
+  return `multipay_attempt:${userId}:${kind}:${itemId}`;
+}
+
+async function getIdempotencyKey(userId: string, kind: string, itemId: string): Promise<string> {
+  const storageKey = idempotencyStorageKey(userId, kind, itemId);
+  const pending = idempotencyKeyPromises.get(storageKey);
+  if (pending) return pending;
+
+  const keyPromise = (async () => {
+    const savedKey = await AsyncStorage.getItem(storageKey);
+    if (savedKey) return savedKey;
+
+    const randomPart = () => Math.random().toString(36).slice(2);
+    const key = `${Date.now().toString(36)}_${randomPart()}${randomPart()}${randomPart()}`;
+    await AsyncStorage.setItem(storageKey, key);
+    return key;
+  })();
+
+  idempotencyKeyPromises.set(storageKey, keyPromise);
+  try {
+    return await keyPromise;
+  } finally {
+    idempotencyKeyPromises.delete(storageKey);
+  }
+}
+
+export async function clearMobileMoneyAttempt(kind: string, itemId: string): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user.id;
+    if (!userId) return;
+    await AsyncStorage.removeItem(idempotencyStorageKey(userId, kind, itemId));
+  } catch {
+    // Garder une clé déjà réglée ne peut pas créer un débit supplémentaire.
+  }
+}
+
 export async function initiateMobileMoneyPayment(params: {
   // 'coins' = pack de pièces, 'incognito' = abonnement au mois,
   // 'event' = entrée en soirée (itemId porte l'id de la soirée, et c'est le
@@ -54,10 +102,18 @@ export async function initiateMobileMoneyPayment(params: {
   operator?: MobileMoneyOperator;
   phone?: string;
 }): Promise<MobileMoneyResult> {
-  if (!PAYMENTS_ENABLED) return { status: 'unavailable' };
+  // Seule l'entrée en soirée échappe au mode gratuit (EVENT_PAYMENTS_ENABLED).
+  const allowed = PAYMENTS_ENABLED || (EVENT_PAYMENTS_ENABLED && params.kind === 'event');
+  if (!allowed) return { status: 'unavailable' };
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const userId = sessionData.session?.user.id;
+    if (!userId) {
+      return { status: 'error', message: 'Session expirée. Reconnecte-toi puis réessaie.' };
+    }
+    const idempotencyKey = await getIdempotencyKey(userId, params.kind, params.itemId);
     const { data, error } = await supabase.functions.invoke('multipay-checkout', {
-      body: params,
+      body: { ...params, idempotencyKey },
     });
     if (error) {
       // Fonction pas encore déployée (404) ou intégration pas branchée (501) :
@@ -81,13 +137,19 @@ export async function initiateMobileMoneyPayment(params: {
       };
     }
     if (data?.reference && data?.pushed === true) {
-      return { status: 'pending', reference: String(data.reference), checkoutUrl: null };
+      return {
+        status: 'pending',
+        reference: String(data.reference),
+        checkoutUrl: null,
+        alreadyStarted: data?.alreadyStarted === true,
+      };
     }
     if (data?.reference && data?.checkoutUrl) {
       return {
         status: 'pending',
         reference: String(data.reference),
         checkoutUrl: String(data.checkoutUrl),
+        alreadyStarted: data?.alreadyStarted === true,
       };
     }
     return { status: 'unavailable' };
@@ -117,7 +179,7 @@ const FINAL_STATUSES: PaymentStatus[] = ['success', 'failed', 'cancelled'];
 // Interroge multipay-return en JSON : la fonction revérifie la transaction
 // chez Interswitch et crédite si elle vient d'être approuvée (idempotent).
 export async function getPaymentStatus(reference: string): Promise<PaymentStatus> {
-  if (!PAYMENTS_ENABLED) return 'unknown';
+  if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) return 'unknown';
   try {
     const { data, error } = await supabase.functions.invoke('multipay-return', {
       body: { ref: reference },
@@ -148,7 +210,7 @@ export async function getPaymentStatus(reference: string): Promise<PaymentStatus
 // Ne l'utiliser que sur une annulation EXPLICITE de l'utilisateur, jamais sur
 // une simple fermeture de navigateur.
 export async function cancelPayment(reference: string): Promise<PaymentStatus> {
-  if (!PAYMENTS_ENABLED) return 'unknown';
+  if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) return 'unknown';
   try {
     const { data, error } = await supabase.functions.invoke('multipay-return', {
       body: { ref: reference, cancel: true },
@@ -168,7 +230,7 @@ export async function waitForPaymentSettlement(
   delayMs = 4000,
 ): Promise<PaymentStatus> {
   // Sans paiement, rien à attendre : on ne lance pas un sondage de 2 minutes.
-  if (!PAYMENTS_ENABLED) return 'unknown';
+  if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) return 'unknown';
   let last: PaymentStatus = 'unknown';
   for (let i = 0; i < tries; i++) {
     last = await getPaymentStatus(reference);

@@ -1,8 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text } from 'react-native';
 import { ZolaMark } from '@/components/ZolaLogo';
-import { brandRamp } from '@/theme';
+import { flame } from '@/theme';
 
 // Écran de chargement du démarrage : dégradé cacao vers terracotta, logo empreinte
 // qui respire, wordmark ZOLA. Il couvre l'attente de la session, du verrou et
@@ -10,7 +10,8 @@ import { brandRamp } from '@/theme';
 // spinner nu. (L'intro animée du démarrage à froid vit dans IntroSplash ;
 // cet écran est le fond d'attente qu'elle recouvre.)
 export function AppLoading() {
-  const breathe = useRef(new Animated.Value(1)).current;
+  // Une valeur animée stable, créée une fois (compatible React Compiler).
+  const [breathe] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
     // Respiration lente du logo : une présence calme, pas un spinner.
@@ -28,9 +29,9 @@ export function AppLoading() {
 
   return (
     <LinearGradient
-      colors={brandRamp}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
+      colors={flame}
+      start={{ x: 0, y: 1 }}
+      end={{ x: 1, y: 0 }}
       style={styles.fill}
     >
       <Animated.View style={{ transform: [{ scale: breathe }] }}>
@@ -44,7 +45,7 @@ export function AppLoading() {
 
 const styles = StyleSheet.create({
   fill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 18,
@@ -58,7 +59,7 @@ const styles = StyleSheet.create({
     marginRight: -10,
   },
   tagline: {
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
     fontWeight: '500',
     marginTop: -6,
