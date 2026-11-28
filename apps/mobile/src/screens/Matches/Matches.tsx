@@ -1,24 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { archiveMatch, getMessages, getMyMatches, photoUrl } from '@/services/api';
+import { archiveMatch, getMessages, getMyMatches, getProfileView } from '@/services/api';
+import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { prefetchPhotos } from '@/utils/preload';
 import { Button, Centered, VerifiedBadge } from '@/components/ui';
 import { ZolaMark } from '@/components/ZolaLogo';
 import { realtimeChannel, supabase } from '@/services/supabase';
 import { colors } from '@/theme';
-import { timeAgo, type MatchSummary } from '@/types';
+import { timeAgo, type MatchSummary, type ViewableProfile } from '@/types';
 import { afterInteractions } from '@/utils/afterInteractions';
 import { styles } from './Matches.styles';
+import { Photo } from '@/components/Photo';
 
 export default function Matches() {
   const router = useRouter();
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  // Fiche ouverte depuis une photo, avec le match qui va avec : le bandeau
+  // « Tu discutes déjà avec … » s'affiche sans attendre le serveur.
+  const [preview, setPreview] = useState<{
+    profile: ViewableProfile;
+    matchId: string;
+    hasMessages: boolean;
+  } | null>(null);
   // Préchauffage une seule fois par vie de l'écran : inutile de relancer
   // ces requêtes à chaque retour d'onglet ou événement temps réel.
   const prefetchedChats = useRef(false);
@@ -124,6 +133,20 @@ export default function Matches() {
       },
     });
 
+  // Appui sur une photo : l'aperçu du profil, avec en bas le rappel qu'une
+  // conversation existe déjà et le bouton pour l'ouvrir.
+  const openPreview = async (item: MatchSummary) => {
+    try {
+      const profile = await getProfileView(item.other_user_id);
+      if (profile) {
+        setPreview({ profile, matchId: item.match_id, hasMessages: !!item.last_message });
+      }
+      else openChat(item);
+    } catch {
+      openChat(item);
+    }
+  };
+
   // Appui long sur une conversation : rangement dans les archives.
   const confirmArchive = (item: MatchSummary) => {
     Alert.alert(
@@ -180,45 +203,57 @@ export default function Matches() {
       </View>
 
       <Text style={styles.freshTitle}>Matchs récents</Text>
-      <View style={styles.freshRow}>
-        {/* Tuile compteur : coeur corail et nombre de nouveaux matchs, sur
-            tuile crème au coin signature. */}
-        <View style={styles.freshTile}>
-          <Ionicons name="heart" size={28} color={colors.accent} />
-          <Text style={styles.freshCounterText}>{freshMatches.length}</Text>
-        </View>
-        {freshMatches.length === 0 ? (
+      {/* Tuile compteur (coeur corail et nombre de nouveaux matchs) puis les
+          avatars, dans la MÊME bande : elle défile entière sous le doigt,
+          compteur compris, de bord à bord de l'écran. */}
+      {freshMatches.length === 0 ? (
+        <View style={styles.freshRow}>
+          <View style={styles.freshTile}>
+            <Ionicons name="heart" size={28} color={colors.accent} />
+            <Text style={styles.freshCounterText}>0</Text>
+          </View>
           <Text style={styles.freshEmptyText}>
             {"Tu n'as pas de nouveaux matchs."}
           </Text>
-        ) : (
-          <FlatList
-            horizontal
-            data={freshMatches}
-            keyExtractor={(m) => m.match_id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.freshListContent}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => openChat(item)}>
-                {item.photo_path ? (
-                  <Image
-                    source={{ uri: photoUrl(item.photo_path) }}
-                    style={styles.freshAvatar}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                  />
-                ) : (
-                  <View style={[styles.freshTile, styles.freshAvatarFallback]}>
-                    <Text style={styles.freshAvatarLetter}>
-                      {item.display_name?.[0]?.toUpperCase() ?? '?'}
-                    </Text>
-                  </View>
-                )}
-              </Pressable>
-            )}
-          />
-        )}
-      </View>
+        </View>
+      ) : (
+        <FlatList
+          horizontal
+          data={freshMatches}
+          keyExtractor={(m) => m.match_id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.freshListContent}
+          style={styles.freshStrip}
+          ListHeaderComponent={
+            <View style={styles.freshTile}>
+              <Ionicons name="heart" size={28} color={colors.accent} />
+              <Text style={styles.freshCounterText}>{freshMatches.length}</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => openPreview(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Voir le profil de ${item.display_name}`}
+            >
+              {item.photo_path ? (
+                <Photo
+                  path={item.photo_path}
+                  style={styles.freshAvatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              ) : (
+                <View style={[styles.freshTile, styles.freshAvatarFallback]}>
+                  <Text style={styles.freshAvatarLetter}>
+                    {item.display_name?.[0]?.toUpperCase() ?? '?'}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          )}
+        />
+      )}
 
       <View style={styles.totalRow}>
         <Text style={styles.totalText}>Total: {conversations.length}</Text>
@@ -270,10 +305,16 @@ export default function Matches() {
               onLongPress={() => confirmArchive(item)}
               delayLongPress={350}
             >
-              <View style={styles.avatarWrap}>
+              <Pressable
+                style={styles.avatarWrap}
+                onPress={() => openPreview(item)}
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel={`Voir le profil de ${item.display_name}`}
+              >
                 {item.photo_path ? (
-                  <Image
-                    source={{ uri: photoUrl(item.photo_path) }}
+                  <Photo
+                    path={item.photo_path}
                     style={styles.avatar}
                     contentFit="cover"
                     cachePolicy="memory-disk"
@@ -290,7 +331,7 @@ export default function Matches() {
                     <VerifiedBadge size={16} />
                   </View>
                 )}
-              </View>
+              </Pressable>
               <View style={styles.rowBody}>
                 <Text style={styles.rowName} numberOfLines={1}>
                   {item.display_name}
@@ -316,6 +357,14 @@ export default function Matches() {
           )}
         />
       )}
+
+      <ProfileDetailModal
+        profile={preview?.profile ?? null}
+        knownMatchId={preview?.matchId}
+        knownHasMessages={preview?.hasMessages}
+        onClose={() => setPreview(null)}
+        onBlocked={(id) => setMatches((prev) => prev.filter((m) => m.other_user_id !== id))}
+      />
     </SafeAreaView>
   );
 }

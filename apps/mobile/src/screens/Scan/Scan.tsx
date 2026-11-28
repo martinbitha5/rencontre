@@ -5,18 +5,17 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   Text,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { scanEvent } from '@/services/api';
 import { OperatorLogo, PackIcon, type OperatorBrandId } from '@/components/brand';
 import { Button, ErrorText, HeaderBackButton, ScreenHeader } from '@/components/ui';
-import { formatCdf, MOBILE_MONEY_OPERATORS } from '@/config/economy';
+import { formatPrice, operatorsFor } from '@/config/economy';
 import { EVENT_PAYMENTS_ENABLED, PAYMENTS_ENABLED } from '@/config/features';
 import { initiateMobileMoneyPayment, waitForPaymentSettlement } from '@/services/payments';
 import { notifyPartyAccessChanged } from '@/utils/partySignal';
@@ -36,7 +35,14 @@ function extractToken(data: string): string {
 // - denied  : le rouge, avec la raison
 type ScanOutcome =
   | { kind: 'granted'; name: string; already: boolean; paid: boolean }
-  | { kind: 'payment'; eventId: string; name: string; priceCdf: number }
+  | {
+      kind: 'payment';
+      eventId: string;
+      name: string;
+      priceCdf: number;
+      currency: 'CDF' | 'XAF';
+      city: string | null;
+    }
   | { kind: 'denied'; message: string };
 
 const INVALID_MESSAGE =
@@ -92,6 +98,8 @@ export default function Scan() {
           eventId: result.event_id,
           name: result.name,
           priceCdf: result.price_cdf,
+          currency: result.currency === 'XAF' ? 'XAF' : 'CDF',
+          city: result.city ?? null,
         });
         // Pas d'écran intermédiaire : la page de paiement s'ouvre aussitôt.
         // L'écran avec le bouton ne sert plus qu'à réessayer après un échec.
@@ -108,17 +116,17 @@ export default function Scan() {
   };
 
   // Portail de paiement : commande créée côté serveur (qui relit le prix dans
-  // la base), paiement sur la page sécurisée Interswitch (carte ou Mobile
+  // la base), paiement sur la page sécurisée pawaPay (Mobile
   // Money), puis verdict redemandé au serveur. L'accès n'est jamais accordé
-  // ici : c'est multipay-return qui l'inscrit, après vérification.
+  // ici : c'est pawapay-return qui l'inscrit, après vérification.
   async function payEntry(eventId: string, name: string) {
     setPayError(null);
     setPaying(true);
     setPushed(false);
 
     // Sans opérateur ni numéro : le serveur prend le rail navigateur et
-    // renvoie l'adresse de la page de paiement du site, où l'on choisit
-    // Mobile Money ou carte.
+    // renvoie l'adresse de la page de paiement pawaPay, où l'on choisit
+    // son opérateur Mobile Money.
     const result = await initiateMobileMoneyPayment({
       kind: 'event',
       itemId: eventId,
@@ -310,13 +318,12 @@ export default function Scan() {
             <Text style={styles.resultTitle}>Ouverture du paiement</Text>
             <Text style={styles.resultName}>{outcome.name}</Text>
             <Text style={styles.resultText}>
-              {`Entrée ${formatCdf(outcome.priceCdf)}. La page sécurisée s’ouvre, tu y paies par Mobile Money ou par carte.`}
+              {`Entrée ${formatPrice(outcome.priceCdf, outcome.currency)}. La page sécurisée s’ouvre, tu y paies par Mobile Money.`}
             </Text>
           </View>
         ) : outcome?.kind === 'payment' ? (
           <SafeAreaView style={styles.paymentSafe} edges={['top', 'bottom']}>
             <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
               style={{ flex: 1 }}
             >
               <ScrollView
@@ -328,15 +335,17 @@ export default function Scan() {
                     <PackIcon id="event" size={40} />
                   </View>
                   <Text style={styles.paymentTitle}>Entrée de la soirée</Text>
-                  <Text style={styles.paymentName}>{outcome.name}</Text>
-                  <Text style={styles.paymentPrice}>{formatCdf(outcome.priceCdf)}</Text>
+                  <Text style={styles.paymentName}>
+                    {outcome.city ? `${outcome.name} · ${outcome.city}` : outcome.name}
+                  </Text>
+                  <Text style={styles.paymentPrice}>{formatPrice(outcome.priceCdf, outcome.currency)}</Text>
                   <Text style={styles.paymentText}>
                     {"L'entrée se paie une seule fois : ensuite tu peux sortir et revenir librement."}
                   </Text>
                 </View>
 
                 {/* Paiement sur le web : la page sécurisée du site, où l'on
-                    choisit Mobile Money ou carte. Rien à saisir ici. */}
+                    choisit son opérateur Mobile Money (pawaPay). Rien à saisir ici. */}
                 <View style={styles.webPay}>
                   <View style={styles.webPayHead}>
                     <View style={styles.webPayIcon}>
@@ -345,17 +354,21 @@ export default function Scan() {
                     <Text style={styles.webPayTitle}>Paiement sécurisé sur le web</Text>
                   </View>
                   <Text style={styles.webPayText}>
-                    Une page de paiement s’ouvre. Tu y règles l’entrée par Mobile Money ou par
-                    carte bancaire, puis tu reviens ici automatiquement.
+                    {outcome.currency === 'XAF'
+                      ? 'Une page de paiement s’ouvre. Tu y règles l’entrée par MTN Mobile Money ou Airtel Money, puis tu reviens ici automatiquement.'
+                      : 'Une page de paiement s’ouvre. Tu y règles l’entrée par Airtel Money, Orange Money ou M-Pesa, puis tu reviens ici automatiquement.'}
                   </Text>
                   <View style={styles.webPayMethods}>
-                    {MOBILE_MONEY_OPERATORS.map((op) => (
-                      <OperatorLogo key={op.id} id={op.id as OperatorBrandId} size={34} />
-                    ))}
-                    <View style={styles.cardChip}>
-                      <Ionicons name="card" size={18} color={colors.text} />
-                      <Text style={styles.cardChipText}>Carte</Text>
-                    </View>
+                    {operatorsFor(outcome.currency).map((op) =>
+                      op.id === 'mtn' ? (
+                        // Pas encore de logo MTN dans les assets : pastille texte.
+                        <View key={op.id} style={styles.cardChip}>
+                          <Text style={styles.cardChipText}>MTN MoMo</Text>
+                        </View>
+                      ) : (
+                        <OperatorLogo key={op.id} id={op.id as OperatorBrandId} size={34} />
+                      ),
+                    )}
                   </View>
                 </View>
 
@@ -364,7 +377,7 @@ export default function Scan() {
 
               <View style={styles.paymentFooter}>
                 <Button
-                  title={payError ? 'Réessayer le paiement' : `Payer ${formatCdf(outcome.priceCdf)}`}
+                  title={payError ? 'Réessayer le paiement' : `Payer ${formatPrice(outcome.priceCdf, outcome.currency)}`}
                   onPress={() => void payEntry(outcome.eventId, outcome.name)}
                   loading={paying}
                 />

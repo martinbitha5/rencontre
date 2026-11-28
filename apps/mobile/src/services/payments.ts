@@ -11,22 +11,21 @@ import { supabase } from '@/services/supabase';
 // dessous du garde-fou — remettre l'interrupteur à true suffit à tout
 // rebrancher, il n'y a rien à réécrire.
 
-// Rail de paiement local (RDC) : MultiPay / Interswitch.
+// Rail de paiement local (RDC) : pawaPay (depuis le 27/11/2026, MultiPay /
+// Interswitch avant ; les fonctions multipay-* restent déployées pour les
+// anciennes commandes).
 //
 // Le client ne fait qu'INITIER le paiement : la fonction Edge
-// `multipay-checkout` calcule le vrai montant et crée la commande. Ensuite,
+// `pawapay-checkout` calcule le vrai montant et crée la commande. Ensuite,
 // deux issues :
-//   - `pushed` (LIVE) : la demande de paiement est partie directement sur le
-//     téléphone du client via l'API wallet — l'opérateur et le numéro ont
-//     déjà été choisis dans l'app, aucune page web à rouvrir. checkoutUrl
-//     est null, l'écran affiche « confirme sur ton téléphone » et sonde.
-//   - `checkoutUrl` (TEST, ou repli si la poussée échoue) : page de paiement
-//     hébergée à ouvrir dans un navigateur intégré.
+//   - `pushed` : opérateur et numéro choisis dans l'app, pawaPay envoie la
+//     demande de confirmation directement sur le téléphone. checkoutUrl est
+//     null, l'écran affiche « confirme sur ton téléphone » et sonde.
+//   - `checkoutUrl` : sans opérateur ni numéro (entrée en soirée), page de
+//     paiement hébergée pawaPay à ouvrir dans un navigateur intégré.
 // Ce qui a été acheté (pièces, Incognito, ou l'accès à une soirée) est
-// accordé UNIQUEMENT côté serveur (`multipay-return`), après revérification
-// de la transaction chez Interswitch. Jamais depuis le client. En mode TEST
-// (sandbox), le serveur simule une approbation à la fin du tunnel /payer
-// pour que le parcours passe de bout en bout.
+// accordé UNIQUEMENT côté serveur (`pawapay-return`), après revérification
+// du dépôt chez pawaPay. Jamais depuis le client.
 //
 // Le rail international (App Store / Google Play) passera par RevenueCat :
 // même principe, crédit via webhook.
@@ -49,12 +48,22 @@ const CHECKOUT_ERRORS: Record<string, string> = {
   event_free: "L'entrée de cette soirée est libre, il n'y a rien à payer.",
   already_attending: 'Tu es déjà sur la liste de cette soirée.',
   unknown_item: 'Cet article de paiement est introuvable.',
+  invalid_phone: "Ce numéro n'est pas reconnu par l'opérateur. Vérifie-le puis réessaie.",
+  wrong_country: "Ce numéro n'est pas du même pays que la soirée. Utilise un numéro Mobile Money du pays de la soirée.",
+  unknown_operator: "Cet opérateur n'est pas disponible dans ce pays.",
+  provider_unavailable: "L'opérateur Mobile Money ne répond pas pour l'instant. Réessaie dans un instant.",
+  amount_out_of_bounds: 'Ce montant dépasse la limite de ton compte Mobile Money.',
+  payment_rejected: "L'opérateur a refusé le paiement. Réessaie ou choisis un autre opérateur.",
 };
+
+// Fonctions Edge du rail. Un seul endroit à changer si le fournisseur change.
+const CHECKOUT_FUNCTION = 'pawapay-checkout';
+const RETURN_FUNCTION = 'pawapay-return';
 
 const idempotencyKeyPromises = new Map<string, Promise<string>>();
 
 function idempotencyStorageKey(userId: string, kind: string, itemId: string): string {
-  return `multipay_attempt:${userId}:${kind}:${itemId}`;
+  return `pawapay_attempt:${userId}:${kind}:${itemId}`;
 }
 
 async function getIdempotencyKey(userId: string, kind: string, itemId: string): Promise<string> {
@@ -98,7 +107,7 @@ export async function initiateMobileMoneyPayment(params: {
   kind: 'coins' | 'incognito' | 'event';
   itemId: string;
   // Inutiles pour une entrée en soirée : le moyen de paiement se choisit sur
-  // la page Interswitch, on ne demande pas un numéro pour rien à l'entrée.
+  // la page pawaPay, on ne demande pas un numéro pour rien à l'entrée.
   operator?: MobileMoneyOperator;
   phone?: string;
 }): Promise<MobileMoneyResult> {
@@ -111,10 +120,16 @@ export async function initiateMobileMoneyPayment(params: {
     if (!userId) {
       return { status: 'error', message: 'Session expirée. Reconnecte-toi puis réessaie.' };
     }
-    const idempotencyKey = await getIdempotencyKey(userId, params.kind, params.itemId);
-    const { data, error } = await supabase.functions.invoke('multipay-checkout', {
-      body: { ...params, idempotencyKey },
-    });
+    // Deux essais au plus : une tentative précédente déjà close (échouée,
+    // annulée) ou dont la page pawaPay a expiré exige une nouvelle clé, donc
+    // une nouvelle commande. Sans ça, la même clé rejouerait indéfiniment une
+    // commande morte.
+    let attempt = await invokeCheckout(userId, params);
+    if (attempt.retry) {
+      await clearMobileMoneyAttempt(params.kind, params.itemId);
+      attempt = await invokeCheckout(userId, params);
+    }
+    const { data, error } = attempt;
     if (error) {
       // Fonction pas encore déployée (404) ou intégration pas branchée (501) :
       // l'UI affiche « bientôt disponible » plutôt qu'une erreur brute.
@@ -158,6 +173,41 @@ export async function initiateMobileMoneyPayment(params: {
   }
 }
 
+const DEAD_ATTEMPT_ERRORS = new Set([
+  'invalid_phone',
+  'unknown_operator',
+  'wrong_country',
+  'provider_unavailable',
+  'payment_rejected',
+  'amount_out_of_bounds',
+]);
+
+async function invokeCheckout(
+  userId: string,
+  params: { kind: string; itemId: string; operator?: string; phone?: string },
+): Promise<{ data: any; error: unknown; retry: boolean }> {
+  const idempotencyKey = await getIdempotencyKey(userId, params.kind, params.itemId);
+  const { data, error } = await supabase.functions.invoke(CHECKOUT_FUNCTION, {
+    body: { ...params, idempotencyKey },
+  });
+  if (error) {
+    const code = await readErrorBody(error);
+    // Refus définitif de cette tentative (numéro, opérateur, pays, pawaPay
+    // indisponible) : la clé est jetée, le prochain appui crée une commande
+    // neuve au lieu de rejouer une commande morte. Pas de nouvel essai
+    // automatique, c'est à la personne de corriger puis de réappuyer.
+    if (code && DEAD_ATTEMPT_ERRORS.has(code)) {
+      await clearMobileMoneyAttempt(params.kind, params.itemId);
+    }
+    return { data, error, retry: code === 'attempt_expired' };
+  }
+  if (data?.alreadyStarted === true && data?.pushed === true && data?.reference) {
+    const status = await getPaymentStatus(String(data.reference));
+    if (status === 'failed' || status === 'cancelled') return { data, error, retry: true };
+  }
+  return { data, error, retry: false };
+}
+
 // supabase-js range le corps de la réponse d'erreur dans error.context (une
 // Response). On y lit le code d'erreur métier, sans jamais faire échouer
 // l'appelant si le corps est absent ou illisible.
@@ -176,12 +226,12 @@ export type PaymentStatus = 'pending' | 'success' | 'failed' | 'cancelled' | 'un
 
 const FINAL_STATUSES: PaymentStatus[] = ['success', 'failed', 'cancelled'];
 
-// Interroge multipay-return en JSON : la fonction revérifie la transaction
-// chez Interswitch et crédite si elle vient d'être approuvée (idempotent).
+// Interroge pawapay-return en JSON : la fonction revérifie le dépôt
+// chez pawaPay et crédite si elle vient d'être approuvée (idempotent).
 export async function getPaymentStatus(reference: string): Promise<PaymentStatus> {
   if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) return 'unknown';
   try {
-    const { data, error } = await supabase.functions.invoke('multipay-return', {
+    const { data, error } = await supabase.functions.invoke(RETURN_FUNCTION, {
       body: { ref: reference },
     });
     if (error || !data?.status) return 'unknown';
@@ -203,8 +253,8 @@ export async function getPaymentStatus(reference: string): Promise<PaymentStatus
 // production : on fermait donc des commandes que MultiPay annonçait ensuite
 // par webhook comme TRANSACTION.COMPLETED, alors que le client avait payé.
 //
-// Fermer ne protégeait de rien. Le crédit exige déjà que multipay-return
-// revérifie la transaction chez Interswitch et y retrouve une approbation au
+// Fermer ne protégeait de rien. Le crédit exige déjà que pawapay-return
+// revérifie le dépôt chez pawaPay et y retrouve un COMPLETED au
 // bon montant : un paiement abandonné n'est pas créditable de toute façon.
 //
 // Ne l'utiliser que sur une annulation EXPLICITE de l'utilisateur, jamais sur
@@ -212,7 +262,7 @@ export async function getPaymentStatus(reference: string): Promise<PaymentStatus
 export async function cancelPayment(reference: string): Promise<PaymentStatus> {
   if (!PAYMENTS_ENABLED && !EVENT_PAYMENTS_ENABLED) return 'unknown';
   try {
-    const { data, error } = await supabase.functions.invoke('multipay-return', {
+    const { data, error } = await supabase.functions.invoke(RETURN_FUNCTION, {
       body: { ref: reference, cancel: true },
     });
     if (error || !data?.status) return 'unknown';

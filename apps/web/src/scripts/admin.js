@@ -108,6 +108,7 @@ const AUDIT_LABELS = {
   event_closed: 'Soirée : accès fermé',
   event_reopened: 'Soirée : accès rouvert',
   event_price_changed: 'Soirée : prix modifié',
+  mail_replied: 'Courrier : réponse envoyée',
   event_ends_changed: 'Soirée : fin modifiée',
   inbound_mail_securite: 'Courrier : message reçu sur securite@',
   admin_added: 'Administrateur ajouté',
@@ -413,6 +414,8 @@ const state = {
   verifFilter: 'pending',
   currentPost: null,
   currentEvent: null,
+  mailFolder: 'inbox',
+  mailOpen: null,
 };
 
 const isOwner = () => state.me?.role === 'owner';
@@ -632,7 +635,12 @@ async function actDeletePhoto(photoId, after) {
   if (!v) return;
   try {
     const r = await rpc('admin_delete_photo', { p_photo_id: photoId, p_reason: v.reason });
-    if (r.storage_path) await supabase.storage.from('photos').remove([r.storage_path]);
+    // La miniature (même nom, suffixe _t, créée par l'app) part avec la photo.
+    if (r.storage_path) {
+      await supabase.storage
+        .from('photos')
+        .remove([r.storage_path, r.storage_path.replace(/\.jpg$/i, '_t.jpg')]);
+    }
     toast('Photo supprimée.');
     if (after) after();
   } catch (e) { toast(errText(e), true); }
@@ -1825,15 +1833,44 @@ const accessOpen = (ev) => ev.is_active && (!ev.ends_at || new Date(ev.ends_at) 
 // 496 000. À RECONFIRMER auprès de MultiPay le jour où les identifiants
 // marchand LIVE sont posés : le plafond d'un vrai marchand n'est pas celui
 // d'un marchand de démonstration.
-const MAX_ENTRY_CDF = 490000;
+// Depuis le passage à pawaPay (27/11/2026), les plafonds sont ceux de
+// l'opérateur le plus restrictif de chaque pays, lus dans la configuration
+// active du compte sandbox : 1 000 000 CDF (Orange, M-Pesa) et
+// 1 000 000 XAF (MTN). À relire sur le compte LIVE.
+const MAX_ENTRY = { CDF: 1000000, XAF: 1000000 };
+// Conservé pour les libellés existants.
+const MAX_ENTRY_CDF = MAX_ENTRY.CDF;
+
+// Devise d'une soirée : CDF (RDC) ou XAF (Congo-Brazzaville). price_cdf porte
+// le montant dans cette devise malgré son nom (migration 075).
+const evCur = (ev) => (ev && ev.currency === 'XAF' ? 'XAF' : 'CDF');
+
+// Pays d'une soirée. Il fixe la monnaie et les opérateurs Mobile Money
+// proposés à l'entrée. Toutes les villes du pays sont couvertes, il n'y a
+// pas de ville à choisir. Stocké dans events.currency (CDF ou XAF).
+const EVENT_COUNTRIES = {
+  CDF: { label: 'RDC (Kinshasa)', short: 'RDC', operators: 'Airtel Money, Orange Money ou M-Pesa', money: 'francs congolais' },
+  XAF: { label: 'Congo-Brazzaville', short: 'Congo-Brazzaville', operators: 'MTN Mobile Money ou Airtel Money', money: 'francs CFA' },
+};
+const countryOf = (ev) => EVENT_COUNTRIES[evCur(ev)];
+
+function countrySelect(selected) {
+  return h('select', {},
+    ...Object.entries(EVENT_COUNTRIES).map(([cur, c]) =>
+      h('option', { value: cur, selected: cur === selected ? 'selected' : null }, c.label)));
+}
+
+const paymentSentence = (cur) =>
+  `Paiement en ${EVENT_COUNTRIES[cur].money} (${cur}) par ${EVENT_COUNTRIES[cur].operators}.`;
 
 // Avertit et laisse trancher plutôt que de bloquer : le plafond ci-dessus est
 // une mesure, pas une règle du produit, et il changera en LIVE.
-function priceAccepted(cdf) {
-  if (cdf <= MAX_ENTRY_CDF) return true;
+function priceAccepted(amount, currency = 'CDF') {
+  const max = MAX_ENTRY[currency] ?? MAX_ENTRY.CDF;
+  if (amount <= max) return true;
   return confirm(
-    `${num(cdf)} CDF dépasse le plafond connu du service de paiement (${num(MAX_ENTRY_CDF)} CDF par transaction).\n\n` +
-    "Au-delà, le paiement échoue et le client voit « Incorrect Transaction » à l'entrée, sans pouvoir payer.\n\n" +
+    `${num(amount)} ${currency} dépasse le plafond connu du service de paiement (${num(max)} ${currency} par transaction).\n\n` +
+    "Au-delà, l'opérateur refuse le paiement et le client ne peut pas payer son entrée.\n\n" +
     'Enregistrer ce prix quand même ?',
   );
 }
@@ -1850,7 +1887,7 @@ async function pageEvents(root) {
     ? { data: structuredClone(previewData.events), error: null }
     : await supabase
       .from('events')
-      .select('id, name, price_cdf, qr_token, is_active, ends_at, created_at')
+      .select('id, name, price_cdf, currency, qr_token, is_active, ends_at, created_at')
       .order('created_at', { ascending: false });
 
   if (error) { root.append(h('div', { class: 'card' }, empty('Erreur de chargement des soirées.'))); return; }
@@ -1861,16 +1898,28 @@ async function pageEvents(root) {
 
   const name = h('input', { type: 'text', maxlength: '80', placeholder: 'Soirée Zola au Fleuve Congo' });
   const price = h('input', { type: 'number', min: '0', step: '100', placeholder: '10000' });
+  // Le pays fixe la monnaie et les opérateurs proposés à l'entrée. Toutes
+  // les villes du pays sont couvertes.
+  const country = countrySelect('CDF');
+  const priceLabel = h('label', { class: 'field' });
+  const paymentHint = h('p', { class: 'hint', style: { margin: '10px 0 0' } });
+  const refreshCountry = () => {
+    priceLabel.textContent = `Prix d'entrée en ${country.value}`;
+    paymentHint.textContent = paymentSentence(country.value);
+  };
+  country.addEventListener('change', refreshCountry);
+  refreshCountry();
   const ends = h('input', { type: 'datetime-local' });
 
   const create = async () => {
     if (!name.value.trim()) { toast('Le nom est obligatoire.', true); return; }
     const p = parseInt(price.value, 10);
-    if (!Number.isFinite(p) || p < 0) { toast('Indiquez un prix en CDF (0 = entrée libre).', true); return; }
-    if (!priceAccepted(p)) return;
+    const cur = country.value === 'XAF' ? 'XAF' : 'CDF';
+    if (!Number.isFinite(p) || p < 0) { toast(`Indiquez un prix en ${cur} (0 = entrée libre).`, true); return; }
+    if (!priceAccepted(p, cur)) return;
     const { data: { session } } = await supabase.auth.getSession();
     const { data, error: err } = await supabase.from('events').insert({
-      name: name.value.trim(), price_cdf: p,
+      name: name.value.trim(), price_cdf: p, currency: cur,
       ends_at: ends.value ? new Date(ends.value).toISOString() : null,
       created_by: session?.user?.id ?? null,
     }).select('*').single();
@@ -1883,7 +1932,8 @@ async function pageEvents(root) {
     const open = accessOpen(ev);
     return h('tr', { class: 'clickable', onclick: () => openEventDetail(ev, counts[ev.id] ?? 0) },
       h('td', { 'data-l': 'Soirée' }, h('b', { text: ev.name })),
-      h('td', { 'data-l': 'Entrée', text: ev.price_cdf > 0 ? `${num(ev.price_cdf)} CDF` : 'Entrée libre' }),
+      h('td', { 'data-l': 'Pays', text: countryOf(ev).short }),
+      h('td', { 'data-l': 'Entrée', text: ev.price_cdf > 0 ? `${num(ev.price_cdf)} ${evCur(ev)}` : 'Entrée libre' }),
       h('td', { 'data-l': 'Présents', text: `${counts[ev.id] ?? 0} participant(s)` }),
       h('td', { 'data-l': 'Fin', class: 'hint', text: ev.ends_at ? `fin ${fmtFull(ev.ends_at)}` : 'sans date de fin' }),
       h('td', { 'data-l': 'Accès' }, pill(open ? 'Accès ouvert' : 'Accès fermé', open ? 'green' : 'grey')));
@@ -1891,19 +1941,21 @@ async function pageEvents(root) {
 
   root.append(
     h('p', { class: 'page-intro' },
-      "Une soirée, un code QR. Il faut un compte Zola pour scanner : c'est le passe. Le scan ouvre le portail de paiement au prix fixé ici, réglable par carte ou Mobile Money ; l'entrée se paie une seule fois, puis on sort et on revient librement. Sur place, l'onglet Rencontres ne montre que les personnes présentes ; ce qu'on y recale s'efface à la fin de la soirée, les matchs restent."),
+      "Une soirée, un code QR. Il faut un compte Zola pour scanner : c'est le passe. Le scan ouvre le portail de paiement au prix fixé ici, par Mobile Money et avec les opérateurs du pays choisi (Airtel, Orange, M-Pesa en RDC ; MTN, Airtel au Congo-Brazzaville) ; l'entrée se paie une seule fois, puis on sort et on revient librement. Sur place, l'onglet Rencontres ne montre que les personnes présentes ; ce qu'on y recale s'efface à la fin de la soirée, les matchs restent."),
     h('div', { class: 'card' },
       h('h2', { text: 'Créer une soirée' }),
       h('div', { class: 'form-row', style: { marginTop: '12px', marginBottom: '0' } },
         h('div', {}, h('label', { class: 'field' }, 'Nom'), name),
-        h('div', { style: { maxWidth: '180px' } }, h('label', { class: 'field' }, `Prix d'entrée (CDF, max ${num(MAX_ENTRY_CDF)})`), price),
+        h('div', { style: { maxWidth: '220px' } }, h('label', { class: 'field' }, 'Pays'), country),
+        h('div', { style: { maxWidth: '180px' } }, priceLabel, price),
         h('div', { style: { maxWidth: '230px' } }, h('label', { class: 'field' }, 'Fin (optionnel)'), ends),
-        h('div', { style: { flex: '0 0 auto' } }, h('button', { class: 'btn', onclick: create }, 'Créer')))),
+        h('div', { style: { flex: '0 0 auto' } }, h('button', { class: 'btn', onclick: create }, 'Créer'))),
+      paymentHint),
     h('div', { class: 'card' },
       rows.length
         ? h('div', { class: 'table-wrap' }, h('table', {},
             h('thead', {}, h('tr', {},
-              h('th', {}, 'Soirée'), h('th', {}, 'Entrée'), h('th', {}, 'Présents'),
+              h('th', {}, 'Soirée'), h('th', {}, 'Pays'), h('th', {}, 'Entrée'), h('th', {}, 'Présents'),
               h('th', {}, 'Fin'), h('th', {}, 'Accès'))),
             h('tbody', {}, ...rows)))
         : empty('Aucune soirée pour le moment.')));
@@ -1916,7 +1968,7 @@ async function openEventDetail(ev, count) {
   // Les deux textes se modifient ici sans toucher à la soirée elle-même.
   const defaultInfo = () => {
     const e = state.currentEvent;
-    const entry = e.price_cdf > 0 ? `Entrée ${num(e.price_cdf)} CDF` : 'Entrée libre';
+    const entry = e.price_cdf > 0 ? `Entrée ${num(e.price_cdf)} ${evCur(e)}` : 'Entrée libre';
     return e.ends_at ? `${entry} · Jusqu'au ${fmtFull(e.ends_at)}` : entry;
   };
   const poster = h('canvas', { class: 'poster-preview', 'aria-label': "Aperçu de l'affiche" });
@@ -1970,6 +2022,9 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
 
   const endsInput = h('input', { type: 'datetime-local', value: toLocalInput(ev.ends_at) });
   const priceInput = h('input', { type: 'number', min: '0', step: '100', value: String(ev.price_cdf ?? 0) });
+  const countryInput = countrySelect(evCur(ev));
+  const countryLine = h('p', { class: 'hint', style: { margin: '0' } });
+  const priceFieldLabel = h('label', { class: 'field' });
   const priceLine = h('p', { class: 'hint', style: { margin: '0' } });
   const stateLine = h('p', { style: { fontWeight: '700', margin: '0 0 4px' } });
   const accessBtn = h('button', { class: 'btn danger sm' });
@@ -1986,7 +2041,7 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
     statsBox.replaceChildren(
       statCard('Entrées', num(s.entries), `${num(s.verified)} profil(s) vérifié(s)`),
       statCard('Matchs sur place', num(s.matches), `${num(s.likes)} like(s) échangé(s)`),
-      statCard('Encaissé', `${num(s.revenue_cdf)} CDF`, 'Entrées réglées en ligne'),
+      statCard('Encaissé', `${num(s.revenue_cdf)} ${evCur(state.currentEvent)}`, 'Entrées réglées en ligne'),
       statCard('Recalages en cours', s.open ? num(s.passes_live) : '—',
         s.open ? 'Effacés à la fin de la soirée' : 'Soirée terminée : historique effacé'));
     const rows = (s.attendees || []).map((a) => h('tr', { class: 'clickable', onclick: () => openUser(a.user_id) },
@@ -2010,8 +2065,11 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
     accessBtn.className = open ? 'btn danger sm' : 'btn sm';
     endsInput.value = toLocalInput(state.currentEvent.ends_at);
     priceInput.value = String(state.currentEvent.price_cdf ?? 0);
+    priceFieldLabel.textContent = `Prix en ${evCur(state.currentEvent)} (0 = libre)`;
+    countryInput.value = evCur(state.currentEvent);
+    countryLine.textContent = `${countryOf(state.currentEvent).label}. ${paymentSentence(evCur(state.currentEvent))}`;
     priceLine.textContent = state.currentEvent.price_cdf > 0
-      ? `Entrée à ${num(state.currentEvent.price_cdf)} CDF, réglée sur le portail de paiement.`
+      ? `Entrée à ${num(state.currentEvent.price_cdf)} ${evCur(state.currentEvent)}, réglée sur le portail de paiement.`
       : 'Entrée libre : le scan donne accès sans passer par le paiement.';
   };
 
@@ -2019,14 +2077,39 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
   // au tarif du moment, on ne rembourse ni ne réclame après coup.
   const savePrice = async () => {
     const p = parseInt(priceInput.value, 10);
-    if (!Number.isFinite(p) || p < 0) { toast('Indiquez un prix en CDF (0 = entrée libre).', true); return; }
-    if (!priceAccepted(p)) return;
+    const cur = evCur(state.currentEvent);
+    if (!Number.isFinite(p) || p < 0) { toast(`Indiquez un prix en ${cur} (0 = entrée libre).`, true); return; }
+    if (!priceAccepted(p, cur)) return;
     const patch = { price_cdf: p };
     const { error } = await supabase.from('events').update(patch).eq('id', state.currentEvent.id);
     if (error) { toast('Enregistrement impossible.', true); return; }
     Object.assign(state.currentEvent, patch);
     paint();
-    toast(p > 0 ? `Entrée fixée à ${num(p)} CDF.` : 'Entrée passée en accès libre.');
+    toast(p > 0 ? `Entrée fixée à ${num(p)} ${evCur(state.currentEvent)}.` : 'Entrée passée en accès libre.');
+  };
+
+  // Changer de pays change la monnaie. La base refuse ce changement dès
+  // qu'une entrée a été payée (event_currency_locked, migration 076).
+  const saveCountry = async () => {
+    const next = countryInput.value === 'XAF' ? 'XAF' : 'CDF';
+    if (next === evCur(state.currentEvent)) { toast('Rien à changer.'); return; }
+    if (state.currentEvent.price_cdf > 0
+      && !confirm(`La soirée passe en ${next}. Le prix actuel (${num(state.currentEvent.price_cdf)}) sera lu en ${next}. Vérifie-le juste après. Continuer ?`)) {
+      countryInput.value = evCur(state.currentEvent);
+      return;
+    }
+    const { data, error } = await supabase.from('events').update({ currency: next })
+      .eq('id', state.currentEvent.id).select('currency').single();
+    if (error) {
+      toast(String(error.message || '').includes('event_currency_locked')
+        ? "Des entrées ont déjà été payées. Le pays ne peut plus changer."
+        : 'Enregistrement impossible.', true);
+      countryInput.value = evCur(state.currentEvent);
+      return;
+    }
+    Object.assign(state.currentEvent, data);
+    paint();
+    toast(`Pays enregistré, ${EVENT_COUNTRIES[next].label}.`);
   };
 
   accessBtn.addEventListener('click', async () => {
@@ -2068,7 +2151,7 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
     [h('div', {}, h('div', { style: { fontWeight: '700', fontSize: '1.02rem' }, text: ev.name }),
       h('div', {
         class: 'hint',
-        text: `${ev.price_cdf > 0 ? `${num(ev.price_cdf)} CDF par entrée` : 'Entrée libre'} · ${count} participant(s)`,
+        text: `${countryOf(ev).short} · ${ev.price_cdf > 0 ? `${num(ev.price_cdf)} ${evCur(ev)} par entrée` : 'Entrée libre'} · ${count} participant(s)`,
       }))],
     [
       h('div', { class: 'card' },
@@ -2077,12 +2160,19 @@ img{max-width:100%;max-height:100vh}</style></head><body><img src="${poster.toDa
         statsBox,
         attendeesBox),
       h('div', { class: 'card' },
+        h('h2', { text: 'Pays' }),
+        countryLine,
+        h('p', { class: 'hint' }, "Le pays décide de la monnaie et des opérateurs Mobile Money que le client voit à l'entrée. Toutes les villes du pays sont couvertes."),
+        h('div', { class: 'form-row', style: { marginTop: '12px', marginBottom: '0' } },
+          h('div', { style: { maxWidth: '240px' } }, h('label', { class: 'field' }, 'Pays'), countryInput),
+          h('div', { style: { flex: '0 0 auto' } }, h('button', { class: 'btn ghost sm', onclick: saveCountry }, 'Enregistrer')))),
+      h('div', { class: 'card' },
         h('h2', { text: "Prix d'entrée" }),
         priceLine,
-        h('p', { class: 'hint' }, "Le montant est encaissé sur le portail de paiement (carte ou Mobile Money) juste après le scan. Un changement de prix ne vaut que pour les entrées suivantes."),
-        h('p', { class: 'hint' }, `Plafond du service de paiement : ${num(MAX_ENTRY_CDF)} CDF par transaction. Au-dessus, le paiement est refusé à l'entrée.`),
+        h('p', { class: 'hint' }, "Le montant est encaissé par Mobile Money juste après le scan. Un changement de prix ne vaut que pour les entrées suivantes."),
+        h('p', { class: 'hint' }, `Plafond du service de paiement : ${num(MAX_ENTRY_CDF)} par transaction. Au-dessus, le paiement est refusé à l'entrée.`),
         h('div', { class: 'form-row', style: { marginTop: '12px', marginBottom: '0' } },
-          h('div', { style: { maxWidth: '200px' } }, h('label', { class: 'field' }, 'Prix en CDF (0 = libre)'), priceInput),
+          h('div', { style: { maxWidth: '200px' } }, priceFieldLabel, priceInput),
           h('div', { style: { flex: '0 0 auto' } }, h('button', { class: 'btn ghost sm', onclick: savePrice }, 'Enregistrer')))),
       h('div', { class: 'card' },
         h('h2', { text: 'Affiche et code QR' }),
@@ -2414,8 +2504,14 @@ async function pageWaitlist(root) {
 }
 
 // ---------------------------------------------------------------------------
-// Courrier (boîtes du domaine, poussé par le webhook Hostinger, migration 057)
+// Courrier : une messagerie, comme un client mail (migrations 057, 062, 081)
 // ---------------------------------------------------------------------------
+// Trois colonnes sur grand écran : les dossiers, la liste, le message ouvert.
+// Sur téléphone : les dossiers en pastilles, la liste, et le message en plein
+// écran avec un retour. Les non lus sont en gras ; ouvrir un message le marque
+// lu. On répond sans quitter le backoffice : la réponse part de
+// support@zola-rdc.com par Brevo (fonction admin-mail-reply), dans le même
+// fil chez le destinataire, et reste visible sous le message.
 
 const MAIL_CATEGORY = {
   securite: ['Sécurité des enfants', 'red'],
@@ -2426,79 +2522,327 @@ const MAIL_CATEGORY = {
   other: ['Autre', 'grey'],
 };
 
+// Couleur de la pastille d'initiales, par catégorie.
+const MAIL_TINT = {
+  securite: ['#fef2f2', '#dc2626'],
+  partenaires: ['#fff7ed', '#c2410c'],
+  contact: ['#eff6ff', '#2563eb'],
+  support: ['#f3f4f6', '#374151'],
+  waitlist_reply: ['#f0fdf4', '#15803d'],
+  other: ['#f3f4f6', '#374151'],
+};
+
+const MAIL_FOLDERS = [
+  { key: 'inbox', label: 'À traiter', icon: '<path d="M4 4h16v12H8l-4 4z"/>', test: (m) => m.status === 'new' },
+  { key: 'unread', label: 'Non lus', icon: '<circle cx="12" cy="12" r="4"/>', test: (m) => !m.read_at },
+  { key: 'all', label: 'Tous les messages', icon: '<path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/>', test: () => true },
+  { sep: 'Par sujet' },
+  { key: 'securite', label: 'Sécurité des enfants', test: (m) => m.category === 'securite' },
+  { key: 'partenaires', label: 'Partenariats', test: (m) => m.category === 'partenaires' },
+  { key: 'contact', label: 'Contact', test: (m) => m.category === 'contact' },
+  { key: 'support', label: 'Support', test: (m) => m.category === 'support' },
+  { key: 'waitlist_reply', label: "Liste d'attente", test: (m) => m.category === 'waitlist_reply' },
+  { key: 'site', label: 'Formulaire du site', test: (m) => m.source === 'site' },
+  { sep: 'Archives' },
+  { key: 'done', label: 'Traités', icon: '<path d="M5 12l4 4 10-10"/>', test: (m) => m.status !== 'new' },
+  // La corbeille (migration 086) : on y restaure ou on supprime pour de bon.
+  { key: 'trash', label: 'Corbeille', test: (m) => !!m.deleted_at },
+];
+
 // Chaque adresse ouvre le bon client mail, avec la réponse déjà adressée.
 function mailReplyHref(m) {
   const subject = /^re:/i.test(m.subject || '') ? m.subject : `Re: ${m.subject || ''}`;
   return `mailto:${encodeURIComponent(m.from_address || '')}?subject=${encodeURIComponent(subject)}`;
 }
 
-async function pageMail(root) {
-  const data = await rpc('admin_list_inbound_mail', { p_status: null, p_limit: 500 });
-  const items = data.items || [];
-  const open = items.filter((m) => m.status === 'new');
-  const done = items.filter((m) => m.status !== 'new');
+const mailSender = (m) => m.from_name || m.from_address || 'Expéditeur inconnu';
+const mailInitials = (m) => {
+  const base = (m.from_name || m.from_address || '?').replace(/[<>"]/g, '').trim();
+  const parts = base.split(/[\s._@-]+/).filter(Boolean);
+  return ((parts[0]?.[0] || '?') + (parts[1]?.[0] || '')).toUpperCase();
+};
+const replySubject = (s) => (/^re\s*:/i.test(s || '') ? s : `Re: ${s || '(sans objet)'}`);
 
-  const toggle = async (m, handled) => {
-    let note = null;
-    if (handled) {
-      const v = await ask({
-        title: 'Marquer comme traité',
-        text: `« ${m.subject || '(sans objet)'} » de ${m.from_address}. Une note courte aide à retrouver ce qui a été fait.`,
-        confirmLabel: 'Traité',
-        fields: [{ name: 'note', label: 'Note (facultative)', type: 'text', placeholder: 'Répondu, soirée fixée au 3 octobre' }],
-      });
-      if (!v) return;
-      note = v.note || null;
-    }
+// Heure si c'est aujourd'hui, « hier », sinon la date courte.
+function mailWhen(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(d);
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'hier';
+  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) }).format(d);
+}
+
+function mailAvatar(m, big) {
+  const [bg, fg] = MAIL_TINT[m.category] || MAIL_TINT.other;
+  return h('div', { class: `mx-avatar${big ? ' lg' : ''}`, style: { background: bg, color: fg }, text: mailInitials(m) });
+}
+
+const FORM_FIELDS = { phone: 'Téléphone', topic: 'Sujet choisi' };
+
+async function pageMail(root) {
+  const data = await rpc('admin_list_inbound_mail', { p_status: null, p_limit: 1000 });
+  const all = data.items || [];
+  // Hors corbeille, chaque dossier ne voit que les messages non supprimés.
+  const live = all.filter((m) => !m.deleted_at);
+  const pool = (f) => (f.key === 'trash' ? all : live);
+  const items = live;
+  const folder = MAIL_FOLDERS.find((f) => f.key === state.mailFolder) || MAIL_FOLDERS[0];
+  state.mailFolder = folder.key;
+
+  const shell = h('div', { class: `mx${state.mailOpen ? ' reading' : ''}` });
+
+  // --- Dossiers ---------------------------------------------------------------
+  const folders = h('nav', { class: 'mx-folders', 'aria-label': 'Dossiers' },
+    ...MAIL_FOLDERS.map((f) => {
+      if (f.sep) return h('div', { class: 'mx-sep', text: f.sep });
+      const count = f.key === 'done' || f.key === 'all' || f.key === 'trash'
+        ? pool(f).filter(f.test).length
+        : items.filter((m) => f.test(m) && (f.key === 'unread' ? true : m.status === 'new')).length;
+      const urgent = f.key === 'securite' && count > 0;
+      return h('button', {
+        class: `mx-folder${f.key === folder.key ? ' on' : ''}`,
+        onclick: () => { state.mailFolder = f.key; state.mailOpen = null; go('mail'); },
+      },
+        h('span', { class: 'mx-folder-label', text: f.label }),
+        count ? h('span', { class: `mx-folder-count${urgent ? ' alert' : ''}`, text: String(count) }) : null);
+    }));
+
+  // --- Liste ------------------------------------------------------------------
+  const list = pool(folder).filter(folder.test);
+
+  // Corbeille : on y envoie, on en sort, on la vide. Supprimer pour de bon
+  // demande toujours une confirmation et n'est pas réversible.
+  const trash = async (ids, deleted) => {
     try {
-      await rpc('admin_handle_inbound_mail', { p_id: m.id, p_handled: handled, p_note: note });
-      toast(handled ? 'Message marqué comme traité.' : 'Message remis dans la file.');
+      await rpc('admin_trash_inbound_mail', { p_ids: ids, p_deleted: deleted });
+      toast(deleted
+        ? (ids.length > 1 ? `${ids.length} messages mis à la corbeille.` : 'Message mis à la corbeille.')
+        : 'Message restauré.');
+      state.mailOpen = null;
+      paintMailCount();
       go('mail');
     } catch (e) { toast(errText(e), true); }
   };
-
-  const row = (m) => {
-    const cat = MAIL_CATEGORY[m.category] || MAIL_CATEGORY.other;
-    const preview = h('div', { class: 'hint', style: { whiteSpace: 'pre-wrap', marginTop: '6px', display: 'none' } , text: m.body_preview || '(pas de texte dans la notification, ouvrir la boîte)' });
-    return h('tr', { class: m.category === 'securite' && m.status === 'new' ? 'row-alert' : '' },
-      h('td', { 'data-l': 'Type' }, pill(cat[0], cat[1]),
-        m.source === 'site' ? h('div', { class: 'hint', style: { marginTop: '4px' }, text: 'Via le formulaire du site' }) : null),
-      h('td', { 'data-l': 'De' }, h('b', { text: m.from_name || m.from_address || '—' }),
-        m.from_name ? h('div', { class: 'hint', text: m.from_address }) : null),
-      h('td', { 'data-l': 'Objet' },
-        h('div', { text: m.subject || '(sans objet)', style: { cursor: 'pointer' }, onclick: () => { preview.style.display = preview.style.display === 'none' ? 'block' : 'none'; } }),
-        preview,
-        m.note ? h('div', { class: 'hint', text: `Note : ${m.note}` }) : null),
-      h('td', { 'data-l': 'Reçu', class: 'hint', text: fmtFull(m.received_at) }),
-      h('td', { 'data-l': 'Traité' }, m.status === 'new'
-        ? pill('À traiter', m.category === 'securite' ? 'red' : 'orange')
-        : pill(`par ${m.handled_by_email || '—'}`, 'green')),
-      h('td', {}, h('div', { class: 'btn-row' },
-        h('a', { class: 'btn ghost sm', href: mailReplyHref(m) }, 'Répondre'),
-        m.status === 'new'
-          ? h('button', { class: 'btn sm', onclick: () => toggle(m, true) }, 'Traité')
-          : h('button', { class: 'btn ghost sm', onclick: () => toggle(m, false) }, 'Rouvrir'))));
+  const purge = async (ids) => {
+    const ok = await ask({
+      title: ids.length > 1 ? 'Vider la corbeille' : 'Supprimer pour de bon',
+      text: ids.length > 1
+        ? `Les ${ids.length} messages de la corbeille et leurs réponses seront effacés. Ce n’est pas réversible.`
+        : 'Ce message et ses réponses seront effacés. Ce n’est pas réversible.',
+      confirmLabel: 'Supprimer',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const n = await rpc('admin_purge_inbound_mail', { p_ids: ids });
+      toast(n > 1 ? `${n} messages supprimés.` : 'Message supprimé.');
+      state.mailOpen = null;
+      go('mail');
+    } catch (e) { toast(errText(e), true); }
   };
+  const listEl = h('div', { class: 'mx-list', role: 'list' },
+    ...list.map((m) => {
+      const cat = MAIL_CATEGORY[m.category] || MAIL_CATEGORY.other;
+      const unread = !m.read_at;
+      return h('button', {
+        class: `mx-item${unread ? ' unread' : ''}${state.mailOpen === m.id ? ' on' : ''}${m.category === 'securite' && m.status === 'new' ? ' urgent' : ''}`,
+        role: 'listitem',
+        onclick: () => openMail(m.id),
+      },
+        mailAvatar(m),
+        h('div', { class: 'mx-item-main' },
+          h('div', { class: 'mx-item-top' },
+            h('span', { class: 'mx-item-from', text: mailSender(m) }),
+            h('span', { class: 'mx-item-when', text: mailWhen(m.received_at) })),
+          h('div', { class: 'mx-item-subject', text: m.subject || '(sans objet)' }),
+          h('div', { class: 'mx-item-snippet', text: (m.body_preview || '').replace(/\s+/g, ' ').slice(0, 160) }),
+          h('div', { class: 'mx-item-tags' },
+            h('span', { class: `mx-tag ${cat[1]}`, text: cat[0] }),
+            m.source === 'site' ? h('span', { class: 'mx-tag grey', text: 'Site' }) : null,
+            m.replies ? h('span', { class: 'mx-tag ok', text: `Répondu${m.replies > 1 ? ` ×${m.replies}` : ''}` }) : null,
+            m.status !== 'new' && !m.replies ? h('span', { class: 'mx-tag ok', text: 'Traité' }) : null)));
+    }));
 
-  const table = (list) => h('div', { class: 'table-wrap' }, h('table', {},
-    h('thead', {}, h('tr', {},
-      h('th', {}, 'Type'), h('th', {}, 'De'), h('th', {}, 'Objet'), h('th', {}, 'Reçu'), h('th', {}, 'Traité'), h('th', {}))),
-    h('tbody', {}, ...list.map(row))));
+  const listPane = h('section', { class: 'mx-list-pane' },
+    h('div', { class: 'mx-list-head' },
+      h('div', {},
+        h('h2', { text: folder.label }),
+        h('div', { class: 'hint', text: `${num(list.length)} message${list.length > 1 ? 's' : ''}${list.filter((m) => !m.read_at).length ? `, ${num(list.filter((m) => !m.read_at).length)} non lu(s)` : ''}` })),
+      folder.key === 'trash' && list.length
+        ? h('button', { class: 'btn ghost sm danger', onclick: () => purge(list.map((m) => m.id)) }, 'Vider la corbeille')
+        : null),
+    list.length ? listEl : h('div', { class: 'mx-empty' },
+      h('b', { text: folder.key === 'inbox' ? 'Tout est traité.' : folder.key === 'trash' ? 'La corbeille est vide.' : 'Aucun message ici.' }),
+      h('span', { text: folder.key === 'trash'
+        ? 'Un message supprimé arrive ici. Tu peux encore le restaurer, ou le supprimer pour de bon.'
+        : 'Les nouveaux messages arrivent ici dès leur réception, sur les boîtes du domaine ou par le formulaire du site.' })));
 
-  root.append(
-    h('p', { class: 'page-intro' },
-      "Tout ce qui arrive sur les boîtes du domaine et par le formulaire de contact du site, classé par sujet. Un message sur securite@ passe en tête et laisse une trace dans l'historique des actions. Cliquez sur l'objet pour lire l'extrait ; la réponse se fait depuis votre messagerie, le bouton Répondre l'ouvre déjà adressée. Marquez traité ce qui l'est, pour que rien ne se perde."),
-    h('div', { class: 'grid k4' },
-      h('div', { class: 'stat' }, h('div', { class: 'label kicker', text: 'À traiter' }), h('div', { class: 'value', text: num(open.length) })),
-      h('div', { class: 'stat' }, h('div', { class: 'label kicker', text: 'Sécurité des enfants' }), h('div', { class: 'value', text: num(open.filter((m) => m.category === 'securite').length) })),
-      h('div', { class: 'stat' }, h('div', { class: 'label kicker', text: 'Partenariats' }), h('div', { class: 'value', text: num(open.filter((m) => m.category === 'partenaires').length) })),
-      h('div', { class: 'stat' }, h('div', { class: 'label kicker', text: 'Traités' }), h('div', { class: 'value', text: num(done.length) }))),
-    h('div', { class: 'card' },
-      h('h2', { text: 'À traiter' }),
-      open.length ? table(open) : empty('Rien en attente. Les nouveaux messages apparaissent ici dès leur arrivée dans la boîte.')),
-    done.length
-      ? h('div', { class: 'card' }, h('h2', { text: 'Traités' }), table(done))
-      : null);
+  // --- Lecture ----------------------------------------------------------------
+  const reader = h('section', { class: 'mx-reader' },
+    h('div', { class: 'mx-empty center' },
+      h('span', { class: 'mx-empty-icon', svg: '<svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>' }),
+      h('b', { text: 'Choisis un message' }),
+      h('span', { text: 'Il s’affiche ici, avec ses réponses et de quoi y répondre.' })));
+
+  async function openMail(id) {
+    state.mailOpen = id;
+    shell.classList.add('reading');
+    for (const el of listEl.querySelectorAll('.mx-item')) el.classList.remove('on');
+    const idx = list.findIndex((m) => m.id === id);
+    listEl.children[idx]?.classList.add('on');
+    listEl.children[idx]?.classList.remove('unread');
+    reader.replaceChildren(h('div', { class: 'mx-loading', text: 'Ouverture…' }));
+    let m;
+    try { m = await rpc('admin_get_inbound_mail', { p_id: id }); }
+    catch (e) { reader.replaceChildren(h('div', { class: 'mx-empty center' }, h('b', { text: 'Message indisponible.' }), h('span', { text: errText(e) }))); return; }
+    const item = all.find((x) => x.id === id);
+    m.deleted_at = item?.deleted_at || null;
+    if (item && !item.read_at) { item.read_at = new Date().toISOString(); paintMailCount(); }
+    paintReader(m);
+  }
+
+  function paintReader(m) {
+    const cat = MAIL_CATEGORY[m.category] || MAIL_CATEGORY.other;
+    const isNew = m.status === 'new';
+
+    const act = async (fn, ok) => {
+      try { await fn(); toast(ok); go('mail'); } catch (e) { toast(errText(e), true); }
+    };
+    const markDone = async () => {
+      const v = await ask({
+        title: 'Marquer comme traité',
+        text: `« ${m.subject || '(sans objet)'} » de ${mailSender(m)}. Une note courte aide à retrouver ce qui a été fait.`,
+        confirmLabel: 'Traité',
+        fields: [{ name: 'note', label: 'Note (facultative)', type: 'text', placeholder: 'Ex. Rappelé par téléphone' }],
+      });
+      if (!v) return;
+      act(() => rpc('admin_handle_inbound_mail', { p_id: m.id, p_handled: true, p_note: v.note || null }), 'Message marqué comme traité.');
+    };
+
+    const toolbar = h('div', { class: 'mx-toolbar' },
+      h('button', { class: 'mx-back', onclick: () => { state.mailOpen = null; shell.classList.remove('reading'); }, 'aria-label': 'Retour à la liste' },
+        h('span', { svg: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>' })),
+      h('div', { class: 'mx-toolbar-actions' },
+        h('button', { class: 'btn sm', onclick: () => composer.scrollIntoView({ behavior: 'smooth', block: 'center' }) || bodyInput.focus() }, 'Répondre'),
+        isNew
+          ? h('button', { class: 'btn ghost sm', onclick: markDone }, 'Marquer traité')
+          : h('button', { class: 'btn ghost sm', onclick: () => act(() => rpc('admin_handle_inbound_mail', { p_id: m.id, p_handled: false, p_note: null }), 'Message remis à traiter.') }, 'Remettre à traiter'),
+        h('button', { class: 'btn ghost sm', onclick: () => act(() => rpc('admin_mark_inbound_mail_unread', { p_id: m.id }), 'Marqué non lu.') }, 'Non lu'),
+        h('button', {
+          class: 'btn ghost sm',
+          onclick: async () => {
+            try { await navigator.clipboard.writeText(m.from_address || ''); toast('Adresse copiée.'); }
+            catch { toast('Copie impossible dans ce navigateur.', true); }
+          },
+        }, 'Copier l’adresse'),
+        ...(m.deleted_at
+          ? [
+              h('button', { class: 'btn ghost sm', onclick: () => trash([m.id], false) }, 'Restaurer'),
+              h('button', { class: 'btn ghost sm danger', onclick: () => purge([m.id]) }, 'Supprimer pour de bon'),
+            ]
+          : [h('button', { class: 'btn ghost sm danger', onclick: () => trash([m.id], true), title: 'Mettre à la corbeille' }, 'Supprimer')])));
+
+    const meta = h('div', { class: 'mx-meta' },
+      mailAvatar(m, true),
+      h('div', { class: 'mx-meta-text' },
+        h('div', { class: 'mx-meta-from' }, h('b', { text: mailSender(m) }),
+          m.from_name ? h('span', { class: 'hint', text: ` <${m.from_address}>` }) : null),
+        h('div', { class: 'hint', text: `À ${(m.to_addresses || []).join(', ') || m.mailbox || 'support@zola-rdc.com'}${m.source === 'site' ? ', via le formulaire du site' : ''}` }),
+        h('div', { class: 'hint', text: fmtFull(m.received_at) })));
+
+    const form = m.form
+      ? h('dl', { class: 'kv mx-form' },
+          ...Object.entries(FORM_FIELDS).flatMap(([k, label]) => (m.form[k] ? [h('dt', { text: label }), h('dd', { text: m.form[k] })] : [])),
+          ...(m.form.details && typeof m.form.details === 'object'
+            ? Object.entries(m.form.details).flatMap(([k, v]) => (v ? [h('dt', { text: k }), h('dd', { text: String(v) })] : []))
+            : []))
+      : null;
+
+    const status = m.deleted_at
+      ? h('div', { class: 'mx-banner' },
+          h('b', { text: 'Dans la corbeille' }),
+          h('span', { text: ` depuis le ${fmtFull(m.deleted_at)}. Restaure-le pour le remettre dans les dossiers.` }))
+      : !isNew
+      ? h('div', { class: 'mx-banner ok' },
+          h('b', { text: 'Traité' }),
+          h('span', { text: ` ${m.handled_at ? `le ${fmtFull(m.handled_at)}` : ''}${m.handled_by_email ? ` par ${m.handled_by_email}` : ''}${m.note ? `. ${m.note}` : ''}` }))
+      : m.category === 'securite'
+        ? h('div', { class: 'mx-banner alert' }, h('b', { text: 'Sécurité des enfants.' }), h('span', { text: ' À traiter en priorité, chaque action reste dans l’historique.' }))
+        : null;
+
+    const thread = (m.replies || []).map((r) => h('div', { class: 'mx-reply' },
+      h('div', { class: 'mx-reply-head' },
+        h('b', { text: 'Réponse envoyée' }),
+        h('span', { class: 'hint', text: ` ${fmtFull(r.created_at)}${r.sent_by_email ? ` par ${r.sent_by_email}` : ''}` })),
+      h('div', { class: 'hint', text: `À ${r.to_address}, objet « ${r.subject} »` }),
+      h('div', { class: 'mx-body', text: r.body })));
+
+    // --- Réponse ------------------------------------------------------------
+    const subjectInput = h('input', { type: 'text', value: replySubject(m.subject), maxlength: '300' });
+    const bodyInput = h('textarea', { rows: '7', placeholder: `Écris ta réponse à ${mailSender(m)}…` });
+    const keepOpen = h('input', { type: 'checkbox' });
+    const sendBtn = h('button', { class: 'btn' }, 'Envoyer');
+    const canReply = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m.from_address || '');
+
+    sendBtn.addEventListener('click', async () => {
+      const body = bodyInput.value.trim();
+      if (body.length < 2) { toast('La réponse est vide.', true); return; }
+      sendBtn.disabled = true; sendBtn.textContent = 'Envoi…';
+      try {
+        const { data: res, error } = await supabase.functions.invoke('admin-mail-reply', {
+          body: { mailId: m.id, subject: subjectInput.value.trim(), body, markHandled: !keepOpen.checked },
+        });
+        if (error || !res?.ok) throw error || new Error('Envoi refusé.');
+        toast(`Réponse envoyée à ${m.from_address}.`);
+        go('mail');
+      } catch (e) {
+        toast(`Envoi impossible. ${errText(e)}`, true);
+        sendBtn.disabled = false; sendBtn.textContent = 'Envoyer';
+      }
+    });
+
+    const composer = h('div', { class: 'mx-composer' },
+      h('div', { class: 'mx-composer-head' },
+        h('b', { text: 'Répondre' }),
+        h('span', { class: 'hint', text: `De support@zola-rdc.com à ${m.from_address || '—'}` })),
+      canReply
+        ? h('div', {},
+            h('label', { class: 'field' }, 'Objet'), subjectInput,
+            h('label', { class: 'field', style: { marginTop: '10px' } }, 'Message'), bodyInput,
+            h('div', { class: 'mx-composer-foot' },
+              h('label', { class: 'mx-check' }, keepOpen, h('span', { text: 'Laisser à traiter après l’envoi' })),
+              h('div', { class: 'btn-row' },
+                h('a', { class: 'btn ghost sm', href: mailReplyHref(m) }, 'Ouvrir dans ma messagerie'),
+                sendBtn)))
+        : h('p', { class: 'hint', text: 'Pas d’adresse valide pour répondre à ce message.' }));
+
+    reader.replaceChildren(
+      toolbar,
+      h('div', { class: 'mx-reader-scroll' },
+        h('div', { class: 'mx-subject' },
+          h('h1', { text: m.subject || '(sans objet)' }),
+          h('div', { class: 'mx-item-tags' },
+            h('span', { class: `mx-tag ${cat[1]}`, text: cat[0] }),
+            isNew ? h('span', { class: `mx-tag ${m.category === 'securite' ? 'red' : 'orange'}`, text: 'À traiter' }) : h('span', { class: 'mx-tag ok', text: 'Traité' }))),
+        status,
+        meta,
+        form,
+        h('div', { class: 'mx-body', text: m.body || '(Ce message n’a pas de texte. Ouvre la boîte support@zola-rdc.com pour le voir en entier.)' }),
+        (m.attachments || []).length
+          ? h('div', { class: 'hint', style: { marginTop: '10px' }, text: `${m.attachments.length} pièce(s) jointe(s), à consulter dans la boîte mail.` })
+          : null,
+        ...thread,
+        composer));
+  }
+
+  shell.append(folders, listPane, reader);
+  root.append(shell);
+
+  if (state.mailOpen && list.some((m) => m.id === state.mailOpen)) openMail(state.mailOpen);
+  else state.mailOpen = null;
 }
 
 // Compteur de la barre latérale, comme pour les vérifications.
@@ -2516,6 +2860,132 @@ async function paintMailCount() {
 // Navigation
 // ---------------------------------------------------------------------------
 
+
+// --- Programme testeur (migration 078, suivi 080) ---------------------------
+// Une ligne par personne invitée ou inscrite au programme : ses jours
+// confirmés, jour par jour, sa dernière activité et sa récompense. Les jours
+// sont comptés au fuseau de Kinshasa, comme dans l'app.
+const DAY_MS = 86400000;
+const isoDay = (d) => d.toISOString().slice(0, 10);
+const addDays = (iso, n) => isoDay(new Date(Date.parse(`${iso}T00:00:00Z`) + n * DAY_MS));
+const dayLabel = (iso) => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  .format(new Date(`${iso}T00:00:00Z`));
+
+async function pageTesters(root) {
+  const data = await rpc('admin_tester_overview');
+  const program = data.program || {};
+  const required = program.required_days || 14;
+  const today = data.today;
+  const people = data.people || [];
+
+  // Le calendrier montre le programme depuis son premier jour : au moins les
+  // 14 premières cases, puis chaque jour écoulé, 28 au plus (les plus récents).
+  const start = program.starts_on || today;
+  const elapsed = Math.max(0, Math.round((Date.parse(today) - Date.parse(start)) / DAY_MS)) + 1;
+  const span = Math.min(Math.max(required, elapsed), 28);
+  const first = elapsed > 28 ? addDays(today, -27) : start;
+  const calendar = Array.from({ length: span }, (_, i) => addDays(first, i));
+
+  const inApp = people.filter((p) => p.user_id).length;
+  const offList = people.filter((p) => p.user_id && p.invited === false).length;
+  const activeToday = people.filter((p) => p.last_checkin === today).length;
+  const done = people.filter((p) => p.completed_at).length;
+  const toGrant = people.filter((p) => p.completed_at && !p.granted_at).length;
+
+  const strip = (p) => {
+    const set = new Set(p.dates || []);
+    return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '3px', maxWidth: '260px' } },
+      ...calendar.map((d) => {
+        const on = set.has(d);
+        const future = d > today;
+        return h('span', {
+          title: `${dayLabel(d)}${on ? ', confirmé' : future ? ', à venir' : ', pas confirmé'}`,
+          style: {
+            width: '14px', height: '14px', borderRadius: '4px', display: 'inline-block',
+            background: on ? '#fd267a' : future ? 'transparent' : '#e7e9ee',
+            border: d === today ? '2px solid #101113' : future ? '1px dashed #c9ccd4' : '0',
+            boxSizing: 'border-box',
+          },
+        });
+      }));
+  };
+
+  const grant = async (p) => {
+    const v = await ask({
+      title: 'Récompense remise',
+      text: `Confirme que la récompense de ${p.display_name || p.email} lui a bien été remise.`,
+      confirmLabel: 'Marquer remise',
+      fields: [{ name: 'note', label: 'Note (facultatif)', placeholder: 'Ex. 3 mois Incognito offerts' }],
+    });
+    if (!v) return;
+    try {
+      await rpc('admin_mark_tester_reward', { p_user: p.user_id, p_note: (v.note || '').trim() || null });
+      toast('Récompense marquée comme remise.');
+      go('testers');
+    } catch (e) { toast(errText(e), true); }
+  };
+
+  const rewardCell = (p) => {
+    if (p.granted_at) return pill(`Remise le ${fmtDate(p.granted_at)}`, 'green');
+    if (p.completed_at) {
+      return h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
+        pill('À remettre', 'orange'),
+        h('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); grant(p); } }, 'Marquer remise'));
+    }
+    if (!p.user_id) return pill('Pas encore dans l’app', 'grey');
+    return pill(`Encore ${Math.max(required - p.days, 0)} jour(s)`, 'grey');
+  };
+
+  const rows = people.map((p) => h('tr', {
+    class: p.user_id ? 'clickable' : null,
+    onclick: p.user_id ? () => openUser(p.user_id) : null,
+  },
+    h('td', { 'data-l': 'Testeur' },
+      h('b', { text: p.display_name || '—' }),
+      h('div', { class: 'hint', text: p.email || p.phone || 'sans adresse' }),
+      p.public_id ? h('div', { class: 'hint', text: p.public_id }) : null,
+      // Inscrit pendant le programme sans être sur la liste d'invitation.
+      p.user_id && p.invited === false
+        ? h('div', { style: { marginTop: '4px' } }, pill('Hors liste', 'grey'))
+        : null),
+    h('td', { 'data-l': 'Jours' },
+      h('b', { text: `${p.days} / ${required}` }),
+      h('div', { class: 'hint', text: p.last_checkin ? `dernier jour ${dayLabel(p.last_checkin)}` : 'aucun jour confirmé' })),
+    h('td', { 'data-l': 'Calendrier' }, strip(p)),
+    h('td', { 'data-l': 'Activité', class: 'hint', text: p.last_active_at ? `vu ${ago(p.last_active_at)}` : (p.user_id ? '—' : 'pas de compte') }),
+    h('td', { 'data-l': 'Récompense' }, rewardCell(p))));
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const exportCsv = () => {
+    const lines = [['email', 'telephone', 'invite', 'pseudo', 'id_public', 'jours', 'dernier_jour', 'derniere_activite', 'termine_le', 'remise_le', 'dates'].join(';')];
+    for (const p of people) {
+      lines.push([p.email, p.phone, p.invited ? 'oui' : 'non', p.display_name, p.public_id, p.days, p.last_checkin, p.last_active_at,
+        p.completed_at, p.granted_at, (p.dates || []).join(' ')].map(csvCell).join(';'));
+    }
+    downloadText(`zola-testeurs-${stamp}.csv`, '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+  };
+
+  root.append(
+    h('p', { class: 'page-intro' },
+      `Le défi des ${required} jours. Tout compte créé depuis le début du programme apparaît ici, même si son adresse n’était pas sur la liste d’invitation. Chaque jour où un testeur ouvre Zola, il confirme sa présence d’un appui. Les cases roses sont les jours confirmés, la case encadrée est aujourd’hui. Au ${required}e jour, sa récompense passe « À remettre ». Les jours n’ont pas besoin de se suivre.`),
+    h('div', { class: 'grid k4' },
+      statCard('Testeurs', num(people.length),
+        `${num(inApp)} déjà dans l’app${offList ? `, dont ${num(offList)} hors liste` : ''}`),
+      statCard('Actifs aujourd’hui', num(activeToday), 'jour confirmé aujourd’hui', activeToday ? 'good' : null),
+      statCard(`${required} jours terminés`, num(done), 'récompense débloquée'),
+      statCard('À remettre', num(toGrant), 'récompenses en attente', toGrant ? 'alert' : null)),
+    h('div', { class: 'card' },
+      h('div', { class: 'btn-row', style: { marginBottom: '12px' } },
+        h('button', { class: 'btn ghost sm', onclick: exportCsv }, 'Exporter en CSV')),
+      rows.length
+        ? h('div', { class: 'table-wrap' }, h('table', {},
+            h('thead', {}, h('tr', {},
+              h('th', {}, 'Testeur'), h('th', {}, 'Jours'), h('th', {}, 'Calendrier'),
+              h('th', {}, 'Activité'), h('th', {}, 'Récompense'))),
+            h('tbody', {}, ...rows)))
+        : empty('Aucun testeur pour le moment.')));
+}
+
 const PAGES = {
   dashboard: ['Tableau de bord', pageDashboard],
   reports: ['Signalements', pageReports],
@@ -2530,6 +3000,7 @@ const PAGES = {
   audit: ['Historique des actions', pageAudit],
   team: ['Administrateurs', pageTeam],
   waitlist: ["Liste d'attente", pageWaitlist],
+  testers: ['Testeurs', pageTesters],
   mail: ['Courrier', pageMail],
   guide: ['Guide de modération', pageGuide],
 };
@@ -2539,7 +3010,7 @@ const PAGES = {
 const GROUPS = {
   dashboard: 'Pilotage',
   safety: 'Modération', reports: 'Modération', verifications: 'Modération', photos: 'Modération',
-  users: 'Communauté', conversation: 'Communauté',
+  users: 'Communauté', conversation: 'Communauté', testers: 'Communauté',
   events: 'Contenu', blog: 'Contenu',
   mail: 'Contacts', waitlist: 'Contacts',
   team: 'Équipe et réglages', audit: 'Équipe et réglages', guide: 'Équipe et réglages', economy: 'Équipe et réglages',
@@ -2569,7 +3040,7 @@ const SEARCH = {
   conversation: { placeholder: 'Chercher dans les signalements avec conversation' },
   events: { placeholder: 'Chercher une soirée (nom, lieu)' },
   blog: { placeholder: 'Chercher un article' },
-  mail: { placeholder: 'Chercher un message (expéditeur, objet)' },
+  mail: { placeholder: 'Chercher un message (expéditeur, objet, texte)', items: '.mx-item' },
   waitlist: { placeholder: 'Chercher une adresse e-mail' },
   team: { placeholder: 'Chercher un administrateur' },
   audit: { placeholder: "Chercher une action (auteur, compte, motif)" },

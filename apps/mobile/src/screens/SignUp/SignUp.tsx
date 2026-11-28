@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorText, Input, StepIntro } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
@@ -45,7 +46,6 @@ export default function SignUp() {
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
         <StepIntro

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -21,17 +21,22 @@ import { colors, isDark, shadows } from '@/theme';
 //
 // Appelable de partout, y compris hors d'un composant : showToast({ ... }).
 
-export type ToastTone = 'info' | 'success' | 'pending' | 'error';
+export type ToastTone = 'info' | 'success' | 'pending' | 'error' | 'offline' | 'unstable';
 
 export interface ToastOptions {
   text: string;
   tone?: ToastTone;
-  // Durée d'affichage en millisecondes, 4 s par défaut.
+  // Durée d'affichage en millisecondes, 4 s par défaut. 0 : le bandeau reste
+  // jusqu'à ce qu'on le ferme ou qu'un autre le remplace (perte de réseau).
   duration?: number;
+  // Identifie un bandeau pour pouvoir le retirer sans toucher aux autres
+  // (hideToast('network') ne ferme que le bandeau réseau).
+  key?: string;
 }
 
 type Listener = (t: ToastOptions & { id: number }) => void;
 let listener: Listener | null = null;
+let hideListener: ((key?: string) => void) | null = null;
 let seq = 0;
 // Minuterie de disparition : une seule notification à la fois, donc une
 // seule minuterie, gardée au niveau du module.
@@ -42,6 +47,11 @@ export function showToast(options: ToastOptions) {
   listener?.({ ...options, id: seq });
 }
 
+// Ferme le bandeau affiché. Avec une clé, seulement s'il porte cette clé.
+export function hideToast(key?: string) {
+  hideListener?.(key);
+}
+
 // Pastille colorée à gauche : la couleur dit la nature du message d'un coup
 // d'oeil, l'icône le confirme.
 const TONES: Record<ToastTone, { bg: string; icon: keyof typeof Ionicons.glyphMap; ink: string }> = {
@@ -49,6 +59,8 @@ const TONES: Record<ToastTone, { bg: string; icon: keyof typeof Ionicons.glyphMa
   pending: { bg: '#ffe1ea', icon: 'time-outline', ink: '#e6175f' },
   success: { bg: '#16a34a', icon: 'checkmark', ink: '#ffffff' },
   error: { bg: '#dc2626', icon: 'alert', ink: '#ffffff' },
+  offline: { bg: '#24262a', icon: 'cloud-offline-outline', ink: '#ffffff' },
+  unstable: { bg: '#f59e0b', icon: 'cellular-outline', ink: '#ffffff' },
 };
 
 const HIDDEN = -160;
@@ -69,19 +81,31 @@ export function TopToastHost() {
     );
   };
 
+  // Clé du bandeau affiché, lue par hideToast sans attendre un rendu.
+  const shownKey = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     listener = (t) => {
       if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = null;
+      shownKey.current = t.key;
       setToast(t);
       y.set(HIDDEN);
       y.set(withSpring(0, { damping: 18, stiffness: 220, mass: 0.8 }));
       if (t.tone === 'success') haptic.success();
       else if (t.tone === 'error') haptic.impact();
       else haptic.tap();
-      hideTimer = setTimeout(hide, t.duration ?? 4000);
+      const duration = t.duration ?? 4000;
+      if (duration > 0) hideTimer = setTimeout(hide, duration);
+    };
+    hideListener = (key) => {
+      if (key !== undefined && shownKey.current !== key) return;
+      shownKey.current = undefined;
+      hide();
     };
     return () => {
       listener = null;
+      hideListener = null;
       if (hideTimer) clearTimeout(hideTimer);
     };
     // hide ne dépend que de valeurs stables (y et la minuterie du module).

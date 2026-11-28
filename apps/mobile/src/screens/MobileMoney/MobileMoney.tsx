@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DrcFlag, OperatorLogo, type OperatorBrandId } from '@/components/brand';
 import { Button, ErrorText, ScreenHeader } from '@/components/ui';
@@ -39,7 +40,6 @@ export default function MobileMoney() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScreenHeader title="Mobile Money" right={<DrcFlag width={28} />} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <View style={styles.intro}>

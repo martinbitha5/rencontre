@@ -2,15 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { sendMessage } from '@/services/api';
 import { Button } from '@/components/ui';
 import { colors, radius, sigCorner, spacing, keyboardAppearance } from '@/theme';
@@ -72,7 +71,6 @@ export function ReplyModal({
     >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.card}>
           <View style={styles.head}>

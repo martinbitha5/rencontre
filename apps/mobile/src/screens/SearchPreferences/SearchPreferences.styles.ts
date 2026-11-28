@@ -90,6 +90,20 @@ export const styles = StyleSheet.create({
   noPrefPillActive: { backgroundColor: colors.primary },
   noPrefText: { fontSize: 14, fontWeight: '700', color: colors.textMuted },
   // Ville : libellé et valeur rose sur la même ligne, comme la maquette.
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  // Ligne « Ville » de l'autre Congo : touchable, avec un chevron.
+  cityPick: { marginTop: spacing.md, gap: 4 },
+  cityPickValue: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cityPickText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.accent },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sheetRowLabel: { fontSize: 15, fontWeight: '700', color: colors.text },
   cityRow: {
     flexDirection: 'row',
     alignItems: 'center',

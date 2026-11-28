@@ -1,9 +1,16 @@
 export type Gender = 'homme' | 'femme';
 
+// Pays servis par l'app (colonne cities.country, migration 071).
+export type CountryCode = 'CD' | 'CG';
+
+// Zone du fil Rencontres : ma ville, tout mon pays, ou les deux Congo.
+export type SearchScope = 'city' | 'country' | 'both';
+
 export interface City {
   id: number;
   name: string;
   province: string;
+  country: CountryCode;
 }
 
 // Champs de profil détaillés, partagés entre mon profil et les profils du feed.
@@ -39,6 +46,13 @@ export interface Profile extends ProfileDetails {
   is_verified: boolean;
   // Filtres de recherche avancés (migration 017). null = pas de préférence.
   search_whole_country: boolean;
+  // Zone du fil Rencontres dans mon pays (migration 083) : ma ville ou tout
+  // le pays. Absent sur un profil lu avant la migration.
+  search_scope?: SearchScope;
+  // L'autre Congo (migration 084) : activé ou non, et la ville choisie
+  // là-bas (null = toutes ses villes).
+  other_congo_enabled?: boolean;
+  other_congo_city_id?: number | null;
   filter_goals: string[] | null;
   filter_religions: string[] | null;
   filter_has_children: 'oui' | 'non' | null;
@@ -58,6 +72,9 @@ export interface PhotoRef {
 
 export interface FeedProfile extends ProfileDetails {
   user_id: string;
+  // Pays du profil (migration 083) : la carte le précise quand il diffère
+  // du mien, avec la zone « les deux Congo ».
+  country?: CountryCode;
   display_name: string;
   birth_date: string;
   gender: Gender;
@@ -281,10 +298,50 @@ export interface EventSummary {
 //   invalid          : aucune soirée ouverte derrière ce code
 //   ok               : accès acquis (déjà sur la liste, ou entrée libre)
 //   payment_required : il reste à payer, prix fixé au backoffice
+// Devise du prix d'entrée : CDF (RDC) ou XAF (Congo-Brazzaville). price_cdf
+// porte le montant dans cette devise malgré son nom (migration 075).
+export type EventCurrency = 'CDF' | 'XAF';
+
+// Pastilles des onglets (migration 080). messages pour Discussions ;
+// requests, likes et views pour Activité.
+export interface Badges {
+  messages: number;
+  requests: number;
+  likes: number;
+  views: number;
+}
+
+// Programme testeur (migration 078) : une confirmation par jour, comptée
+// par le serveur au fuseau de Kinshasa.
+export interface TesterProgress {
+  active: boolean;
+  required: number;
+  days: number;
+  checked_today: boolean;
+  completed: boolean;
+  reward_label: string;
+  today: string;
+}
+
 export type ScanEventResult =
   | { status: 'invalid' }
-  | { status: 'ok'; already: boolean; event_id: string; name: string; price_cdf: number }
-  | { status: 'payment_required'; event_id: string; name: string; price_cdf: number };
+  | {
+      status: 'ok';
+      already: boolean;
+      event_id: string;
+      name: string;
+      price_cdf: number;
+      currency?: EventCurrency;
+    }
+  | {
+      status: 'payment_required';
+      event_id: string;
+      name: string;
+      price_cdf: number;
+      currency?: EventCurrency;
+      // Ville de la soirée (migration 076), absente pour une ancienne soirée.
+      city?: string | null;
+    };
 
 export interface Reaction {
   message_id: number;

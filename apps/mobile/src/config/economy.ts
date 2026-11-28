@@ -22,6 +22,11 @@ export function formatCdf(value: number): string {
   return `${formatCoins(value)} CDF`;
 }
 
+// Prix dans la devise de son pays : CDF (RDC) ou XAF (Congo-Brazzaville).
+export function formatPrice(value: number, currency: 'CDF' | 'XAF' = 'CDF'): string {
+  return `${formatCoins(value)} ${currency}`;
+}
+
 // Or : couleur de l'icône de pièces (composant CoinIcon dans components/coins)
 // et des pastilles de coût. La monnaie interne est toujours or, jamais rose :
 // c'est ce qui la distingue du reste de l'interface.
@@ -205,10 +210,24 @@ export function findPurchase(kind?: string, id?: string): Purchase {
   };
 }
 
-// Opérateurs Mobile Money supportés en RDC (agrégés par MultiPay).
+// Opérateurs Mobile Money supportés en RDC (agrégés par pawaPay).
 export const MOBILE_MONEY_OPERATORS = [
   { id: 'airtel', name: 'Airtel Money' },
   { id: 'orange', name: 'Orange Money' },
   { id: 'vodacom', name: 'M-Pesa (Vodacom)' },
 ] as const;
-export type MobileMoneyOperator = (typeof MOBILE_MONEY_OPERATORS)[number]['id'];
+
+// Opérateurs Mobile Money du Congo-Brazzaville (pawaPay, en XAF).
+export const MOBILE_MONEY_OPERATORS_CG = [
+  { id: 'mtn', name: 'MTN Mobile Money' },
+  { id: 'airtel', name: 'Airtel Money' },
+] as const;
+
+export type MobileMoneyOperator =
+  | (typeof MOBILE_MONEY_OPERATORS)[number]['id']
+  | (typeof MOBILE_MONEY_OPERATORS_CG)[number]['id'];
+
+// Opérateurs à montrer pour une devise donnée.
+export function operatorsFor(currency: 'CDF' | 'XAF') {
+  return currency === 'XAF' ? MOBILE_MONEY_OPERATORS_CG : MOBILE_MONEY_OPERATORS;
+}

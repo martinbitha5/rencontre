@@ -2,6 +2,7 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
+import { monitoredFetch } from '@/utils/network';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
@@ -27,6 +28,9 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: Platform.OS !== 'web',
     detectSessionInUrl: false,
   },
+  // Chaque requête est chronométrée : lenteurs et échecs alimentent le
+  // bandeau « réseau instable » (voir utils/network).
+  global: { fetch: monitoredFetch },
 });
 
 // Canal temps réel à nom UNIQUE, à utiliser partout au lieu de

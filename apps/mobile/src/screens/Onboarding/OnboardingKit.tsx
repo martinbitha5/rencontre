@@ -87,25 +87,42 @@ export function GradientButton({
   title,
   onPress,
   disabled,
+  dimmed,
   loading,
   icon = null,
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
+  // Grisé à l'œil mais toujours touchable : l'appui reste reçu et l'écran
+  // explique ce qui manque. À préférer à `disabled` quand l'état bascule
+  // pendant la saisie : un Pressable qui passe de désactivé à actif peut
+  // ignorer l'appui qui suit juste, d'où le « il faut appuyer deux fois ».
+  dimmed?: boolean;
   loading?: boolean;
   icon?: keyof typeof Ionicons.glyphMap | null;
 }) {
+  // Pressable simple, sans l'échelle animée de PressableScale : sur Android
+  // (nouvelle architecture), rétrécir le bouton pendant l'appui pouvait faire
+  // croire que le doigt s'était relevé hors du bouton, et l'appui était
+  // perdu. Le retour visuel passe par l'opacité, qui ne bouge rien.
   return (
-    <PressableScale
+    <Pressable
       disabled={disabled || loading}
       onPress={() => {
         haptic.impact();
         onPress();
       }}
+      // Zone de tolérance large : un doigt qui glisse un peu reste un appui.
+      hitSlop={6}
+      pressRetentionOffset={40}
       accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
-      style={[kg.btn, disabled && kg.btnOff]}
+      accessibilityState={{ disabled: !!disabled || !!dimmed, busy: !!loading }}
+      style={({ pressed }) => [
+        kg.btn,
+        (disabled || dimmed) && kg.btnOff,
+        pressed && !disabled && { opacity: dimmed ? 0.3 : 0.85 },
+      ]}
     >
       {/* Dégradé flamme des boutons du site (--flame). */}
       <LinearGradient
@@ -123,7 +140,7 @@ export function GradientButton({
           <Text style={kg.text}>{title}</Text>
         </>
       )}
-    </PressableScale>
+    </Pressable>
   );
 }
 
@@ -178,6 +195,7 @@ function Mark({ on, multi }: { on: boolean; multi?: boolean }) {
 // ---------------------------------------------------------------------------
 export function OptionCard({
   icon,
+  emoji,
   label,
   hint,
   selected,
@@ -185,6 +203,8 @@ export function OptionCard({
   onPress,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
+  // Emoji posé à la place de l'icône, par exemple le drapeau d'un pays.
+  emoji?: string;
   label: string;
   hint?: string;
   selected?: boolean;
@@ -203,7 +223,11 @@ export function OptionCard({
       scaleTo={0.98}
     >
       <Animated.View style={[ko.row, !!hint && ko.rowTall, bg]}>
-        {!!icon && <Ionicons name={icon} size={22} color={colors.text} style={ko.icon} />}
+        {emoji ? (
+          <Text style={[ko.icon, ko.emoji]}>{emoji}</Text>
+        ) : (
+          !!icon && <Ionicons name={icon} size={22} color={colors.text} style={ko.icon} />
+        )}
         <View style={ko.body}>
           <Text style={[ko.label, !!hint && ko.labelStrong]}>{label}</Text>
           {!!hint && <Text style={ko.hint}>{hint}</Text>}
@@ -480,6 +504,8 @@ const ko = StyleSheet.create({
   },
   rowTall: { paddingVertical: 16 },
   icon: { width: 24 },
+  // Drapeau : un peu plus grand qu'une icône, centré sur la même colonne.
+  emoji: { width: 32, fontSize: 26, lineHeight: 32, textAlign: 'center' },
   body: { flex: 1, gap: 3 },
   label: { fontSize: 15, fontWeight: '600', color: colors.text },
   labelStrong: { fontSize: 16, fontWeight: '700' },

@@ -38,10 +38,13 @@ const LOGO_SIZE = 150;
 // FingerprintDraw le dessine sur ~85 % de sa taille : 0,45 recolle les deux.
 const START_SCALE = 0.45;
 
-const GROW_MS = 650;
-const WORD_AT = 380;
-const DONE_AT = 1250; // logo formé, wordmark posé, courte tenue
-const EXIT_MS = 380;
+// Intro courte : environ une seconde de l'écran natif à l'app (contre 1,6 s
+// avant). Elle se prolonge seulement si l'app derrière n'est pas encore
+// prête, jamais pour le plaisir de l'animation.
+const GROW_MS = 480;
+const WORD_AT = 200;
+const DONE_AT = 720; // logo formé, wordmark posé, courte tenue
+const EXIT_MS = 280;
 
 export function IntroSplash({ onFinish }: { onFinish: () => void }) {
   // Sortie conditionnée à deux choses : l'animation est arrivée au bout de sa
@@ -73,15 +76,15 @@ export function IntroSplash({ onFinish }: { onFinish: () => void }) {
   useEffect(() => {
     if (reduceMotion) {
       solid.set(withTiming(0, { duration: 300 }));
-      const t = setTimeout(() => setAnimDone(true), 700);
+      const t = setTimeout(() => setAnimDone(true), 500);
       return () => clearTimeout(t);
     }
-    solid.set(withTiming(0, { duration: 520, easing: Easing.inOut(Easing.quad) }));
+    solid.set(withTiming(0, { duration: 400, easing: Easing.inOut(Easing.quad) }));
     logoScale.set(withTiming(1, { duration: GROW_MS, easing: Easing.out(Easing.cubic) }));
-    wordOpacity.set(withDelay(WORD_AT, withTiming(1, { duration: 360 })));
+    wordOpacity.set(withDelay(WORD_AT, withTiming(1, { duration: 300 })));
     wordShift.set(withDelay(
       WORD_AT,
-      withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) }),
+      withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) }),
     ));
 
     // Retour haptique de l'éclat : passe par utils/haptics, désactivé pour

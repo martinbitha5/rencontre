@@ -8,6 +8,8 @@ const RING = 148;
 // Fond de la zone des cartes : gris très clair en clair, un cran au-dessus du
 // noir en sombre.
 const PANEL_BG = isDark ? '#16171a' : '#f4f4f6';
+// Liseré de la pastille de la cloche : la couleur du fond, pour la détacher.
+const PANEL_BADGE_RING = PANEL_BG;
 // Encre sombre fixe : pastille du pourcentage, bloc « soirées », Incognito.
 const INK = '#101113';
 
@@ -29,6 +31,21 @@ export const styles = StyleSheet.create({
   topTitle: { fontSize: 32, fontWeight: '900', color: colors.primaryDeep, letterSpacing: -0.6 },
   topIcons: { flexDirection: 'row', alignItems: 'center' },
   topIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+  topBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 3,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: PANEL_BADGE_RING,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
 
   // Identité.
   identity: {
@@ -106,16 +123,32 @@ export const styles = StyleSheet.create({
   promptText: { flex: 1, fontSize: 17, lineHeight: 24, fontWeight: '600', color: colors.text },
 
   // Onglets soulignés.
+  // Deux boutons côte à côte, bien séparés : on voit tout de suite qu'on
+  // peut toucher l'un ou l'autre.
   tabs: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
+    paddingTop: spacing.sm,
+    paddingBottom: 12,
     backgroundColor: colors.background,
   },
-  tab: { flex: 1, alignItems: 'center', paddingTop: spacing.sm },
-  tabText: { fontSize: 17, fontWeight: '700', color: colors.textMuted, paddingBottom: 12 },
-  tabTextOn: { color: colors.text, fontWeight: '900' },
-  tabLine: { height: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent' },
-  tabLineOn: { backgroundColor: colors.primary },
+  tabsTrack: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    backgroundColor: PANEL_BG,
+  },
+  tabOn: { backgroundColor: colors.primary },
+  tabText: { fontSize: 16, fontWeight: '800', color: colors.text },
+  tabTextOn: { color: '#ffffff' },
 
   // Zone grise des cartes.
   panel: {
@@ -129,8 +162,6 @@ export const styles = StyleSheet.create({
 
   // Tuiles d'état.
   tiles: { flexDirection: 'row', gap: 12 },
-  // Écran étroit ou grand texte : une tuile par ligne, rien n'est coupé.
-  tilesStacked: { flexDirection: 'column' },
   tile: {
     flex: 1,
     flexDirection: 'row',

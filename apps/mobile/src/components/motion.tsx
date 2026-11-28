@@ -23,6 +23,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { colors, glass, isDark, isIOS, m3, motion, radius } from '@/theme';
+import { KEYBOARD_PRESS_RETENTION } from '@/components/keyboard';
 
 // Primitives de mouvement et de matière, partagées par tous les écrans pour
 // que l'app ait un seul rythme. Durées 150-300 ms, ressort à l'appui,
@@ -62,10 +63,16 @@ export function Reveal({
 // Appui : léger enfoncement au ressort. Le retour visuel arrive avant la
 // navigation, c'est lui qui donne l'impression de réactivité.
 // ---------------------------------------------------------------------------
-// `style` habille le Pressable lui-même : c'est lui qui porte la mise en page
-// interne (direction, padding, gap). `containerStyle` va sur l'enveloppe
-// animée, pour ce qui concerne le placement dans le parent (flex, largeur).
-// Séparer les deux évite que le transform écrase la mise en page, ou l'inverse.
+// `style` habille la vue intérieure : c'est elle qui porte la mise en page
+// interne (direction, padding, gap) et qui s'enfonce. `containerStyle` va sur
+// l'enveloppe, pour ce qui concerne le placement dans le parent (flex,
+// largeur).
+//
+// L'enveloppe est le Pressable et elle ne bouge JAMAIS ; seule la vue
+// intérieure rétrécit. Avant, c'était l'inverse : la vue qui recevait l'appui
+// était elle-même transformée pendant l'appui, et sur Android (nouvelle
+// architecture) React Native pouvait annuler l'appui, d'où le « il faut
+// toucher deux fois » (choix d'une ville, bouton Continuer, 27/11/2026).
 export function PressableScale({
   children,
   style,
@@ -89,26 +96,31 @@ export function PressableScale({
   }));
 
   return (
-    <Animated.View style={[animated, containerStyle]}>
-      <Pressable
-        {...props}
-        style={style}
-        onPressIn={(e) => {
-          // Réduire les animations : plus d'échelle, un simple voile. Le doigt
-          // reçoit toujours sa confirmation.
-          if (reduced) opacity.set(withTiming(0.7, { duration: motion.duration.instant }));
-          else scale.set(withSpring(scaleTo, motion.spring.snappy));
-          props.onPressIn?.(e);
-        }}
-        onPressOut={(e) => {
-          scale.set(withSpring(1, motion.spring.snappy));
-          opacity.set(withTiming(1, { duration: motion.duration.fast }));
-          props.onPressOut?.(e);
-        }}
-      >
-        {children}
-      </Pressable>
-    </Animated.View>
+    <Pressable
+      // Appui fiable même si le clavier vient de déplacer le bouton (voir
+      // KEYBOARD_PRESS_RETENTION) : un appui commencé dessus compte.
+      pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+      {...props}
+      style={containerStyle}
+      onPressIn={(e) => {
+        // Réduire les animations : plus d'échelle, un simple voile. Le doigt
+        // reçoit toujours sa confirmation.
+        if (reduced) opacity.set(withTiming(0.7, { duration: motion.duration.instant }));
+        else scale.set(withSpring(scaleTo, motion.spring.snappy));
+        props.onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        scale.set(withSpring(1, motion.spring.snappy));
+        opacity.set(withTiming(1, { duration: motion.duration.fast }));
+        props.onPressOut?.(e);
+      }}
+    >
+      {(state) => (
+        <Animated.View style={[typeof style === 'function' ? style(state) : style, animated]}>
+          {children}
+        </Animated.View>
+      )}
+    </Pressable>
   );
 }
 

@@ -50,7 +50,8 @@ const light = {
   // paiement est désactivé). Les clés gardent leur nom historique.
   purple: '#A8752A',
   purpleDark: '#8A5D1E',
-  gold: '#D4AF37',
+  // Or franc et lumineux, pas l'ocre terne d'avant (#D4AF37).
+  gold: '#FFC21A',
   background: '#ffffff',
   surface: FOND_DOUX, // champs, segments
   card: 'rgba(255, 255, 255, 0.92)',
@@ -84,7 +85,7 @@ const dark: typeof light = {
   headerGradTo: NOIR,
   purple: '#DFB362',
   purpleDark: '#C0954A',
-  gold: '#E5C25A',
+  gold: '#FFC93C',
   background: NOIR,
   surface: 'rgba(255, 255, 255, 0.07)',
   card: 'rgba(255, 255, 255, 0.08)',

@@ -41,10 +41,15 @@ function getNotifications(): NotificationsModule | null {
         const data = notification.request.content.data as
           | { type?: string; match_id?: string }
           | undefined;
+        // Décision de vérification reçue app ouverte : l'app se met à jour et
+        // l'annonce dans son propre bandeau (onPushReceived), pas de doublon.
+        const handledInApp =
+          data?.type === 'verification_approved' || data?.type === 'verification_rejected';
         const muted =
-          data?.type === 'message' &&
-          !!data.match_id &&
-          data.match_id === activeChatMatchId;
+          handledInApp ||
+          (data?.type === 'message' &&
+            !!data.match_id &&
+            data.match_id === activeChatMatchId);
         return {
           shouldShowBanner: !muted,
           shouldShowList: !muted,
@@ -58,6 +63,21 @@ function getNotifications(): NotificationsModule | null {
     cached = null;
   }
   return cached;
+}
+
+/**
+ * Notification reçue pendant que l'app est ouverte. Sert à synchroniser
+ * aussitôt ce que le serveur vient de changer (badge vérifié, photo retirée)
+ * au lieu d'attendre une relance de l'app. Renvoie la fonction de nettoyage.
+ */
+export function onPushReceived(cb: (type: string | undefined) => void): () => void {
+  const Notifications = getNotifications();
+  if (!Notifications) return () => {};
+  const sub = Notifications.addNotificationReceivedListener((n) => {
+    const data = n.request.content.data as { type?: string } | undefined;
+    cb(data?.type);
+  });
+  return () => sub.remove();
 }
 
 // projectId EAS requis pour un token valide (config extra.eas.projectId).

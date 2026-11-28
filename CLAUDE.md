@@ -49,6 +49,43 @@ jamais un droit qu'il n'a pas payé.
 
 ### 4. Fournisseurs
 
+> **Depuis le 27/11/2026, pawaPay remplace MultiPay** pour le Mobile Money
+> des deux Congo : RDC (Airtel `AIRTEL_COD`, Orange `ORANGE_COD`, M-Pesa
+> `VODACOM_MPESA_COD`, en CDF) et Congo-Brazzaville (MTN `MTN_MOMO_COG`,
+> Airtel `AIRTEL_COG`, en XAF). Le pays se déduit du numéro (+243 / +242)
+> pour la boutique et du PAYS de la soirée, choisi au backoffice
+> (`events.currency` CDF ou XAF, pas de ville à choisir, toutes les villes
+> du pays sont couvertes). La page pawaPay ne montre que les opérateurs de
+> ce pays (vérifié en sandbox, RDC = Airtel/Orange/Vodacom en FC,
+> Congo-Brazzaville = Airtel/MTN en FCFA). Une soirée qui a déjà encaissé ne
+> peut plus changer de pays (trigger, migrations 076 et 077).
+> `events.city_id` existe mais reste facultatif et inutilisé par le
+> backoffice. `events.price_cdf` et
+> `payment_orders.amount_cdf` portent le montant DANS la devise de la ligne,
+> malgré leur nom. Grille XAF des pièces et d'Incognito dans
+> `pawapay-checkout`, à valider commercialement. Le crédit passe par la RPC
+> `settle_payment_order()` (075) : passage en success et octroi du droit dans
+> une seule transaction sous verrou de ligne, testé avec 24 appels
+> simultanés en sandbox (un seul crédit par paiement). Mobile Money
+> seulement, plus de carte bancaire. Même chaîne de
+> confiance : `pawapay-checkout` initie (dépôt direct `POST /v2/deposits` si
+> opérateur + numéro, sinon page hébergée `POST /v2/paymentpage`),
+> `pawapay-return` est la seule porte du crédit (relit
+> `GET /v2/deposits/{depositId}`, exige `COMPLETED`, montant et devise
+> identiques), `pawapay-webhook` relaie le callback vers `pawapay-return`.
+> `payment_orders.txn_ref` porte le `depositId` (UUID), colonne
+> `provider = 'pawapay'` (migration `072_pawapay_provider.sql`). Secrets
+> (environnement, sinon Vault via `public.pawapay_config()`) :
+> `PAWAPAY_MODE` (`SANDBOX` par défaut / `LIVE`), `PAWAPAY_API_TOKEN`,
+> `PAWAPAY_WEB_BASE`. Les trois fonctions se déploient avec `--no-verify-jwt`
+> sauf `pawapay-checkout`. URL de callback à poser dans le tableau de bord
+> pawaPay (Deposits) : `https://<projet>.supabase.co/functions/v1/pawapay-webhook`.
+> Les fonctions `multipay-*`, leurs secrets et les pages `payer.html` restent
+> en place (anciennes commandes, retour arrière possible). Les prix intègrent
+> encore la commission MultiPay de 3 % : à recaler sur celle de pawaPay avant
+> de rouvrir pièces et Incognito. Le reste de cette section décrit l'état
+> MultiPay d'origine.
+
 - **MultiPay / Interswitch** — Mobile Money RDC (Airtel Money, Orange Money,
   M-Pesa Vodacom) et carte bancaire, en CDF. Deux rails : poussée directe sur
   le téléphone (LIVE, API wallet) et page de paiement hébergée (TEST ou repli).

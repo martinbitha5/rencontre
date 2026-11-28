@@ -1,5 +1,5 @@
 import { Platform, StyleSheet } from 'react-native';
-import { colors, isDark, radius, spacing } from '@/theme';
+import { colors, isDark, radius, shadows, spacing } from '@/theme';
 
 export const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
@@ -69,6 +69,38 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emojiText: { fontSize: 24 },
+  // Menu d'appui long posé sur la bulle : voile léger, pas de flou, pour
+  // que le message touché reste parfaitement lisible.
+  menuVeil: { flex: 1, backgroundColor: 'rgba(16, 17, 19, 0.18)' },
+  menuEmojiBar: {
+    position: 'absolute',
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    borderRadius: 26,
+    backgroundColor: colors.cardSolid,
+    ...shadows.floating,
+  },
+  menuEmojiBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuAction: {
+    position: 'absolute',
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.cardSolid,
+    ...shadows.floating,
+  },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -162,6 +194,21 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },
+  videoPoster: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#101113',
+  },
+  videoPosterPlay: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  videoPosterText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
   fullImageOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,.92)',

@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
@@ -19,10 +20,18 @@ import {
 } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { blockUser, photoUrl, recordProfileView, reportUser } from '@/services/api';
+import {
+  blockUser,
+  getActiveMatchWith,
+  photoUrl,
+  recordProfileView,
+  reportUser,
+} from '@/services/api';
 import { COIN_COLOR, COIN_ON_GOLD } from '@/config/economy';
 import { CoinIcon } from '@/components/coins';
-import { GlassSurface, PressableScale } from '@/components/motion';
+import { PressableScale } from '@/components/motion';
+import { PAYMENTS_ENABLED } from '@/config/features';
+import { COUNTRIES, useCountryOfCity } from '@/utils/countries';
 import { VerifiedBadge } from '@/components/ui';
 import { InterestLabel } from '@/components/InterestIcon';
 import { PhotoViewer } from '@/components/PhotoViewer';
@@ -54,6 +63,14 @@ interface Props {
   // Aperçu de MON propre profil : exactement la fiche publique que voient les
   // autres, sans compter de vue et sans les actions signaler / bloquer.
   isSelf?: boolean;
+  // Fiche ouverte depuis la conversation elle-même : le bouton du bandeau
+  // ferme simplement la fiche, on est déjà dans le chat.
+  inConversation?: boolean;
+  // Match déjà connu de l'écran appelant (onglet Discussions) : le bandeau
+  // s'affiche tout de suite, sans requête.
+  knownMatchId?: string;
+  // Avec knownMatchId : la conversation a-t-elle déjà au moins un message ?
+  knownHasMessages?: boolean;
 }
 
 // Rangée d'infos Velours : cercle à liseré corail avec icône corail,
@@ -123,7 +140,11 @@ export function ProfileDetailModal({
   onMessage,
   likeCost,
   isSelf,
+  inConversation,
+  knownMatchId,
+  knownHasMessages,
 }: Props) {
+  const router = useRouter();
   // Galerie plein écran ouverte sur cette photo (null = fermée).
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   // Géométrie de la couverture fixe : au format 3/4 de la largeur, bornée
@@ -134,6 +155,8 @@ export function ProfileDetailModal({
   const coverH = Math.round(Math.min((winW * 4) / 3, winH * 0.66));
   // Ligne d'arrêt de la feuille : sous l'encoche, plus un petit espace.
   const sheetTop = insets.top + SHEET_TOP_GAP;
+  // Pays de la personne, déduit de sa ville : RDC ou Congo-Brazzaville.
+  const country = useCountryOfCity(profile?.city_name);
   const [reporting, setReporting] = useState(false);
   // Toutes les photos vivent sur la grande photo du profil : un balayage
   // horizontal dessus passe à la suivante, sans animation, l'image change
@@ -206,6 +229,32 @@ export function ProfileDetailModal({
     if (viewedId) recordProfileView(viewedId).catch(() => {});
   }, [viewedId]);
 
+  // Déjà en conversation avec cette personne ? On le lit sur le serveur à
+  // chaque fiche ouverte. Le bandeau remplace alors les boutons d'action :
+  // liker ou écrire en premier n'a plus de sens, la conversation existe.
+  const [matchId, setMatchId] = useState<string | null>(null);
+  // Matché sans aucun message : on ne dit pas « tu discutes déjà ».
+  const [hasMessages, setHasMessages] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const lookupId = viewedId;
+  useEffect(() => {
+    setMatchId(knownMatchId ?? null);
+    setHasMessages(!!knownHasMessages);
+    setBannerDismissed(false);
+    if (!lookupId || knownMatchId) return;
+    let alive = true;
+    getActiveMatchWith(lookupId)
+      .then((m) => {
+        if (!alive) return;
+        setMatchId(m?.matchId ?? null);
+        setHasMessages(!!m?.hasMessages);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [lookupId, knownMatchId, knownHasMessages]);
+
   if (!profile) {
     return null;
   }
@@ -218,7 +267,23 @@ export function ProfileDetailModal({
   const place = profile.city_name ?? '';
   const goal = labelFor(GOAL_OPTIONS, profile.relationship_goal);
   const online = activeLabel(profile.last_active_at);
-  const hasActions = !!(onLike || onDislike || onMessage);
+  const showMatchBanner = !!matchId && !bannerDismissed;
+  const hasActions = !showMatchBanner && !!(onLike || onDislike || onMessage);
+
+  const openConversation = () => {
+    if (!matchId) return;
+    onClose();
+    if (inConversation) return;
+    router.push({
+      pathname: '/chat/[matchId]',
+      params: {
+        matchId,
+        name: profile.display_name,
+        otherUserId: profile.user_id,
+        photoPath: photos[0]?.path ?? '',
+      },
+    });
+  };
   const age = ageFromBirthDate(profile.birth_date);
 
   // Valeurs affichables des deux blocs de rangées, humanisées via labelFor :
@@ -328,7 +393,10 @@ export function ProfileDetailModal({
                 photo reste visible. */}
             <ScrollView
               style={[styles.scroller, { top: sheetTop }]}
-              contentContainerStyle={{ paddingBottom: (hasActions ? 104 : spacing.lg) + insets.bottom }}
+              contentContainerStyle={{
+                paddingBottom:
+                  (showMatchBanner ? 190 : hasActions ? 104 : spacing.lg) + insets.bottom,
+              }}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
             >
@@ -469,7 +537,7 @@ export function ProfileDetailModal({
                 {/* 8. Pays d'origine */}
                 <Text style={styles.sectionTitle}>{"Pays d'origine"}</Text>
                 <Text style={styles.countryValue}>
-                  {"République démocratique du Congo 🇨🇩"}
+                  {`${COUNTRIES[country].name} ${COUNTRIES[country].flag}`}
                 </Text>
 
                 {/* Sécurité : accessible depuis n'importe quel profil, y compris
@@ -519,45 +587,103 @@ export function ProfileDetailModal({
               <Ionicons name="chevron-back" size={24} color={onLight.ink} />
             </Pressable>
 
-            {/* Barre flottante en verre : elle survole le contenu, le flou dit
-                que ce qui passe dessous est en retrait. */}
+            {/* Les mêmes trois ronds blancs que sur Rencontres : Passer, DM,
+                Like, icônes à l'encre. Une seule façon de décider, où qu'on
+                soit dans l'app. */}
             {hasActions && (
-              <GlassSurface intensity={55} style={styles.actions}>
-                <View style={styles.actionsRow}>
-                  {onDislike && (
-                    <PressableScale style={styles.dislikeBtn} onPress={onDislike}>
-                      <View style={styles.actionInner}>
-                        {/* Posé sur la barre de verre, pas sur la photo : le X
-                            suit l'encre du thème. */}
-                        <Ionicons name="close" size={30} color={colors.text} />
-                      </View>
-                    </PressableScale>
-                  )}
-                  {onMessage && (
-                    <PressableScale style={styles.msgBtn} onPress={onMessage}>
-                      <View style={styles.actionInner}>
-                        <Ionicons name="chatbubble" size={24} color="#ffffff" />
+              <View style={styles.actions} pointerEvents="box-none">
+                {onDislike && (
+                  <PressableScale
+                    style={styles.actionBtn}
+                    scaleTo={0.9}
+                    onPress={onDislike}
+                    accessibilityRole="button"
+                    accessibilityLabel="Passer ce profil"
+                  >
+                    <View style={styles.actionInner}>
+                      <Ionicons name="close" size={30} color={onLight.ink} />
+                    </View>
+                  </PressableScale>
+                )}
+                {onMessage && (
+                  <PressableScale
+                    style={[styles.actionBtn, styles.msgBtn]}
+                    scaleTo={0.9}
+                    onPress={onMessage}
+                    accessibilityRole="button"
+                    accessibilityLabel="Envoyer un message direct"
+                  >
+                    <View style={styles.actionInner}>
+                      <Ionicons name="chatbubble-ellipses" size={24} color={onLight.ink} />
+                      {/* Pastille de coût : rien à signaler quand écrire est libre. */}
+                      {PAYMENTS_ENABLED && (
                         <View style={styles.msgCoin}>
-                          <CoinIcon size={10} color={COIN_ON_GOLD} />
+                          <CoinIcon size={12} />
                         </View>
-                      </View>
-                    </PressableScale>
-                  )}
-                  {onLike && (
-                    <PressableScale style={styles.likeBtn} onPress={onLike}>
-                      <View style={styles.actionInner}>
-                        <Ionicons name="heart" size={28} color="#ffffff" />
-                        {!!likeCost && (
-                          <View style={styles.costBadge}>
-                            <CoinIcon size={10} color={COIN_ON_GOLD} />
-                            <Text style={styles.costText}>{likeCost}</Text>
-                          </View>
-                        )}
-                      </View>
-                    </PressableScale>
-                  )}
+                      )}
+                    </View>
+                  </PressableScale>
+                )}
+                {onLike && (
+                  <PressableScale
+                    style={styles.actionBtn}
+                    scaleTo={0.9}
+                    onPress={onLike}
+                    accessibilityRole="button"
+                    accessibilityLabel="Liker ce profil"
+                  >
+                    <View style={styles.actionInner}>
+                      <Ionicons name="heart" size={28} color={onLight.ink} />
+                      {PAYMENTS_ENABLED && !!likeCost && (
+                        <View style={styles.costBadge}>
+                          <CoinIcon size={10} color={COIN_ON_GOLD} />
+                          <Text style={styles.costText}>{likeCost}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </PressableScale>
+                )}
+              </View>
+            )}
+
+            {/* Déjà en conversation : on le dit, et on propose d'y aller. */}
+            {showMatchBanner && (
+              <View
+                style={[styles.matchBar, { paddingBottom: spacing.md + insets.bottom }]}
+              >
+                <View style={styles.matchHead}>
+                  <View style={styles.matchIcon}>
+                    <Ionicons name="chatbubbles" size={18} color={colors.textOnAccent} />
+                  </View>
+                  <Text style={styles.matchText} numberOfLines={2}>
+                    {hasMessages ? 'Tu discutes déjà avec ' : 'Vous avez matché avec '}
+                    <Text style={styles.matchName}>{profile.display_name}</Text>
+                  </Text>
                 </View>
-              </GlassSurface>
+                <PressableScale
+                  style={styles.matchPrimary}
+                  scaleTo={0.97}
+                  onPress={openConversation}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    hasMessages
+                      ? `Ouvrir la conversation avec ${profile.display_name}`
+                      : `Envoyer un message à ${profile.display_name}`
+                  }
+                >
+                  <Text style={styles.matchPrimaryText}>
+                    {hasMessages ? 'Ouvrir la conversation' : 'Envoyer un message'}
+                  </Text>
+                </PressableScale>
+                <Pressable
+                  style={({ pressed }) => [styles.matchSecondary, pressed && { opacity: 0.55 }]}
+                  onPress={() => setBannerDismissed(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ignorer"
+                >
+                  <Text style={styles.matchSecondaryText}>Ignorer</Text>
+                </Pressable>
+              </View>
             )}
 
             <ReportModal
@@ -801,19 +927,24 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
     marginHorizontal: spacing.lg,
   },
+  // Copie conforme des boutons de Rencontres (Discover.styles) : trois ronds
+  // blancs flottants, la bulle un peu plus petite au milieu.
   actions: {
     position: 'absolute',
-    left: spacing.md,
-    right: spacing.md,
-    bottom: spacing.md,
-    borderRadius: radius.full,
-    paddingVertical: spacing.sm + 2,
-  },
-  actionsRow: {
+    left: 0,
+    right: 0,
+    bottom: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.xl,
+    gap: 20,
+  },
+  actionBtn: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    ...shadows.floating,
   },
   actionInner: {
     width: '100%',
@@ -821,43 +952,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // X : cercle crème, croix en encre du thème.
-  dislikeBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.cardSolid,
-    ...shadows.floating,
-  },
-  // Bulle : ambre (clé historique « purple »), la couleur de l'économie de
-  // pièces, pour marquer le message payant.
-  msgBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.purple,
-    ...shadows.floating,
-  },
-  // Pastilles or : les coûts en pièces gardent la couleur de la monnaie,
-  // jamais le rose de la marque.
+  msgBtn: { width: 50, height: 50, borderRadius: 25 },
   msgCoin: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COIN_COLOR,
+    top: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Coeur : cercle corail plein, coeur blanc.
-  likeBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.accent,
-    ...shadows.floating,
   },
   costBadge: {
     position: 'absolute',
@@ -872,4 +977,40 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   costText: { color: COIN_ON_GOLD, fontSize: 11, fontWeight: '800' },
+  // Bandeau « déjà en conversation » : posé en bas, par-dessus la feuille.
+  matchBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.background,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    gap: spacing.sm,
+    ...shadows.floating,
+    shadowOffset: { width: 0, height: -6 },
+  },
+  matchHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
+  matchIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchText: { flex: 1, fontSize: 16, color: colors.text },
+  matchName: { fontWeight: '800' },
+  matchPrimary: {
+    height: 52,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchPrimaryText: { fontSize: 16, fontWeight: '800', color: colors.textOnAccent },
+  matchSecondary: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  matchSecondaryText: { fontSize: 15, fontWeight: '700', color: colors.textMuted },
 });

@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { photoUrl } from '@/services/api';
+import { isSavingData } from '@/utils/dataSaver';
 import { haptic } from '@/utils/haptics';
 import { onLight, radius } from '@/theme';
 import type { FeedProfile } from '@/types';
@@ -81,19 +82,23 @@ export const SwipeDeck = forwardRef<SwipeDeckHandle, SwipeDeckProps>(function Sw
   const third = profiles[2];
   const photoCount = top?.photos?.length ?? 0;
 
-  // Les photos des cartes qui attendent leur tour sont préchargées : quand la
-  // carte du dessus part, la suivante arrive déjà habillée, jamais grise.
+  // Préchargement des cartes qui attendent leur tour : quand la carte du
+  // dessus part, la suivante arrive déjà habillée, jamais grise.
+  //   - en Wi-Fi : la première photo des trois cartes suivantes, plus la
+  //     deuxième de la carte suivante (prête pour le premier glissement) ;
+  //   - en économie de données : seulement la première photo de la carte
+  //     suivante. Les autres se chargent quand on les regarde.
+  // Avant, toutes les photos de la carte suivante partaient d'avance, même
+  // pour un profil qu'on passe en une seconde.
   useEffect(() => {
-    const upcoming = profiles.slice(1, 4);
+    const saving = isSavingData();
+    const upcoming = profiles.slice(1, saving ? 2 : 4);
     for (const p of upcoming) {
       const first = p.photos?.[0];
       if (first) Image.prefetch(photoUrl(first.path)).catch(() => {});
     }
-    // Les autres photos de la carte suivante aussi : on peut feuilleter dès
-    // qu'elle passe dessus.
-    for (const photo of next?.photos?.slice(1) ?? []) {
-      Image.prefetch(photoUrl(photo.path)).catch(() => {});
-    }
+    const second = next?.photos?.[1];
+    if (!saving && second) Image.prefetch(photoUrl(second.path)).catch(() => {});
   }, [profiles, next]);
 
   // La photo affichée appartient au paquet, pas à la carte : c'est ici que le

@@ -89,7 +89,7 @@ PREVIEW.admin_list_reports = ({ p_search } = {}) => {
 
 PREVIEW.events = [
   { id: 'e1', name: 'Soirée Zola au Fleuve Congo', price_cdf: 0, qr_token: '4f1c9a2e-demo', is_active: true, ends_at: new Date(Date.now() + 6 * 36e5).toISOString(), created_at: ago(30) },
-  { id: 'e2', name: 'Le Bar Matonge', price_cdf: 10000, qr_token: '8b2d7e11-demo', is_active: false, ends_at: ago(48), created_at: ago(200) },
+  { id: 'e2', name: 'Le Bar Matonge', price_cdf: 10000, currency: 'XAF', qr_token: '8b2d7e11-demo', is_active: false, ends_at: ago(48), created_at: ago(200) },
 ];
 // Les images du site servent de selfie et de photos de profil fictifs.
 const shot = (name) => `${location.origin}/img/scene-${name}-928.webp`;
@@ -104,3 +104,51 @@ PREVIEW.admin_list_verifications = (args) => {
 };
 
 PREVIEW.admin_event_stats ={ entries: 42, verified: 30, matches: 11, likes: 96, revenue_cdf: 0, open: true, passes_live: 57, attendees: [] };
+
+// Programme testeur (aperçu local uniquement, données fictives).
+{
+  const today = new Date().toISOString().slice(0, 10);
+  const back = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const days = (n, skip = []) => Array.from({ length: n }, (_, i) => back(n - 1 - i)).filter((d, i) => !skip.includes(i));
+  PREVIEW.admin_tester_overview = {
+    today,
+    program: { is_active: true, required_days: 14, starts_on: back(15), ends_on: null },
+    people: [
+      { email: 'testeur1@example.com', user_id: 'u1', display_name: 'Grace', public_id: 'DW-AAA111', last_active_at: ago(1), days: 14, last_checkin: today, dates: days(15, [6]), completed_at: ago(2), granted_at: null },
+      { email: 'testeur2@example.com', user_id: 'u2', display_name: 'Patrick', public_id: 'DW-BBB222', last_active_at: ago(5), days: 9, last_checkin: back(1), dates: days(12, [2, 5, 9]).slice(0, 9), completed_at: null, granted_at: null },
+      { email: 'testeur3@example.com', user_id: 'u3', display_name: 'Nadège', public_id: 'DW-CCC333', last_active_at: ago(30), days: 2, last_checkin: back(4), dates: [back(5), back(4)], completed_at: null, granted_at: null },
+      { email: 'nouveau@example.com', invited: false, user_id: 'u4', display_name: 'Elmos', public_id: 'DW-DDD444', last_active_at: ago(2), days: 0, last_checkin: null, dates: [], completed_at: null, granted_at: null },
+      { email: 'invite@example.com', user_id: null, display_name: null, public_id: null, last_active_at: null, days: 0, last_checkin: null, dates: [], completed_at: null, granted_at: null },
+    ],
+  };
+}
+
+// Courrier (aperçu local uniquement, données fictives).
+{
+  const mails = [
+    { id: 'm1', category: 'partenaires', status: 'new', source: 'site', from_name: 'Le Bar Matonge', from_address: 'contact@barmatonge.example', to_addresses: ['partenaires@zola-rdc.com'], subject: 'Soirée Zola le 12 décembre', body_preview: "Bonjour l'équipe,\n\nNous aimerions organiser une soirée Zola dans notre bar le samedi 12 décembre, à partir de 20 h. Nous pouvons accueillir 150 personnes.\n\nPouvez-vous nous dire comment créer le code QR et fixer le prix d'entrée ?\n\nMerci,\nJoël", received_at: ago(0.3), read_at: null, replies: 0, form: { name: 'Joël', email: 'contact@barmatonge.example', phone: '+243 81 000 0000', topic: 'Organiser une soirée', details: { 'Lieu ou marque': 'Le Bar Matonge', Ville: 'Kinshasa' } } },
+    { id: 'm2', category: 'support', status: 'new', source: 'mail', from_name: 'Grace M.', from_address: 'grace@example.com', to_addresses: ['support@zola-rdc.com'], subject: 'Je ne reçois pas le code de connexion', body_preview: "Bonjour,\nDepuis hier je ne reçois plus le code pour me connecter. J'ai vérifié mes spams.\nMerci de m'aider.", received_at: ago(3), read_at: null, replies: 0 },
+    { id: 'm3', category: 'securite', status: 'new', source: 'mail', from_name: 'Parent inquiet', from_address: 'parent@example.com', to_addresses: ['securite@zola-rdc.com'], subject: 'Profil qui semble mineur', body_preview: 'Le profil DW-48213 semble appartenir à une adolescente.', received_at: ago(5), read_at: ago(4), replies: 0 },
+    { id: 'm4', category: 'contact', status: 'handled', source: 'mail', from_name: 'Radio Okapi', from_address: 'redaction@example.com', to_addresses: ['contact@zola-rdc.com'], subject: "Demande d'interview", body_preview: "Bonjour à l'équipe, nous préparons un sujet sur les applications de rencontre à Kinshasa.", received_at: ago(30), read_at: ago(29), handled_at: ago(28), handled_by_email: 'equipe@zola-rdc.com', note: 'Répondu depuis le backoffice', replies: 1 },
+  ];
+  mails.push({ id: 'm5', category: 'other', status: 'new', source: 'mail', from_name: 'Promo Web', from_address: 'offres@spam.example', to_addresses: ['contact@zola-rdc.com'], subject: 'Boostez votre référencement', body_preview: 'Offre exceptionnelle.', received_at: ago(50), read_at: ago(49), deleted_at: ago(48), replies: 0 });
+  PREVIEW.admin_list_inbound_mail = { items: mails };
+  PREVIEW.admin_trash_inbound_mail = ({ p_ids, p_deleted }) => {
+    for (const m of mails) if (p_ids.includes(m.id)) m.deleted_at = p_deleted ? new Date().toISOString() : null;
+    return p_ids.length;
+  };
+  PREVIEW.admin_purge_inbound_mail = ({ p_ids }) => {
+    const n = mails.filter((m) => p_ids.includes(m.id) && m.deleted_at).length;
+    for (let i = mails.length - 1; i >= 0; i--) if (p_ids.includes(mails[i].id) && mails[i].deleted_at) mails.splice(i, 1);
+    return n;
+  };
+  PREVIEW.admin_get_inbound_mail = ({ p_id }) => {
+    const m = mails.find((x) => x.id === p_id) || mails[0];
+    return {
+      ...m, body: m.body_preview, mailbox: m.to_addresses[0], attachments: [],
+      replies: m.replies ? [{ id: 1, to_address: m.from_address, subject: `Re: ${m.subject}`, body: 'Bonjour,\n\nAvec plaisir. Je vous propose un appel mardi à 10 h.\n\nL’équipe Zola', created_at: ago(28), sent_by_email: 'equipe@zola-rdc.com' }] : [],
+    };
+  };
+  PREVIEW.admin_mark_inbound_mail_unread = null;
+  PREVIEW.admin_handle_inbound_mail = null;
+}

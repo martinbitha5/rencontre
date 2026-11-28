@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { FadeInDown, FadeOut } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 import { PressableScale } from '@/components/motion';
 import { haptic } from '@/utils/haptics';
 import { colors, flame, isIOS, m3, radius, shadows, spacing, keyboardAppearance } from '@/theme';
@@ -36,14 +37,17 @@ export const VERIFIED_BLUE = '#1D9BF0';
 
 // Badge « profil certifié », posé à côté du nom partout où il apparaît :
 // carte Rencontres, fiche détaillée, listes d'activité, mon profil.
+// Dessiné en SVG (le même pictogramme « check-decagram ») et non avec la
+// police d'icônes : la police ne se charge qu'à sa première utilisation, et
+// le badge apparaissait une à deux secondes APRÈS le reste du profil.
+const DECAGRAM_CHECK =
+  'M23,12L20.56,9.22L20.9,5.54L17.29,4.72L15.4,1.54L12,3L8.6,1.54L6.71,4.72L3.1,5.53L3.44,9.21L1,12L3.44,14.78L3.1,18.47L6.71,19.29L8.6,22.47L12,21L15.4,22.46L17.29,19.28L20.9,18.46L20.56,14.78L23,12M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z';
+
 export function VerifiedBadge({ size = 18 }: { size?: number }) {
   return (
-    <MaterialCommunityIcons
-      name="check-decagram"
-      size={size}
-      color={VERIFIED_BLUE}
-      accessibilityLabel="Profil certifié"
-    />
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="Profil certifié">
+      <Path d={DECAGRAM_CHECK} fill={VERIFIED_BLUE} />
+    </Svg>
   );
 }
 

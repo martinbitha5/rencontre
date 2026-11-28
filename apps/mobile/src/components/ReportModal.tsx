@@ -1,9 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { colors, radius, spacing, keyboardAppearance } from '@/theme';
 import { Button } from '@/components/ui';
 
@@ -51,7 +50,6 @@ export function ReportModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
       >
         <View style={styles.card}>
           <View style={styles.handle} />

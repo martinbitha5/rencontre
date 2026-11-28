@@ -89,6 +89,23 @@ export const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   searchInput: { flex: 1, fontSize: 16, color: colors.text, height: '100%' },
+  // Sélecteur de pays : même pilule que la recherche de ville, texte centré
+  // verticalement (un Text, pas un champ de saisie) et drapeau à gauche.
+  countryValue: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: colors.text,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
+  countryFlag: {
+    fontSize: 20,
+    lineHeight: 24,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
   note: { fontSize: 13, color: colors.textMuted, lineHeight: 18, marginTop: spacing.xs },
   changeCity: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   changeCityText: { fontSize: 15, fontWeight: '700', color: colors.primary, textDecorationLine: 'underline' },

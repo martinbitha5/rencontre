@@ -67,7 +67,7 @@ insert into public.profiles (
 select ('d0c0d0c0-0000-4000-8000-' || lpad(n::text, 12, '0'))::uuid,
        name,
        (current_date - (age || ' years')::interval - ((n * 37) % 300 || ' days')::interval)::date,
-       gender, looking, 1, bio, 18, 99, true,
+       gender, looking, 1, bio, 18, 60, true,
        -- Un sur trois est « en ligne » à l'instant, les autres récemment.
        case when n % 3 = 0 then now() - (n || ' minutes')::interval
             else now() - (n * 2 || ' hours')::interval end,

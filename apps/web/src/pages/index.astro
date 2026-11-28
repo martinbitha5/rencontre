@@ -18,22 +18,22 @@ for (let attempt = 1; ; attempt++) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo</title>
-  <meta name="description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <title>Zola | L'app de rencontre des deux Congo, Kinshasa et Brazzaville</title>
+  <meta name="description" content="Zola, l'app de rencontre de la RDC et du Congo-Brazzaville. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Brazzaville, Lubumbashi ou Pointe-Noire. Gratuit.">
   <link rel="canonical" href="https://zola-rdc.com/">
   <meta property="og:site_name" content="Zola">
   <meta property="og:locale" content="fr_CD">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://zola-rdc.com/">
-  <meta property="og:title" content="Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo">
-  <meta property="og:description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <meta property="og:title" content="Zola | L'app de rencontre des deux Congo, Kinshasa et Brazzaville">
+  <meta property="og:description" content="Zola, l'app de rencontre de la RDC et du Congo-Brazzaville. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Brazzaville, Lubumbashi ou Pointe-Noire. Gratuit.">
   <meta property="og:image" content="https://zola-rdc.com/og-image.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Zola, des rencontres qui comptent, en RDC">
+  <meta property="og:image:alt" content="Zola, des rencontres qui comptent, en RDC et au Congo-Brazzaville">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Zola | L'app de rencontre en RDC, Kinshasa et tout le Congo">
-  <meta name="twitter:description" content="Zola, l'app de rencontre de la RDC. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Lubumbashi ou Goma. Gratuit.">
+  <meta name="twitter:title" content="Zola | L'app de rencontre des deux Congo, Kinshasa et Brazzaville">
+  <meta name="twitter:description" content="Zola, l'app de rencontre de la RDC et du Congo-Brazzaville. Profils vérifiés, intentions claires, des gens près de chez toi à Kinshasa, Brazzaville, Lubumbashi ou Pointe-Noire. Gratuit.">
   <meta name="twitter:image" content="https://zola-rdc.com/og-image.jpg">
   <script is:inline type="application/ld+json">
   {
@@ -48,8 +48,8 @@ for (let attempt = 1; ; attempt++) {
         "logo": "https://zola-rdc.com/og-image.jpg",
         "email": "contact@zola-rdc.com",
         "contactPoint": [
-          { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
-          { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" }
+          { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": ["CD", "CG"] },
+          { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": ["CD", "CG"] }
         ],
         "address": {
           "@type": "PostalAddress",
@@ -64,7 +64,7 @@ for (let attempt = 1; ; attempt++) {
         "@id": "https://zola-rdc.com/#website",
         "url": "https://zola-rdc.com/",
         "name": "Zola",
-        "alternateName": ["Zola RDC", "Zola rencontre", "Zola application de rencontre", "zola-rdc.com"],
+        "alternateName": ["Zola RDC", "Zola Congo", "Zola Brazzaville", "Zola rencontre", "Zola application de rencontre", "zola-rdc.com"],
         "inLanguage": "fr",
         "publisher": { "@id": "https://zola-rdc.com/#organization" }
       },
@@ -73,11 +73,11 @@ for (let attempt = 1; ; attempt++) {
         "@id": "https://zola-rdc.com/#app",
         "name": "Zola",
         "alternateName": "Zola RDC",
-        "description": "Application de rencontre pour la République démocratique du Congo. Des profils vérifiés de sa ville, qui disent ce qu'ils cherchent, pour l'amour, l'amitié ou le réseau. Matchs, messages en temps réel, et un mode soirée qui montre qui est présent dans un lieu partenaire.",
+        "description": "Application de rencontre pour la République démocratique du Congo et la République du Congo. Des profils vérifiés de sa ville, qui disent ce qu'ils cherchent, pour l'amour, l'amitié ou le réseau. Matchs, messages en temps réel, et un mode soirée qui montre qui est présent dans un lieu partenaire.",
         "applicationCategory": "SocialNetworkingApplication",
         "operatingSystem": "iOS, Android",
         "inLanguage": "fr",
-        "areaServed": { "@type": "Country", "name": "République démocratique du Congo" },
+        "areaServed": [{ "@type": "Country", "name": "République démocratique du Congo" }, { "@type": "Country", "name": "République du Congo" }],
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CDF" },
         "author": { "@id": "https://zola-rdc.com/#organization" },
         "url": "https://zola-rdc.com/"
@@ -377,7 +377,7 @@ for (let attempt = 1; ; attempt++) {
     <section class="hero">
       <div class="wrap split">
         <div class="copy">
-          <span class="eyebrow">L'app de rencontre de la RDC</span>
+          <span class="eyebrow">L'app de rencontre des deux Congo</span>
           <h1>Des rencontres qui comptent.</h1>
           <p class="lead" style="margin-top:18px">Des profils vérifiés, près de chez toi, qui cherchent la même chose que toi.</p>
           <div class="actions">
@@ -524,12 +524,12 @@ for (let attempt = 1; ; attempt++) {
     <section class="trust">
       <div class="wrap split">
         <div class="copy">
-          <h2>Zola, partout en RDC.</h2>
-          <p>Des gens vrais, dans les 26 provinces, qui veulent se rencontrer autrement.</p>
+          <h2>Zola, des deux côtés du fleuve.</h2>
+          <p>Des gens vrais, de Kinshasa à Brazzaville, de Lubumbashi à Pointe-Noire, qui veulent se rencontrer autrement.</p>
         </div>
         <div class="figures">
           <div class="figure"><b id="counter" data-count={counter.count} data-mode={counter.mode}>{formatCount(counter.count)}</b><span id="counter-label">{counterLabel(counter)}</span></div>
-          <div class="figure"><b>26</b><span>provinces couvertes en RDC</span></div>
+          <div class="figure"><b>2</b><span>pays, la RDC et le Congo-Brazzaville</span></div>
           <div class="figure"><b>18+</b><span>la communauté des vrais adultes</span></div>
         </div>
       </div>
@@ -551,7 +551,7 @@ for (let attempt = 1; ; attempt++) {
       <div class="foot-grid">
         <div>
           <a class="brand" href="/">zola</a>
-          <p class="about">Des rencontres qui comptent, partout en RDC.</p>
+          <p class="about">Des rencontres qui comptent, en RDC et au Congo-Brazzaville.</p>
         </div>
         <div>
           <h4>Zola</h4>

@@ -1,4 +1,4 @@
-// L'intro de démarrage (IntroSplash) recouvre l'app pendant ~1,5 s. Un
+// L'intro de démarrage (IntroSplash) recouvre l'app pendant environ 1 s. Un
 // clavier ouvert pendant ce temps s'affiche PAR-DESSUS l'intro (le clavier
 // est une fenêtre système). Les écrans qui veulent ouvrir le clavier tout
 // seuls attendent donc la fin de l'intro.

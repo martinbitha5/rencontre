@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { useKeyboardHeight } from '@/components/keyboard';
 import { colors, glass, isDark, isIOS, m3, radius, shadows, spacing } from '@/theme';
 
 // Feuille qui glisse depuis le bas, pour tous les choix importants de l'app
@@ -46,7 +46,7 @@ export function BottomSheet({
   // Clavier ouvert (champ texte dans la feuille) : la feuille remonte d'autant.
   // Sans ça, collée en bas de l'écran, elle disparaissait entièrement sous le
   // clavier et toucher « Description » semblait ne rien faire.
-  const keyboardInset = useKeyboardInset();
+  const keyboardInset = useKeyboardHeight();
 
   useEffect(() => {
     if (visible) {

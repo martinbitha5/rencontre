@@ -9,25 +9,32 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withDecay,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { haptic } from '@/utils/haptics';
 
+// Zoom maximal (relevé automatiquement pour les photos très allongées).
 const MAX_SCALE = 4;
-const DOUBLE_TAP_SCALE = 2.5;
+// Double toucher : au moins x2, davantage si la photo doit remplir l'écran.
+const DOUBLE_TAP_SCALE = 2;
+// Au-dessus de cette échelle, la photo compte comme zoomée.
+const ZOOMED = 1.01;
 // Distance verticale (ou vitesse) au-delà de laquelle le glissement ferme.
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 900;
@@ -72,7 +79,11 @@ function Gallery({
   onClose: () => void;
   onIndexChange?: (index: number) => void;
 }) {
-  const { width } = useWindowDimensions();
+  const win = useWindowDimensions();
+  // Taille réelle de la modale (sous Android, la fenêtre et la modale
+  // translucide n'ont pas toujours la même hauteur) : la loupe en dépend.
+  const [size, setSize] = useState({ width: win.width, height: win.height });
+  const { width, height } = size;
   const insets = useSafeAreaInsets();
   const initial = Math.min(Math.max(start, 0), uris.length - 1);
   const [current, setCurrent] = useState(initial);
@@ -82,6 +93,11 @@ function Gallery({
   const thumbsRef = useRef<FlatList<string>>(null);
   // Glissement vertical de fermeture, partagé avec le fond et l'interface.
   const dragY = useSharedValue(0);
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    if (Math.abs(w - width) > 0.5 || Math.abs(h - height) > 0.5) setSize({ width: w, height: h });
+  };
 
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / width);
@@ -116,7 +132,7 @@ function Gallery({
   }));
 
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <GestureHandlerRootView style={styles.root} onLayout={onLayout}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdrop]} />
       <FlatList
         ref={listRef}
@@ -130,10 +146,12 @@ function Gallery({
         keyExtractor={(u, i) => `${i}-${u}`}
         onMomentumScrollEnd={onScrollEnd}
         decelerationRate="fast"
+        extraData={size}
         renderItem={({ item, index: i }) => (
           <ZoomablePage
             uri={item}
             width={width}
+            height={height}
             active={i === current}
             dragY={dragY}
             onZoomChange={setZoomed}
@@ -173,8 +191,8 @@ function Gallery({
         </Animated.View>
       )}
 
-      {/* Vignettes, en bas : la photo affichée est cerclée. */}
-      {chrome && uris.length > 1 && (
+      {/* Vignettes, en bas : la photo affichée est cerclée. Masquées pendant le zoom. */}
+      {chrome && !zoomed && uris.length > 1 && (
         <Animated.View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) + 8 }, chromeStyle]}>
           <FlatList
             ref={thumbsRef}
@@ -202,9 +220,29 @@ function Gallery({
 }
 
 // Une page de la galerie : sa propre loupe, son propre glissement de fermeture.
+//
+// Réécrite le 28/11/2026 sur le modèle des galeries natives (Photos iOS,
+// Google Photos). Repère : écran = centre + t + s * point_de_la_photo, d'où
+// l'ordre [translate, scale] du transform.
+//   - Les bornes viennent de la photo AFFICHÉE (contain), pas de l'écran : on
+//     ne glisse jamais dans les bandes noires, même sur une photo paysage.
+//   - Le pincement s'applique par petits pas (scaleChange) autour du point
+//     sous les doigts. Quand un doigt se lève ou se pose, le point focal saute :
+//     on se recale sans bouger la photo, au lieu de la faire sauter.
+//   - Un seul Pan pour tout : déplacement zoomé (élan, bord élastique) ou
+//     glisser pour fermer à plat. Son activation est décidée sur le thread UI
+//     (manualActivation), jamais par un état React qui reconfigurerait le
+//     geste en plein mouvement.
+//   - Poser le doigt arrête net l'élan.
+//   - Au-delà du zoom max ou sous la taille normale, ça résiste, puis revient
+//     en un seul mouvement amorti, ancré sous les doigts, sans rebond.
+//   - Double toucher : remplit l'écran (au moins x2) là où on a touché.
+//   - La photo est décodée en pleine résolution (allowDownscaling=false),
+//     sinon expo-image la réduit à la taille de l'écran et le zoom est flou.
 function ZoomablePage({
   uri,
   width,
+  height,
   active,
   dragY,
   onZoomChange,
@@ -213,142 +251,306 @@ function ZoomablePage({
 }: {
   uri: string;
   width: number;
+  height: number;
   active: boolean;
   dragY: SharedValue<number>;
   onZoomChange: (zoomed: boolean) => void;
   onTap: () => void;
   onDismiss: () => void;
 }) {
-  const { height } = useWindowDimensions();
   const scale = useSharedValue(1);
-  const savedScale = useSharedValue(1);
+  // Échelle visée, fin d'animation comprise : c'est elle qui fixe les bornes.
+  const target = useSharedValue(1);
+  // Échelle brute du pincement, avant la résistance aux extrêmes.
+  const raw = useSharedValue(1);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
-  const savedTx = useSharedValue(0);
-  const savedTy = useSharedValue(0);
-  const [isZoomed, setIsZoomed] = useState(false);
+  // Taille réelle de la photo, connue au chargement.
+  const imgW = useSharedValue(0);
+  const imgH = useSharedValue(0);
 
-  const setZoom = useCallback(
-    (z: boolean) => {
-      setIsZoomed(z);
-      onZoomChange(z);
-    },
-    [onZoomChange],
-  );
+  const pinching = useSharedValue(false);
+  const lastFx = useSharedValue(0);
+  const lastFy = useSharedValue(0);
+  const lastPointers = useSharedValue(0);
 
-  // Une photo qu'on quitte se remet à plat.
+  // 0 indécis, 1 déplacement dans la photo, 2 glisser pour fermer.
+  const panMode = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+  const flinging = useSharedValue(false);
+  const grabbed = useSharedValue(false);
+  // Un pincement a eu lieu pendant ce Pan : c'est la fin du pincement qui
+  // replace la photo, pas l'élan du Pan.
+  const pinchedInPan = useSharedValue(false);
+
+  // Une photo qu'on quitte se remet à plat, sans animation (elle est hors champ).
   useEffect(() => {
     if (active) return;
-    scale.set(withTiming(1));
-    savedScale.set(1);
+    cancelAnimation(scale);
+    cancelAnimation(tx);
+    cancelAnimation(ty);
+    scale.set(1);
+    target.set(1);
+    raw.set(1);
     tx.set(0);
     ty.set(0);
-    savedTx.set(0);
-    savedTy.set(0);
-  }, [active, scale, savedScale, tx, ty, savedTx, savedTy]);
+  }, [active, scale, target, raw, tx, ty]);
 
-  // Ramène la photo dans le cadre, pour l'échelle `s` (la cible d'une
-  // animation de zoom en cours, sinon l'échelle actuelle).
-  const clamp = (s?: number) => {
+  // Le parent bloque le défilement des photos tant qu'on pince ou qu'on est zoomé.
+  useAnimatedReaction(
+    () => pinching.value || target.value > ZOOMED,
+    (z, prev) => {
+      if (prev !== null && z !== prev) runOnJS(onZoomChange)(z);
+    },
+  );
+
+  // Taille de la photo à l'échelle 1, posée en contain dans la page.
+  const fitted = () => {
     'worklet';
-    const k = s ?? scale.value;
-    const maxX = (width * (k - 1)) / 2;
-    const maxY = (height * (k - 1)) / 2;
-    const nx = Math.min(Math.max(tx.value, -maxX), maxX);
-    const ny = Math.min(Math.max(ty.value, -maxY), maxY);
-    tx.set(withSpring(nx, { damping: 20, stiffness: 200 }));
-    ty.set(withSpring(ny, { damping: 20, stiffness: 200 }));
-    savedTx.set(nx);
-    savedTy.set(ny);
+    if (imgW.value <= 0 || imgH.value <= 0) return { w: width, h: height };
+    const r = Math.min(width / imgW.value, height / imgH.value);
+    return { w: imgW.value * r, h: imgH.value * r };
+  };
+
+  // Jusqu'où on peut se déplacer à l'échelle k sans voir de bande noire.
+  const bounds = (k: number) => {
+    'worklet';
+    const f = fitted();
+    return { x: Math.max(0, (f.w * k - width) / 2), y: Math.max(0, (f.h * k - height) / 2) };
+  };
+
+  // Échelle qui remplit l'écran (une photo paysage remplit la hauteur).
+  const fillScale = () => {
+    'worklet';
+    const f = fitted();
+    return Math.max(width / f.w, height / f.h);
+  };
+
+  const maxScale = () => {
+    'worklet';
+    return Math.max(MAX_SCALE, fillScale() * 2);
+  };
+
+  const clamp = (v: number, b: number) => {
+    'worklet';
+    return Math.min(Math.max(v, -b), b);
+  };
+
+  // Amène la loupe sur (k, x, y) en un seul mouvement, sans rebond.
+  const animateTo = (k: number, x: number, y: number, duration = 220) => {
+    'worklet';
+    const cfg = { duration, easing: Easing.out(Easing.cubic) };
+    flinging.set(false);
+    target.set(k);
+    raw.set(k);
+    scale.set(withTiming(k, cfg));
+    tx.set(withTiming(x, cfg));
+    ty.set(withTiming(y, cfg));
   };
 
   const reset = () => {
     'worklet';
-    scale.set(withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
-    savedScale.set(1);
-    tx.set(withTiming(0));
-    ty.set(withTiming(0));
-    savedTx.set(0);
-    savedTy.set(0);
-    runOnJS(setZoom)(false);
+    animateTo(1, 0, 0);
+  };
+
+  // Remet la photo dans le cadre, à l'échelle visée.
+  const settleBounds = () => {
+    'worklet';
+    const b = bounds(target.value);
+    const nx = clamp(tx.value, b.x);
+    const ny = clamp(ty.value, b.y);
+    const cfg = { duration: 200, easing: Easing.out(Easing.cubic) };
+    if (nx !== tx.value) tx.set(withTiming(nx, cfg));
+    if (ny !== ty.value) ty.set(withTiming(ny, cfg));
+  };
+
+  // Au-delà du bord, le doigt n'entraîne plus la photo qu'au tiers.
+  const rubber = (v: number, d: number, b: number) => {
+    'worklet';
+    const n = v + d;
+    return Math.abs(n) <= b ? n : v + d * 0.33;
   };
 
   const pinch = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.set(Math.min(Math.max(savedScale.value * e.scale, 0.8), MAX_SCALE));
+    .onStart((e) => {
+      // Déjà en train de fermer d'un doigt : on ne mélange pas.
+      if (panMode.value === 2) return;
+      cancelAnimation(scale);
+      cancelAnimation(tx);
+      cancelAnimation(ty);
+      flinging.set(false);
+      pinching.set(true);
+      pinchedInPan.set(true);
+      raw.set(scale.value);
+      lastFx.set(e.focalX - width / 2);
+      lastFy.set(e.focalY - height / 2);
+      lastPointers.set(e.numberOfPointers);
     })
-    .onEnd(() => {
-      if (scale.value <= 1.02) {
+    .onChange((e) => {
+      if (!pinching.value) return;
+      const fx = e.focalX - width / 2;
+      const fy = e.focalY - height / 2;
+      if (e.numberOfPointers < 2 || e.numberOfPointers !== lastPointers.value) {
+        lastPointers.set(e.numberOfPointers);
+        lastFx.set(fx);
+        lastFy.set(fy);
+        return;
+      }
+      raw.set(raw.value * e.scaleChange);
+      const max = maxScale();
+      const r = raw.value;
+      const s =
+        r < 1 ? Math.max(1 - (1 - r) * 0.4, 0.6) : r > max ? max * (1 + (r / max - 1) * 0.25) : r;
+      // Le point qui était sous les doigts y reste, et suit leur glissement.
+      const k = s / scale.value;
+      tx.set(fx - (lastFx.value - tx.value) * k);
+      ty.set(fy - (lastFy.value - ty.value) * k);
+      scale.set(s);
+      target.set(s);
+      lastFx.set(fx);
+      lastFy.set(fy);
+    })
+    .onFinalize(() => {
+      if (!pinching.value) return;
+      pinching.set(false);
+      const s = scale.value;
+      if (s <= 1.02) {
         reset();
         return;
       }
-      savedScale.set(scale.value);
-      clamp();
-      runOnJS(setZoom)(true);
+      // Revenir au zoom max en gardant le point sous les doigts, puis borner.
+      const k = Math.min(s, maxScale());
+      const ratio = k / s;
+      const b = bounds(k);
+      animateTo(
+        k,
+        clamp(lastFx.value - (lastFx.value - tx.value) * ratio, b.x),
+        clamp(lastFy.value - (lastFy.value - ty.value) * ratio, b.y),
+      );
     });
 
-  // Zoomé : se déplacer dans la photo.
-  const panZoomed = Gesture.Pan()
-    .enabled(isZoomed)
-    .onUpdate((e) => {
-      tx.set(savedTx.value + e.translationX);
-      ty.set(savedTy.value + e.translationY);
-    })
-    .onEnd(() => {
-      clamp();
-    });
-
-  // À plat : glisser vers le bas (ou le haut) ferme. Échoue dès que le geste
-  // part à l'horizontale, pour laisser la main au défilement des photos.
-  const panDismiss = Gesture.Pan()
-    .enabled(!isZoomed)
-    .activeOffsetY([-12, 12])
-    .failOffsetX([-14, 14])
-    .onUpdate((e) => {
-      dragY.set(e.translationY);
-    })
-    .onEnd((e) => {
-      if (Math.abs(e.translationY) > DISMISS_DISTANCE || Math.abs(e.velocityY) > DISMISS_VELOCITY) {
-        dragY.set(
-          withTiming(Math.sign(e.translationY || 1) * height, { duration: 200 }, () => {
-            runOnJS(onDismiss)();
-          }),
-        );
-      } else {
-        dragY.set(withSpring(0, { damping: 18, stiffness: 220 }));
+  const pan = Gesture.Pan()
+    .manualActivation(true)
+    .onTouchesDown((e) => {
+      if (e.numberOfTouches !== 1) return;
+      const t = e.allTouches[0];
+      startX.set(t.absoluteX);
+      startY.set(t.absoluteY);
+      // Poser le doigt arrête l'élan.
+      if (flinging.value) {
+        cancelAnimation(tx);
+        cancelAnimation(ty);
+        flinging.set(false);
+        grabbed.set(true);
       }
+    })
+    .onTouchesMove((e, manager) => {
+      if (panMode.value !== 0) return;
+      const t = e.allTouches[0];
+      const dx = t.absoluteX - startX.value;
+      const dy = t.absoluteY - startY.value;
+      // Zoomé, ou deux doigts : déplacement dans la photo.
+      if (target.value > ZOOMED || pinching.value || e.numberOfTouches > 1) {
+        if (e.numberOfTouches > 1 || Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+          panMode.set(1);
+          manager.activate();
+        }
+        return;
+      }
+      // À plat, un doigt : horizontal pour la galerie, vertical pour fermer.
+      if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
+        manager.fail();
+      } else if (Math.abs(dy) > 12) {
+        panMode.set(2);
+        manager.activate();
+      }
+    })
+    .onChange((e) => {
+      if (panMode.value === 2) {
+        dragY.set(dragY.value + e.changeY);
+        return;
+      }
+      if (panMode.value !== 1 || pinching.value) return;
+      if (e.numberOfPointers === 1) pinchedInPan.set(false);
+      const b = bounds(target.value);
+      tx.set(rubber(tx.value, e.changeX, b.x));
+      ty.set(rubber(ty.value, e.changeY, b.y));
+    })
+    .onEnd((e, success) => {
+      if (panMode.value === 2) {
+        const out = Math.abs(dragY.value) > DISMISS_DISTANCE || Math.abs(e.velocityY) > DISMISS_VELOCITY;
+        if (success && out) {
+          dragY.set(
+            withTiming(Math.sign(dragY.value || 1) * height, { duration: 200 }, () => {
+              runOnJS(onDismiss)();
+            }),
+          );
+        } else {
+          dragY.set(withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }));
+        }
+        return;
+      }
+      if (panMode.value !== 1 || pinching.value || pinchedInPan.value) return;
+      if (!success) {
+        settleBounds();
+        return;
+      }
+      // Élan, puis arrêt au bord ; si on a tiré au-delà, retour élastique.
+      const b = bounds(target.value);
+      flinging.set(true);
+      tx.set(
+        withDecay({
+          velocity: e.velocityX,
+          deceleration: 0.997,
+          clamp: [-b.x, b.x],
+          rubberBandEffect: true,
+          rubberBandFactor: 0.9,
+        }),
+      );
+      ty.set(
+        withDecay({
+          velocity: e.velocityY,
+          deceleration: 0.997,
+          clamp: [-b.y, b.y],
+          rubberBandEffect: true,
+          rubberBandFactor: 0.9,
+        }),
+      );
+    })
+    .onFinalize(() => {
+      // Doigt posé pour stopper l'élan puis levé sans bouger : on reborne.
+      if (grabbed.value && panMode.value === 0) settleBounds();
+      grabbed.set(false);
+      panMode.set(0);
     });
 
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .maxDelay(250)
-    .onEnd((e) => {
-      if (scale.value > 1) {
+    .maxDistance(24)
+    .onEnd((e, success) => {
+      if (!success) return;
+      if (target.value > ZOOMED) {
         reset();
-      } else {
-        // Zoome là où le doigt a touché.
-        const focusX = (width / 2 - e.x) * (DOUBLE_TAP_SCALE - 1);
-        const focusY = (height / 2 - e.y) * (DOUBLE_TAP_SCALE - 1);
-        scale.set(withTiming(DOUBLE_TAP_SCALE, { duration: 240, easing: Easing.out(Easing.cubic) }));
-        savedScale.set(DOUBLE_TAP_SCALE);
-        tx.set(focusX);
-        ty.set(focusY);
-        clamp(DOUBLE_TAP_SCALE);
-        runOnJS(setZoom)(true);
+        return;
       }
+      // Remplir l'écran (au moins x2), centré là où le doigt a touché.
+      const k = Math.min(Math.max(fillScale(), DOUBLE_TAP_SCALE), maxScale());
+      const b = bounds(k);
+      const fx = e.x - width / 2;
+      const fy = e.y - height / 2;
+      animateTo(k, clamp(-fx * (k - 1), b.x), clamp(-fy * (k - 1), b.y), 260);
     });
 
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
-    .onEnd(() => {
-      runOnJS(onTap)();
+    .maxDistance(10)
+    .onEnd((_e, success) => {
+      if (success) runOnJS(onTap)();
     });
 
-  const gesture = Gesture.Simultaneous(
-    pinch,
-    Gesture.Race(panZoomed, panDismiss),
-    Gesture.Exclusive(doubleTap, singleTap),
-  );
+  const gesture = Gesture.Simultaneous(pinch, pan, Gesture.Exclusive(doubleTap, singleTap));
 
   const style = useAnimatedStyle(() => ({
     transform: [
@@ -360,9 +562,19 @@ function ZoomablePage({
 
   return (
     <GestureDetector gesture={gesture}>
-      <View style={{ width, height }}>
+      <View style={{ width, height }} collapsable={false}>
         <Animated.View style={[styles.page, style]}>
-          <Image source={{ uri }} style={styles.image} contentFit="contain" transition={160} />
+          <Image
+            source={{ uri }}
+            style={styles.image}
+            contentFit="contain"
+            transition={160}
+            allowDownscaling={false}
+            onLoad={(e) => {
+              imgW.set(e.source.width);
+              imgH.set(e.source.height);
+            }}
+          />
         </Animated.View>
       </View>
     </GestureDetector>

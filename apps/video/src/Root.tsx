@@ -7,6 +7,8 @@ import { Pub } from "./pub/Pub";
 import { Ecran, ecranSchema } from "./playstore/Ecran";
 import { ECRANS } from "./playstore/ecrans";
 import { Icone } from "./playstore/Icone";
+import { Pliable, pliableSchema, TAILLES } from "./playstore/Pliable";
+import { PLIABLES } from "./playstore/pliables";
 import { VisuelPrincipal } from "./playstore/VisuelPrincipal";
 import { Accroche } from "./pub/scenes/Accroche";
 import { Appel } from "./pub/scenes/Appel";
@@ -167,6 +169,16 @@ export const RemotionRoot: React.FC = () => {
         ))}
         <Still id="PlayStore-VisuelPrincipal" component={VisuelPrincipal} width={1024} height={500} />
         <Still id="PlayStore-Icone" component={Icone} width={512} height={512} />
+        {PLIABLES.map((p, i) => (
+          <Still
+            key={`pliable-${i}`}
+            id={`PlayStore-Pliable-${i + 1}`}
+            component={Pliable}
+            schema={pliableSchema}
+            {...TAILLES[p.format]}
+            defaultProps={p}
+          />
+        ))}
       </Folder>
     </>
   );

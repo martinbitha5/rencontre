@@ -42,6 +42,17 @@ export const styles = StyleSheet.create({
   },
   // Trait souligné corail arrondi centré sous le libellé actif ; transparent
   // sur les inactifs pour que la rangée ne bouge pas d'un pixel au changement.
+  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tabCount: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabCountText: { fontSize: 11, fontWeight: '800', color: '#ffffff' },
   tabUnderline: {
     width: 24,
     height: 3,
@@ -93,18 +104,6 @@ export const styles = StyleSheet.create({
   },
   sentHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sentTime: { fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
-  sentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.surface,
-  },
-  sentChipRead: { backgroundColor: colors.accent },
-  sentChipText: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
-  sentChipTextRead: { color: colors.textOnAccent },
   sentBubble: {
     alignSelf: 'flex-end',
     maxWidth: '88%',

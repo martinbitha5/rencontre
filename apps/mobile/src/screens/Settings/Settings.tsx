@@ -21,6 +21,7 @@ import {
 } from '@/utils/themePreference';
 import { colors } from '@/theme';
 import { styles } from './Settings.styles';
+import { setDataSaverMode, useDataSaver, type DataSaverMode } from '@/utils/dataSaver';
 
 
 // Les trois modes d'apparence, présentés dans la feuille de choix.
@@ -50,6 +51,36 @@ const PUSH_LABELS = {
 
 // Ligne de réglage : libellé, valeur éventuelle, chevron. Les groupes sont
 // séparés par une bande grise, sans titre.
+// Économiseur de données (voir utils/dataSaver). Les économies de base
+// (photos légères, miniatures, notes vocales compressées, vidéos au toucher)
+// sont toujours actives : ce réglage décide seulement si l'app télécharge à
+// l'avance pour gagner du temps.
+const DATA_OPTIONS: {
+  key: DataSaverMode;
+  label: string;
+  detail: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  {
+    key: 'auto',
+    label: 'Automatique',
+    detail: 'Économise tes mégas hors Wi-Fi',
+    icon: 'sync-outline',
+  },
+  {
+    key: 'on',
+    label: 'Toujours',
+    detail: 'Économise tes mégas partout',
+    icon: 'leaf-outline',
+  },
+  {
+    key: 'off',
+    label: 'Jamais',
+    detail: 'Les profils se chargent plus vite',
+    icon: 'flash-outline',
+  },
+];
+
 function Row({
   label,
   detail,
@@ -91,6 +122,8 @@ export default function Settings() {
   // dans une feuille qui glisse depuis le bas.
   const [themePref, setThemePrefState] = useState<ThemePref>('system');
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
+  const [dataSheetOpen, setDataSheetOpen] = useState(false);
+  const { mode: dataMode } = useDataSaver();
   useEffect(() => {
     getThemePref().then(setThemePrefState);
   }, []);
@@ -188,6 +221,11 @@ export default function Settings() {
           onPress={onNotifications}
         />
         <Row label="Apparence" detail={themeLabel} onPress={() => setThemeSheetOpen(true)} />
+        <Row
+          label="Économiseur de données"
+          detail={DATA_OPTIONS.find((o) => o.key === dataMode)?.label}
+          onPress={() => setDataSheetOpen(true)}
+        />
 
         <Gap />
         <View style={styles.row}>
@@ -219,6 +257,7 @@ export default function Settings() {
         />
 
         <Gap />
+        <Row label="Questions fréquentes" onPress={() => openPage('faq.html')} />
         <Row label="Nous contacter" onPress={() => openPage('contact.html')} />
         <Row label="Conseils et sécurité" onPress={() => openPage('conseils.html')} />
 
@@ -282,6 +321,50 @@ export default function Settings() {
         <Text style={styles.themeHint}>
           {"Le changement s'applique immédiatement : l'app se recharge un court instant."}
         </Text>
+      </BottomSheet>
+      <BottomSheet
+        visible={dataSheetOpen}
+        onClose={() => setDataSheetOpen(false)}
+        title="Économiseur de données"
+      >
+        {DATA_OPTIONS.map((option) => {
+          const active = dataMode === option.key;
+          return (
+            <Pressable
+              key={option.key}
+              style={({ pressed }) => [
+                styles.themeOption,
+                active && styles.themeOptionActive,
+                pressed && { opacity: 0.75 },
+              ]}
+              onPress={() => {
+                setDataSaverMode(option.key);
+                setDataSheetOpen(false);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+            >
+              <View style={styles.themeOptionIcon}>
+                <Ionicons
+                  name={option.icon}
+                  size={20}
+                  color={active ? colors.primary : colors.textMuted}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.themeOptionLabel, active && { color: colors.primary }]}>
+                  {option.label}
+                </Text>
+                <Text style={styles.themeOptionDetail}>{option.detail}</Text>
+              </View>
+              <Ionicons
+                name={active ? 'radio-button-on' : 'radio-button-off'}
+                size={22}
+                color={active ? colors.primary : colors.border}
+              />
+            </Pressable>
+          );
+        })}
       </BottomSheet>
     </SafeAreaView>
   );

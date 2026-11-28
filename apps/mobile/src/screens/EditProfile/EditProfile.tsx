@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,9 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   deletePhoto,
-  getCities,
   getMyPhotos,
-  photoUrl,
   reorderPhotos,
   replacePhoto,
   updateMyProfile,
@@ -47,8 +45,10 @@ import { BounceChip, GradientButton, HeightSlider, OptionCard } from '@/screens/
 import { BottomSheet } from '@/screens/Settings/BottomSheet';
 import { InterestLabel } from '@/components/InterestIcon';
 import { colors, keyboardAppearance } from '@/theme';
-import { ageFromBirthDate, type City, type MyPhoto, type Profile, type ViewableProfile } from '@/types';
+import { ageFromBirthDate, type MyPhoto, type Profile, type ViewableProfile } from '@/types';
+import { useMyCities } from '@/utils/countries';
 import { styles } from './EditProfile.styles';
+import { Photo } from '@/components/Photo';
 
 // Modifier le profil : la barre « Rempli à X % » en haut, la grille de
 // photos, puis une ligne par information. Toucher une ligne ouvre une feuille
@@ -64,7 +64,6 @@ const SUPPORT_EMAIL = 'support@zola-rdc.com';
 
 type Field =
   | 'name'
-  | 'city'
   | 'bio'
   | 'job'
   | 'education'
@@ -80,7 +79,6 @@ type Field =
 
 const SHEET_TITLES: Record<Field, string> = {
   name: 'Ton prénom',
-  city: 'Ta ville',
   bio: 'Description',
   job: 'Ton métier',
   education: "Niveau d'études",
@@ -104,11 +102,8 @@ export default function EditProfile() {
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   const photoNotice = focus === 'photos' && !noticeDismissed;
-  const [cities, setCities] = useState<City[]>([]);
-
-  useEffect(() => {
-    getCities().then(setCities).catch(() => {});
-  }, []);
+  // Seules les villes de mon pays : on ne passe pas d'un pays à l'autre ici.
+  const { cities } = useMyCities();
   const [photos, setPhotos] = useState<MyPhoto[]>([]);
   // Photo en cours d'envoi ou de remplacement : sa cellule montre un voile et
   // un indicateur, la grille reste manipulable pour le reste.
@@ -201,6 +196,16 @@ export default function EditProfile() {
     );
   };
 
+  // La ville est choisie à l'inscription et vérifiée par la position : elle
+  // ne change plus ensuite. Les filtres permettent de voir tout son pays.
+  const lockedCityInfo = () => {
+    haptic.tap();
+    Alert.alert(
+      'Ville vérifiée',
+      `Ta ville a été choisie à l’inscription et confirmée par ta position, elle ne se modifie pas. Pour voir les profils de tout ton pays, active-le dans les filtres. Tu as déménagé ? Écris-nous à ${SUPPORT_EMAIL}.`,
+    );
+  };
+
   const accountInfo = () => {
     haptic.tap();
     Alert.alert(
@@ -265,7 +270,7 @@ export default function EditProfile() {
     }
     setBusyPhoto('new');
     try {
-      const uploaded = await uploadPhoto(picked.base64, photos.length);
+      const uploaded = await uploadPhoto(picked.base64, photos.length, picked.thumbBase64);
       commitPhotos([...photos, uploaded]);
       setNoticeDismissed(true);
     } catch (e) {
@@ -284,7 +289,7 @@ export default function EditProfile() {
     }
     setBusyPhoto(photo.id);
     try {
-      const replaced = await replacePhoto(photo, picked.base64);
+      const replaced = await replacePhoto(photo, picked.base64, picked.thumbBase64);
       commitPhotos(photos.map((p) => (p.id === photo.id ? replaced : p)));
     } catch (e) {
       Alert.alert('Erreur', uploadErrorMessage(e));
@@ -361,8 +366,8 @@ export default function EditProfile() {
           accessibilityRole="button"
           accessibilityLabel={i === 0 ? 'Photo principale, options' : `Photo ${i + 1}, options`}
         >
-          <Image
-            source={{ uri: photoUrl(p.storage_path) }}
+          <Photo
+            path={p.storage_path}
             style={styles.slotImg}
             contentFit="cover"
             cachePolicy="memory-disk"
@@ -495,7 +500,8 @@ export default function EditProfile() {
             icon="location"
             label="Ville"
             value={cities.find((c) => c.id === profile.city_id)?.name ?? null}
-            onPress={() => open('city')}
+            onPress={lockedCityInfo}
+            locked
           />
           <DetailRow
             icon="calendar"
@@ -672,15 +678,6 @@ export default function EditProfile() {
                 </>
               )}
 
-              {editing === 'city' &&
-                cities.map((c) => (
-                  <OptionCard
-                    key={c.id}
-                    label={c.name}
-                    selected={profile.city_id === c.id}
-                    onPress={() => saveFields({ city_id: c.id })}
-                  />
-                ))}
 
               {(editing === 'bio' || editing === 'job') && (
                 <>

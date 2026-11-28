@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
@@ -10,7 +10,6 @@ import {
   isEventOverError,
   likeFromEventHistory,
   likeFromHistory,
-  photoUrl,
 } from '@/services/api';
 import { InsufficientCoinsModal } from '@/components/coins';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
@@ -22,6 +21,7 @@ import { ageFromBirthDate, timeAgo, type DirectMessageResult, type PassedProfile
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './History.styles';
 import { safeBack } from '@/utils/safeBack';
+import { Photo } from '@/components/Photo';
 
 // Historique des profils passés : on peut se raviser et liker (gratuit, et
 // soumis à la même règle que partout — illimité si le profil est vérifié,
@@ -205,8 +205,8 @@ export default function History() {
           renderItem={({ item }) => (
             <Pressable style={styles.cell} onPress={() => setDetail(item)}>
               {item.photos?.[0] ? (
-                <Image
-                  source={{ uri: photoUrl(item.photos[0].path) }}
+                <Photo
+                  path={item.photos[0].path}
                   style={styles.photo}
                   contentFit="cover"
                 />

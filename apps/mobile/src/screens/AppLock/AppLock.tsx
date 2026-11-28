@@ -97,7 +97,7 @@ export default function AppLock() {
       <ScreenHeader title="Code secret" />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.intro}>
-          Un code à quatre chiffres demandé à l'ouverture de Zola et après une absence
+          Un code à quatre chiffres demandé à l’ouverture de Zola et après une absence
           prolongée.
         </Text>
 
@@ -106,26 +106,26 @@ export default function AppLock() {
         <View style={styles.note}>
           <Text style={styles.noteTitle}>Ce que ça protège</Text>
           <Text style={styles.noteText}>
-            Quelqu'un qui prend ton téléphone déverrouillé en main ne peut pas ouvrir Zola. Le
-            code reste dans le coffre-fort du système, il ne quitte jamais l'appareil et n'est
+            Quelqu’un qui prend ton téléphone déverrouillé en main ne peut pas ouvrir Zola. Le
+            code reste dans le coffre-fort du système, il ne quitte jamais l’appareil et n’est
             pas envoyé à nos serveurs.
           </Text>
           <Text style={styles.noteTitle}>Ce que ça ne protège pas</Text>
           <Text style={styles.noteText}>
-            Tes messages ne sont pas chiffrés par ce code. Quelqu'un qui sait extraire les
-            données d'un téléphone y accédera quand même. C'est une porte devant l'écran, pas un
+            Tes messages ne sont pas chiffrés par ce code. Quelqu’un qui sait extraire les
+            données d’un téléphone y accédera quand même. C’est une porte devant l’écran, pas un
             coffre.
           </Text>
           <Text style={styles.noteText}>
-            Il n'existe aucune récupération : un code oublié se règle en désinstallant puis
-            réinstallant l'application.
+            Il n’existe aucune récupération : un code oublié se règle en désinstallant puis
+            réinstallant l’application.
           </Text>
         </View>
 
         {!subscribed && !hasCode ? (
           <View style={styles.locked}>
             <Text style={styles.lockedText}>
-              Le code secret fait partie de l'abonnement Invisible.
+              Le code secret fait partie de l’abonnement Invisible.
             </Text>
             <Button title="Voir l'offre Invisible" onPress={() => router.push('/incognito')} />
           </View>

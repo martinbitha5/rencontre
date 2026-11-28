@@ -6,6 +6,11 @@ export interface Option {
   label: string;
 }
 
+// Tranche d'âge de Zola : de 18 à 60 ans, pour s'inscrire comme pour filtrer.
+// La base applique la même règle (migration 074).
+export const AGE_MIN = 18;
+export const AGE_MAX = 60;
+
 export const EDUCATION_OPTIONS: Option[] = [
   { value: 'secondaire', label: 'Secondaire' },
   { value: 'universitaire', label: 'Universitaire' },

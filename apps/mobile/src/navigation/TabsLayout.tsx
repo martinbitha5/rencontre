@@ -4,10 +4,15 @@ import { Redirect, Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { AppState, StyleSheet, View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getMyPhotos, touchLastActive } from '@/services/api';
+import { TesterCheckinPrompt } from '@/components/TesterProgram';
+import { UpdatePrompt } from '@/components/UpdatePrompt';
+import { badgeLabel, refreshBadges, useBadges } from '@/utils/badgeSignal';
+import { ensureMyThumbs, getMyPhotos, touchLastActive } from '@/services/api';
 import { cacheSet } from '@/utils/cache';
+import { onIntroDone } from '@/utils/introState';
 import { registerForPushNotifications } from '@/services/notifications';
 import { useAuth } from '@/providers/auth';
+import { isSavingData } from '@/utils/dataSaver';
 import { prefetchPhotos } from '@/utils/preload';
 import { colors, glass, isDark, isIOS, m3, shadows } from '@/theme';
 
@@ -17,6 +22,8 @@ import { colors, glass, isDark, isIOS, m3, shadows } from '@/theme';
 // À l'arrière-plan le minuteur s'arrête ; c'est la disparition du signal qui
 // fait office de déconnexion, il n'y a rien à envoyer en quittant.
 const HEARTBEAT_MS = 4 * 60 * 1000;
+// Délai après l'intro avant les tâches secondaires du démarrage.
+const DEFERRED_STARTUP_MS = 1500;
 
 // Hauteur utile de la barre (hors zone de geste système). iOS : barre de verre
 // compacte qui flotte sur le contenu. Android : barre de navigation M3, plus
@@ -70,26 +77,61 @@ export default function TabsLayout() {
   return <SignedInTabs />;
 }
 
+// Relecture des pastilles pendant que l'app est à l'écran : un message reçu
+// sans notification push (réglages du téléphone) finit quand même par
+// allumer la pastille.
+const BADGES_POLL_MS = 60 * 1000;
+
 function SignedInTabs() {
   const insets = useSafeAreaInsets();
   const barHeight = BAR_HEIGHT + insets.bottom;
+  const badges = useBadges();
+  const activityCount = badges.requests + badges.likes + badges.views;
 
-  // L'utilisateur est connecté et onboardé dès qu'il atteint les onglets :
-  // bon moment pour demander la permission et enregistrer le token push.
   useEffect(() => {
-    registerForPushNotifications();
+    refreshBadges();
+    let timer = setInterval(refreshBadges, BADGES_POLL_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      clearInterval(timer);
+      if (state === 'active') {
+        refreshBadges();
+        timer = setInterval(refreshBadges, BADGES_POLL_MS);
+      }
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
   }, []);
 
-  // Préchauffage du profil : mes photos partent en cache (données + images)
-  // dès l'arrivée sur les onglets. Ouvrir l'onglet Profil ensuite affiche
-  // l'avatar et les infos sans aucun délai visible.
+  // Tâches secondaires du démarrage, lancées APRÈS l'intro et un court
+  // délai : le fil Rencontres passe d'abord, seul sur le réseau. Avant, elles
+  // partaient toutes en même temps pendant l'intro et ralentissaient le
+  // premier paquet de cartes sur un réseau mobile lent.
+  //   - permission et token des notifications : l'utilisateur est connecté
+  //     et onboardé, c'est le bon moment ;
+  //   - préchauffage du profil : mes photos partent en cache (données et
+  //     images), l'onglet Profil s'affichera ensuite sans délai visible.
   useEffect(() => {
-    getMyPhotos()
-      .then((photos) => {
-        cacheSet('my-photos', photos);
-        prefetchPhotos(photos.map((p) => p.storage_path));
-      })
-      .catch(() => {});
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const stop = onIntroDone(() => {
+      timer = setTimeout(() => {
+        registerForPushNotifications();
+        getMyPhotos()
+          .then((photos) => {
+            cacheSet('my-photos', photos);
+            prefetchPhotos(photos.map((p) => p.storage_path));
+            // Miniatures manquantes de mes anciennes photos : fabriquées en
+            // Wi-Fi seulement, jamais sur le forfait.
+            if (!isSavingData()) ensureMyThumbs(photos).catch(() => {});
+          })
+          .catch(() => {});
+      }, DEFERRED_STARTUP_MS);
+    });
+    return () => {
+      stop();
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,6 +153,7 @@ function SignedInTabs() {
   }, []);
 
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -165,6 +208,13 @@ function SignedInTabs() {
         tabBarLabelStyle: isIOS
           ? { fontWeight: '700', fontSize: 11 }
           : { fontWeight: '600', fontSize: 12 },
+        // Pastille rose de la marque, chiffre blanc, comme la cloche du Profil.
+        tabBarBadgeStyle: {
+          backgroundColor: colors.primary,
+          color: '#ffffff',
+          fontSize: 11,
+          fontWeight: '700',
+        },
       }}
     >
       <Tabs.Screen
@@ -179,6 +229,8 @@ function SignedInTabs() {
         options={{
           title: 'Discussions',
           tabBarIcon: tabIcon('chatbubbles', 'chatbubbles-outline'),
+          // Messages non lus des conversations.
+          tabBarBadge: badgeLabel(badges.messages),
         }}
       />
       <Tabs.Screen
@@ -186,6 +238,8 @@ function SignedInTabs() {
         options={{
           title: 'Activité',
           tabBarIcon: tabIcon('heart', 'heart-outline'),
+          // Invitations DM non lues, nouveaux likes et nouvelles visites.
+          tabBarBadge: badgeLabel(activityCount),
         }}
       />
       <Tabs.Screen
@@ -196,6 +250,11 @@ function SignedInTabs() {
         }}
       />
     </Tabs>
+    {/* Programme testeur : la fenêtre « confirme ta présence du jour ». */}
+    <TesterCheckinPrompt />
+    {/* Nouvelle version sur le store : propose ou impose la mise à jour. */}
+    <UpdatePrompt />
+    </>
   );
 }
 

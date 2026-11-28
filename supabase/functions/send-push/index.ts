@@ -1,10 +1,12 @@
 // Edge Function « send-push » — notifications push Expo.
 // Appelée uniquement par les triggers Postgres (via pg_net) avec un secret
 // partagé dans l'en-tête x-push-secret ; jamais par les clients.
-// Six cas : message dans une conversation, invitation DM (premier message
+// Cas gérés : message dans une conversation, invitation DM (premier message
 // d'un match pending), match mutuel (voir migration push_notifications_v2),
 // les deux avis de fin d'Incognito (trigger profiles_incognito_expiry,
-// migration 055) et la photo retirée par la modération (migration 063).
+// migration 055), la photo retirée par la modération (migration 063) et la
+// décision de vérification du profil (migration 067) et les notifications
+// du centre de notifications de l'app (type notice, migration 068).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // Secret partagé : variable d'environnement PUSH_SECRET si définie
@@ -213,6 +215,47 @@ Deno.serve(async (req: Request) => {
           push(to, 'Une de tes photos a été retirée', body, {
             type: 'photo_removed',
             url: '/(tabs)/profile/edit?focus=photos',
+          }),
+        ),
+      );
+    } else if (payload.type === 'verification_approved' || payload.type === 'verification_rejected') {
+      // admin_review_verification et admin_set_verified (migration 067).
+      // L'app ouverte relit le profil dès réception, sans attendre une
+      // relance. Le motif d'un refus reste interne : la personne voit
+      // seulement qu'elle peut réessayer.
+      const { user_id } = payload;
+      const tokens = await tokensFor(user_id);
+      if (!tokens.length) return new Response('ok');
+      const approved = payload.type === 'verification_approved';
+      await sendAll(
+        tokens.map((to) =>
+          approved
+            ? push(
+                to,
+                'Ton profil est vérifié',
+                'Le badge bleu s’affiche maintenant sur ton profil.',
+                { type: 'verification_approved', url: '/(tabs)/profile' },
+              )
+            : push(
+                to,
+                'Ta vérification n’a pas abouti',
+                'La photo ne permettait pas de te reconnaître. Touche ici pour réessayer avec un nouveau geste.',
+                { type: 'verification_rejected', url: '/verify-profile' },
+              ),
+        ),
+      );
+    } else if (payload.type === 'notice') {
+      // Centre de notifications (migration 068) : le texte est écrit côté
+      // SQL, en même temps que la notification enregistrée dans l'app. data.type
+      // porte le genre de notification, pour que l'app ouverte se resynchronise.
+      const { user_id, notice_type, title, body, url } = payload;
+      const tokens = await tokensFor(user_id);
+      if (!tokens.length || !title) return new Response('ok');
+      await sendAll(
+        tokens.map((to) =>
+          push(to, title, body ?? '', {
+            type: notice_type ?? 'notice',
+            url: url || '/notifications',
           }),
         ),
       );

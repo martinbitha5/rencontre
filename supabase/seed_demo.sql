@@ -104,7 +104,7 @@ select
   'femme', 'homme',
   case when i <= 7000 then 1 else d.villes[1 + (i % array_length(d.villes, 1))] end,
   d.bios[1 + (i % 10)],
-  18, 99, true,
+  18, 60, true,
   -- Un profil sur douze est actif à l'instant : le badge « En ligne » doit se
   -- voir dans la file, pas seulement exister dans le code.
   case when i % 12 = 0 then now() - ((i % 14) || ' minutes')::interval

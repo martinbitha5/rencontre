@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getMyMatches, photoUrl, unarchiveMatch } from '@/services/api';
+import { getMyMatches, unarchiveMatch } from '@/services/api';
 import { Centered, ScreenHeader } from '@/components/ui';
 import { colors, spacing } from '@/theme';
 import { timeAgo, type MatchSummary } from '@/types';
 import { styles } from './Archives.styles';
+import { Photo } from '@/components/Photo';
 
 // Conversations archivées : rangement personnel, tout reste actif.
 // Désarchiver ramène la conversation dans Discussions.
@@ -84,8 +85,8 @@ export default function Archives() {
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => openChat(item)}>
               {item.photo_path ? (
-                <Image
-                  source={{ uri: photoUrl(item.photo_path) }}
+                <Photo
+                  path={item.photo_path}
                   style={styles.avatar}
                   contentFit="cover"
                 />

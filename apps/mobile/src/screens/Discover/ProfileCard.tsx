@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { photoUrl } from '@/services/api';
 import { VerifiedBadgeButton } from '@/components/ui';
 import { GOAL_OPTIONS, goalIcon, labelFor } from '@/profileOptions';
 import { colors, flame, onLight, radius, spacing } from '@/theme';
 import { ageFromBirthDate, isNewMember, presenceOf, type FeedProfile } from '@/types';
+import { COUNTRIES, useMyCountry } from '@/utils/countries';
 
 export function ProfileCard({
   profile,
@@ -32,6 +33,23 @@ export function ProfileCard({
   photoPos?: SharedValue<number>;
   pageWidth?: number;
 }) {
+  // Un vrai appui seulement : le doigt doit se relever presque là où il s'est
+  // posé. Sans ce garde-fou, un balayage vers le haut ou le bas, qui ne sort
+  // pas de la carte, se terminait comme un appui et ouvrait le profil.
+  const pressStart = useRef<{ x: number; y: number } | null>(null);
+  const onPressIn = (e: GestureResponderEvent) => {
+    pressStart.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+  };
+  const onTap = (e: GestureResponderEvent) => {
+    const start = pressStart.current;
+    pressStart.current = null;
+    if (!onOpenDetail || !start) return;
+    const dx = e.nativeEvent.pageX - start.x;
+    const dy = e.nativeEvent.pageY - start.y;
+    if (dx * dx + dy * dy > TAP_SLOP * TAP_SLOP) return;
+    onOpenDetail();
+  };
+
   const photos = profile.photos ?? [];
   const carousel = !!photoPos && photos.length > 1 && pageWidth > 0;
   const current = photos[Math.min(photoIndex, Math.max(photos.length - 1, 0))];
@@ -40,7 +58,15 @@ export function ProfileCard({
   const presence = presenceOf(profile.last_active_at);
   // La ville seule : la commune a été retirée du produit (déclaratif peu
   // fiable), la ville est vérifiée par la localisation à l'onboarding.
-  const place = profile.city_name ?? '';
+  // Un profil de l'autre Congo (zone « les deux Congo ») : on précise le
+  // pays, « Brazzaville, Congo-Brazzaville » vu de Kinshasa et inversement.
+  const myCountry = useMyCountry();
+  const otherCountry = profile.country && myCountry && profile.country !== myCountry;
+  const place = profile.city_name
+    ? otherCountry
+      ? `${profile.city_name}, ${COUNTRIES[profile.country!].short}`
+      : profile.city_name
+    : '';
 
   // La carte montre la MÊME chose sur toutes ses photos : intention centrée,
   // nom et âge suivis du badge bleu s'il y a lieu, ville, étoile de favori.
@@ -55,7 +81,7 @@ export function ProfileCard({
   return (
     <View style={styles.card}>
       {carousel ? (
-        <PhotoStrip photos={photos} pos={photoPos} width={pageWidth} />
+        <PhotoStrip photos={photos} pos={photoPos} width={pageWidth} index={photoIndex} />
       ) : current ? (
         <Image
           source={{ uri: photoUrl(current.path) }}
@@ -81,14 +107,15 @@ export function ProfileCard({
       {onOpenDetail && (
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={onOpenDetail}
+          onPressIn={onPressIn}
+          onPress={onTap}
           accessibilityRole="button"
           accessibilityLabel={`Voir le profil de ${profile.display_name}`}
         />
       )}
 
       {/* En haut à gauche : prénom, âge, présence, puis les pastilles. */}
-      <Pressable style={styles.info} onPress={onOpenDetail}>
+      <Pressable style={styles.info} onPressIn={onPressIn} onPress={onTap}>
         {/* Ligne 1 : certification, prénom et âge, puis le statut en ligne. */}
         <View style={styles.nameRow}>
           {profile.is_verified && <VerifiedBadgeButton size={20} />}
@@ -180,30 +207,45 @@ function PhotoStrip({
   photos,
   pos,
   width,
+  index,
 }: {
   photos: { id: string; path: string }[];
   pos: SharedValue<number>;
   width: number;
+  index: number;
 }) {
   const stripStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -pos.value * width }],
   }));
+  // Économie de données : on ne télécharge que la photo affichée et la
+  // suivante, prête pour le glissement. Avant, les six photos d'une carte
+  // partaient d'un coup, même si la personne passait sans les regarder.
+  // Les photos précédentes restent montées : elles sont déjà en cache.
+  const reach = index + 1;
   return (
     <Animated.View style={[styles.strip, { width: width * photos.length }, stripStyle]}>
-      {photos.map((p) => (
-        <Image
-          key={p.id}
-          source={{ uri: photoUrl(p.path) }}
-          style={{ width, height: '100%' }}
-          contentFit="cover"
-          transition={150}
-        />
-      ))}
+      {photos.map((p, i) =>
+        i <= reach ? (
+          <Image
+            key={p.id}
+            source={{ uri: photoUrl(p.path) }}
+            style={{ width, height: '100%' }}
+            contentFit="cover"
+            transition={150}
+          />
+        ) : (
+          <View key={p.id} style={{ width, height: '100%' }} />
+        ),
+      )}
     </Animated.View>
   );
 }
 
-const TOP_SCRIM = ['rgba(16, 17, 19, 0.6)', 'rgba(16, 17, 19, 0)'] as const;
+// Distance maximale, en points, entre le doigt posé et le doigt levé pour
+// que le geste compte comme un appui.
+const TAP_SLOP = 12;
+
+const TOP_SCRIM =['rgba(16, 17, 19, 0.6)', 'rgba(16, 17, 19, 0)'] as const;
 const BOTTOM_SCRIM = ['rgba(16, 17, 19, 0)', 'rgba(16, 17, 19, 0.45)'] as const;
 
 const styles = StyleSheet.create({

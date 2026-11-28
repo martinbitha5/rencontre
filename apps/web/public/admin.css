@@ -531,6 +531,9 @@ tr.clickable:hover td { background: #f9f9fb; }
   position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
   background: var(--heading); color: #fff; padding: 11px 22px; border-radius: var(--radius-btn);
   font-size: .86rem; font-weight: 500; z-index: 90; box-shadow: 0 10px 28px rgba(9, 9, 11, .22);
+  /* Largeur du texte, jamais plus que l'écran : sans ça, left 50 % limitait
+     le toast à la moitié de la largeur et le texte s'empilait en bulle. */
+  width: max-content; max-width: calc(100vw - 32px); text-align: center;
 }
 .toast.err { background: var(--danger); }
 
@@ -615,20 +618,39 @@ body.nav-open .nav-backdrop { display: block; }
     padding: 10px 12px; margin-bottom: 10px; background: #fff;
   }
   tr.clickable:hover td { background: transparent; }
+  /* Libellé à gauche, contenu à droite. Une grille plutôt qu'une ligne
+     flexible : quand une cellule porte plusieurs éléments (nom, e-mail,
+     identifiant), ils s'empilent dans la colonne de droite au lieu de
+     déborder de la carte. */
   td {
-    border: none; padding: 4px 0; font-size: .85rem;
-    display: flex; gap: 10px; align-items: center;
+    border: none; padding: 5px 0; font-size: .85rem;
+    display: grid; grid-template-columns: 88px minmax(0, 1fr);
+    column-gap: 10px; align-items: center;
+    overflow-wrap: anywhere;
   }
+  td > * { grid-column: 2; min-width: 0; justify-self: start; max-width: 100%; }
+  td > * + * { margin-top: 3px; }
   td:empty { display: none; }
   td::before {
     content: attr(data-l);
-    flex: 0 0 88px;
+    grid-column: 1; grid-row: 1 / span 6; align-self: start;
+    padding-top: 2px;
     font-size: .6rem;
     color: var(--muted);
   }
+  td:not([data-l]) { grid-template-columns: minmax(0, 1fr); }
+  td:not([data-l]) > * { grid-column: 1; }
   td:not([data-l])::before { display: none; }
   .btn-row .btn { flex: 1 1 auto; justify-content: center; }
   .msg { max-width: 90%; }
+  /* Volets et fenêtres : moins de marge, plus de place pour le contenu. */
+  .drawer-head { padding: 12px 14px; }
+  .drawer-body { padding: 12px 12px 48px; }
+  .kv { grid-template-columns: 104px minmax(0, 1fr); }
+  .modal-wrap { padding: 12px; align-items: end; }
+  .modal { padding: 20px 18px; border-radius: 20px; }
+  .modal .btn-row { flex-wrap: wrap; }
+  .toast { bottom: max(16px, env(safe-area-inset-bottom)); border-radius: 14px; }
   .photo-thumb img { width: 74px; height: 94px; }
   .bars { height: 84px; }
 }
@@ -701,4 +723,134 @@ body.nav-open .nav-backdrop { display: block; }
 @media (max-width: 760px) {
   .cmp-panes { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; overflow-y: auto; }
   .cmp-top, .cmp-bottom { padding: 10px 14px; }
+}
+
+/* ---------- Courrier : messagerie trois colonnes ----------------------------
+   Dossiers, liste, message ouvert. La hauteur suit la fenêtre : la liste et
+   le message défilent chacun de leur côté, comme dans un client mail. */
+.mx {
+  display: grid;
+  grid-template-columns: 210px minmax(280px, 360px) minmax(0, 1fr);
+  height: calc(100vh - 150px); min-height: 520px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden;
+}
+.mx-folders {
+  border-right: 1px solid var(--line); background: #fafbfc;
+  padding: 12px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+}
+.mx-sep { font-size: .62rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; }
+.mx-folder {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; border: 0; background: none; cursor: pointer; text-align: left;
+  padding: 8px 10px; border-radius: 10px; font: inherit; font-size: .84rem; color: var(--text);
+}
+.mx-folder:hover { background: #f0f1f4; }
+.mx-folder.on { background: var(--accent-soft); color: var(--heading); font-weight: 600; }
+.mx-folder-count {
+  min-width: 22px; padding: 1px 7px; border-radius: 999px; text-align: center;
+  font-size: .72rem; font-weight: 700; background: #e7e9ee; color: var(--heading);
+}
+.mx-folder.on .mx-folder-count { background: var(--accent); color: #fff; }
+.mx-folder-count.alert { background: var(--danger); color: #fff; }
+
+.mx-list-pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.mx-list-head { padding: 14px 16px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mx-list-head h2 { font-size: 1rem; margin: 0 0 2px; }
+.mx-list { overflow-y: auto; flex: 1; }
+.mx-item {
+  display: flex; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  border: 0; border-bottom: 1px solid var(--line); background: #fff; font: inherit;
+  padding: 12px 14px 12px 12px; position: relative;
+}
+.mx-item:hover { background: #fafbfc; }
+.mx-item.on { background: var(--accent-soft); }
+.mx-item.unread::before {
+  content: ""; position: absolute; left: 4px; top: 22px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+.mx-item.urgent { box-shadow: inset 3px 0 0 var(--danger); }
+.mx-avatar {
+  flex: 0 0 38px; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 700; font-size: .8rem; letter-spacing: .02em;
+}
+.mx-avatar.lg { flex-basis: 46px; width: 46px; height: 46px; font-size: .95rem; }
+.mx-item-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.mx-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.mx-item-from { font-size: .86rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-item-when { font-size: .72rem; color: var(--faint); white-space: nowrap; }
+.mx-item-subject { font-size: .84rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-item-snippet { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-item.unread .mx-item-from, .mx-item.unread .mx-item-subject { font-weight: 700; color: var(--heading); }
+.mx-item.unread .mx-item-when { color: var(--accent); font-weight: 600; }
+.mx-item-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.mx-tag { font-size: .66rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+.mx-tag.red { background: var(--danger-soft); color: var(--danger); }
+.mx-tag.orange { background: var(--warn-soft); color: var(--warn); }
+.mx-tag.blue { background: var(--info-soft); color: var(--info); }
+.mx-tag.green, .mx-tag.ok { background: var(--ok-soft); color: var(--ok); }
+
+.mx-reader { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #fff; }
+.mx-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: #fff;
+}
+.mx-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.mx-back { display: none; border: 0; background: none; cursor: pointer; color: var(--heading); padding: 6px; border-radius: 8px; }
+.mx-back:hover { background: var(--bg); }
+.mx-reader-scroll { overflow-y: auto; flex: 1; padding: 20px 28px 40px; }
+.mx-subject h1 { font-size: 1.35rem; line-height: 1.3; margin: 0 0 8px; color: var(--heading); font-weight: 650; overflow-wrap: anywhere; }
+.mx-meta { display: flex; gap: 12px; align-items: flex-start; margin: 18px 0 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.mx-meta-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.mx-meta-from b { color: var(--heading); }
+.mx-body { white-space: pre-wrap; font-size: .92rem; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
+.mx-form { margin: 0 0 16px; padding: 12px 14px; background: #fafbfc; border: 1px solid var(--line); border-radius: 12px; }
+.mx-banner { margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: .84rem; background: #f0f1f4; color: var(--heading); }
+.mx-banner.ok { background: var(--ok-soft); color: #14532d; }
+.mx-banner.alert { background: var(--danger-soft); color: #7f1d1d; }
+.mx-reply { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 12px; background: #fffafc; }
+.mx-reply-head { margin-bottom: 4px; }
+.mx-reply .mx-body { margin-top: 8px; font-size: .88rem; }
+.mx-composer { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fafbfc; }
+.mx-composer-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.mx-composer textarea { width: 100%; resize: vertical; min-height: 140px; }
+.mx-composer-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.mx-check { display: inline-flex; align-items: center; gap: 8px; font-size: .82rem; color: var(--muted); cursor: pointer; }
+.mx-empty { display: flex; flex-direction: column; gap: 6px; padding: 28px 22px; color: var(--muted); font-size: .86rem; }
+.mx-empty b { color: var(--heading); font-size: .95rem; }
+.mx-empty.center { margin: auto; align-items: center; text-align: center; max-width: 320px; }
+.mx-empty-icon { color: var(--faint); }
+.mx-loading { margin: auto; color: var(--muted); font-size: .86rem; }
+
+/* Écran moyen : les dossiers passent en bandeau au-dessus. */
+@media (max-width: 1180px) {
+  .mx { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .mx-folders {
+    grid-column: 1 / -1; flex-direction: row; overflow-x: auto; gap: 6px;
+    border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 10px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  /* Bandeau qui glisse au doigt ou à la molette : pas de barre grise. */
+  .mx-folders::-webkit-scrollbar, .mx-toolbar-actions::-webkit-scrollbar { display: none; }
+  .mx-toolbar-actions { scrollbar-width: none; }
+  .mx-sep { display: none; }
+  .mx-folder { width: auto; flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px; }
+  .mx-folder.on { border-color: var(--accent); }
+}
+
+/* Téléphone : la liste, puis le message en plein écran avec un retour. */
+@media (max-width: 760px) {
+  .mx { display: flex; flex-direction: column; height: calc(100vh - 128px); min-height: 0; border-radius: 14px; }
+  .mx-folders { flex: 0 0 auto; }
+  .mx-list-pane { flex: 1; min-height: 0; border-right: 0; }
+  .mx-reader { display: none; }
+  .mx.reading .mx-folders, .mx.reading .mx-list-pane { display: none; }
+  .mx.reading .mx-reader { display: flex; flex: 1; }
+  .mx-back { display: inline-flex; }
+  .mx-toolbar { padding: 8px 10px; }
+  .mx-toolbar-actions { overflow-x: auto; flex-wrap: nowrap; }
+  .mx-toolbar-actions .btn { flex: 0 0 auto; }
+  .mx-reader-scroll { padding: 14px 14px 32px; }
+  .mx-subject h1 { font-size: 1.12rem; }
+  .mx-composer-foot .btn-row { width: 100%; }
 }

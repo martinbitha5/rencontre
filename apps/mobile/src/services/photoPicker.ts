@@ -1,4 +1,5 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { THUMB_EDGE, THUMB_QUALITY } from '@/services/api';
 import * as ImagePicker from 'expo-image-picker';
 
 // Choix d'une photo puis préparation pour l'envoi.
@@ -14,11 +15,17 @@ import * as ImagePicker from 'expo-image-picker';
 // sont conservées, on borne la plus grande dimension. Cela garantit aussi un
 // vrai JPEG (les iPhone livrent du HEIC) et un fichier largement sous la
 // limite de 5 Mo du bucket.
-const MAX_EDGE = 1600;
-const QUALITY = 0.85;
+//
+// Économie de données : 1080 pixels suffisent à l'écran d'un téléphone, même
+// en plein écran, et une compression à 0,75 reste nette à l'oeil. Une photo
+// pèse ainsi environ 120 Ko au lieu de 250 à 500 Ko, à l'envoi comme pour
+// chaque personne qui la regarde. Une miniature de 400 pixels (une vingtaine
+// de Ko) est produite en même temps, pour les vignettes et les listes.
+const MAX_EDGE = 1080;
+const QUALITY = 0.75;
 
 export type PickPhotoResult =
-  | { status: 'ok'; base64: string }
+  | { status: 'ok'; base64: string; thumbBase64?: string }
   | { status: 'cancelled' }
   | { status: 'denied' }
   | { status: 'camera_denied' }
@@ -80,7 +87,22 @@ export async function pickProfilePhoto(source: PhotoSource = 'library'): Promise
     if (!out.base64) {
       return { status: 'error', message: 'La photo est trop lourde à préparer.' };
     }
-    return { status: 'ok', base64: out.base64 };
+    // Miniature : best effort, la photo part même si elle échoue.
+    let thumbBase64: string | undefined;
+    try {
+      const small = ImageManipulator.manipulate(asset.uri);
+      const portrait = (asset.height ?? 0) >= (asset.width ?? 0);
+      small.resize(portrait ? { width: THUMB_EDGE } : { height: THUMB_EDGE });
+      const t = await (await small.renderAsync()).saveAsync({
+        format: SaveFormat.JPEG,
+        compress: THUMB_QUALITY,
+        base64: true,
+      });
+      thumbBase64 = t.base64 ?? undefined;
+    } catch {
+      thumbBase64 = undefined;
+    }
+    return { status: 'ok', base64: out.base64, thumbBase64 };
   } catch (e) {
     const detail = (e as { message?: string })?.message ?? '';
     return { status: 'error', message: detail || 'Préparation de la photo impossible.' };

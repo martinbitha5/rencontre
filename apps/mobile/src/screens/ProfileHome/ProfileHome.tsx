@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,13 +14,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getMyPhotos, getMyVerification, photoUrl, setIncognito, updateMyProfile } from '@/services/api';
+import { getMyPhotos, getMyVerification, setIncognito, updateMyProfile } from '@/services/api';
 import { GoalSheet } from '@/components/GoalSheet';
 import { CoinIcon } from '@/components/coins';
 import { IncognitoIntroModal } from '@/components/IncognitoIntroModal';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
 import { Centered, VerifiedBadge } from '@/components/ui';
 import { formatCoins } from '@/config/economy';
+import { TesterProgramCard } from '@/components/TesterProgram';
 import { PAYMENTS_ENABLED } from '@/config/features';
 import { SITE } from '@/config/support';
 import { useAuth } from '@/providers/auth';
@@ -37,6 +38,8 @@ import {
   type VerificationState,
   type ViewableProfile,
 } from '@/types';
+import { Photo } from '@/components/Photo';
+import { refreshUnreadNotices, useUnreadNotices } from '@/utils/noticeSignal';
 
 // Accueil de l'onglet Profil. En haut, sur fond blanc : le titre et trois
 // raccourcis (paramètres, aide, modifier), la photo dans l'anneau de
@@ -48,7 +51,7 @@ export default function ProfileHome() {
   const router = useRouter();
   // Petit téléphone (moins de 360 points) : photo, nom et tuiles se
   // resserrent pour que rien ne soit coupé.
-  const { width, compact, largeText } = useResponsive();
+  const { width } = useResponsive();
   // La photo suit la largeur de l'écran (34 %), bornée entre 104 et 148.
   const ring = Math.round(Math.min(148, Math.max(104, width * 0.34)));
   // Sous 400 points, le nom et l'intention prennent une taille plus sobre.
@@ -89,8 +92,17 @@ export default function ProfileHome() {
     });
   }, []);
 
+  // Cloche : nombre de notifications non lues, relu à chaque visite.
+  const unreadNotices = useUnreadNotices();
+  // Lu dans l'effet de focus sans le relancer à chaque rendu.
+  const profileVerifiedRef = useRef(!!profile?.is_verified);
+  useEffect(() => {
+    profileVerifiedRef.current = !!profile?.is_verified;
+  }, [profile?.is_verified]);
+
   useFocusEffect(
     useCallback(() => {
+      refreshUnreadNotices();
       getMyPhotos()
         .then((fresh) => {
           setPhotos(fresh);
@@ -101,10 +113,13 @@ export default function ProfileHome() {
         .then((fresh) => {
           setVerification(fresh);
           cacheSet('my-verification', fresh);
+          // Vérification validée depuis le dernier chargement du profil : on
+          // relit le profil pour que le badge apparaisse et que la tuile parte.
+          if (fresh.is_verified && !profileVerifiedRef.current) void refreshProfile();
         })
         .catch(() => {});
       refreshWallet();
-    }, [refreshWallet]),
+    }, [refreshWallet, refreshProfile]),
   );
 
   if (!profile) {
@@ -215,6 +230,9 @@ export default function ProfileHome() {
   ];
   const completion = Math.round((checks.filter(Boolean).length / checks.length) * 100);
   const goalLabel = labelFor(GOAL_OPTIONS, profile.relationship_goal);
+  // Le profil ou l'état fraîchement relu : dès que l'un dit vérifié, la tuile
+  // de vérification n'a plus rien à faire.
+  const isVerified = profile.is_verified || !!verification?.is_verified;
   const nextTip = !photos.length || photos.length < 2
     ? 'Ajoute une deuxième photo, les profils avec plusieurs photos reçoivent plus de likes.'
     : !profile.bio?.trim()
@@ -231,14 +249,25 @@ export default function ProfileHome() {
           <Text style={styles.topTitle}>Profil</Text>
           <View style={styles.topIcons}>
             <TopIcon
+              icon="notifications"
+              label="Notifications"
+              badge={unreadNotices}
+              onPress={() => router.push('/notifications')}
+            />
+            <TopIcon
               icon="settings-sharp"
               label="Paramètres"
               onPress={() => router.push('/(tabs)/profile/settings')}
             />
+            {/* Les soirées : scanner le QR affiché à l'entrée. Remplace l'ancien
+                raccourci d'aide, l'aide reste dans les Paramètres. */}
             <TopIcon
-              icon="help"
-              label="Aide"
-              onPress={() => WebBrowser.openBrowserAsync(`${SITE}/faq.html`).catch(() => {})}
+              icon="qr-code"
+              label="Scanner une soirée"
+              onPress={() => {
+                haptic.tap();
+                router.push('/scan');
+              }}
             />
             <TopIcon
               icon="create"
@@ -271,8 +300,8 @@ export default function ProfileHome() {
             >
               <CompletionRing percent={completion} size={ring} />
               {photos[0] ? (
-                <Image
-                  source={{ uri: photoUrl(photos[0].storage_path) }}
+                <Photo
+                  path={photos[0].storage_path}
                   style={[styles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
                   contentFit="cover"
                   cachePolicy="memory-disk"
@@ -356,85 +385,62 @@ export default function ProfileHome() {
             </Pressable>
           </View>
 
-          {/* Onglets soulignés, collés en haut quand on fait défiler. */}
+          {/* Deux boutons sur la même ligne, collés en haut quand on fait
+              défiler. Celui qui est ouvert est plein, en rose. */}
           <View style={styles.tabs}>
-            {(['atouts', 'securite'] as const).map((t) => (
-              <Pressable
-                key={t}
-                style={styles.tab}
-                onPress={() => {
-                  haptic.select();
-                  setTab(t);
-                }}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: tab === t }}
-              >
-                <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>
-                  {t === 'atouts' ? 'Mes atouts' : 'Sécurité'}
-                </Text>
-                <View style={[styles.tabLine, tab === t && styles.tabLineOn]} />
-              </Pressable>
-            ))}
+            <View style={styles.tabsTrack} accessibilityRole="tablist">
+              {(['atouts', 'securite'] as const).map((t) => {
+                const on = tab === t;
+                return (
+                  <Pressable
+                    key={t}
+                    style={({ pressed }) => [
+                      styles.tab,
+                      on && styles.tabOn,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                    onPress={() => {
+                      haptic.select();
+                      setTab(t);
+                    }}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                  >
+                    <Ionicons
+                      name={t === 'atouts' ? 'sparkles' : 'shield-checkmark'}
+                      size={17}
+                      color={on ? '#ffffff' : colors.primary}
+                    />
+                    <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1}>
+                      {t === 'atouts' ? 'Mes atouts' : 'Sécurité'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           <Animated.View key={tab} entering={FadeIn.duration(220)} style={styles.panel}>
             {tab === 'atouts' ? (
               <>
-                {/* Deux tuiles d'état côte à côte. */}
-                <View style={[styles.tiles, (compact || largeText) && styles.tilesStacked]}>
-                  <MiniTile
-                    icon="images"
-                    label="Mes photos"
-                    value={`${photos.length} sur 6`}
-                    onPress={() => router.push('/(tabs)/profile/edit')}
-                  />
-                  <MiniTile
-                    icon="shield-checkmark"
-                    label="Vérification"
-                    value={
-                      profile.is_verified
-                        ? 'Vérifié'
-                        : verification?.status === 'pending'
-                          ? 'En cours'
-                          : 'À faire'
-                    }
-                    accent={!profile.is_verified && verification?.status !== 'pending'}
-                    onPress={() => router.push('/verify-profile')}
-                  />
-                </View>
-
-                {/* Carte vedette : les soirées, dans le bloc sombre à halo rose
-                    du site. */}
-                <View style={styles.feature}>
-                  <View style={styles.featureHalo} />
-                  <Text style={styles.featureKicker}>ZOLA EN SOIRÉE</Text>
-                  <Text style={styles.featureTitle}>Rencontre les gens qui sont là, ce soir</Text>
-                  <Pressable
-                    style={({ pressed }) => [styles.featureBtn, pressed && { opacity: 0.9 }]}
-                    onPress={() => {
-                      haptic.tap();
-                      router.push('/scan');
-                    }}
-                    accessibilityRole="button"
-                  >
-                    <Ionicons name="qr-code" size={18} color="#101113" />
-                    <Text style={styles.featureBtnText}>Scanner une soirée</Text>
-                  </Pressable>
-                  <View style={styles.featureList}>
-                    {[
-                      'Scanne le code QR affiché à l’entrée',
-                      'Découvre uniquement les personnes présentes',
-                      'Les matchs restent, la soirée s’efface',
-                    ].map((line) => (
-                      <View key={line} style={styles.featureRow}>
-                        <View style={styles.featureCheck}>
-                          <Ionicons name="checkmark" size={13} color="#ffffff" />
-                        </View>
-                        <Text style={styles.featureText}>{line}</Text>
-                      </View>
-                    ))}
+                {/* La vérification, tant que le profil n'est pas vérifié. Les
+                    photos se gèrent depuis Modifier mon profil, en haut, pas
+                    besoin d'un second accès ici. */}
+                {!isVerified && (
+                  <View style={styles.tiles}>
+                    <MiniTile
+                      icon="shield-checkmark"
+                      label="Vérification"
+                      value={verification?.status === 'pending' ? 'En cours' : 'À faire'}
+                      accent={verification?.status !== 'pending'}
+                      onPress={() => router.push('/verify-profile')}
+                    />
                   </View>
-                </View>
+                )}
+
+                {/* Programme testeur : le tableau des 14 jours. Les soirées
+                    sont passées en haut de l'écran (icône QR). */}
+                <TesterProgramCard />
 
                 {PAYMENTS_ENABLED && (
                   <ActionCard
@@ -527,10 +533,13 @@ function TopIcon({
   icon,
   label,
   onPress,
+  badge = 0,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
+  // Pastille rose avec le nombre de nouveautés (cloche des notifications).
+  badge?: number;
 }) {
   return (
     <Pressable
@@ -540,10 +549,15 @@ function TopIcon({
         onPress();
       }}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={badge > 0 ? `${label}, ${badge} nouvelle(s)` : label}
       style={({ pressed }) => [styles.topIcon, pressed && { opacity: 0.55 }]}
     >
       <Ionicons name={icon} size={26} color={colors.text} />
+      {badge > 0 && (
+        <View style={styles.topBadge}>
+          <Text style={styles.topBadgeText}>{badge > 9 ? '9+' : badge}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }

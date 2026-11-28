@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorText, Input, StepIntro } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
@@ -65,7 +66,6 @@ export default function SignIn() {
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
         <StepIntro
@@ -88,7 +88,7 @@ export default function SignIn() {
           />
           <Pressable onPress={() => router.push('/(auth)/password')} hitSlop={6}>
             <Text style={styles.altLink}>
-              Tu n'as pas accès à tes e-mails ? Connexion avec mot de passe
+              Tu n’as pas accès à tes e-mails ? Connexion avec mot de passe
             </Text>
           </Pressable>
           <ErrorText>{error}</ErrorText>
@@ -107,7 +107,7 @@ export default function SignIn() {
             </View>
             <Text style={styles.modalTitle}>Aucun compte trouvé</Text>
             <Text style={styles.modalText}>
-              Aucun compte n'existe avec {email.trim()}. Veux-tu plutôt créer un compte avec cet
+              Aucun compte n’existe avec {email.trim()}. Veux-tu plutôt créer un compte avec cet
               e-mail ?
             </Text>
             <Button title="Oui, créer un compte" onPress={createInstead} />

@@ -1,25 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
+  Linking,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import Animated, { Easing, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   deletePhoto,
   getCities,
   getMyPhotos,
-  photoUrl,
   updateMyProfile,
   uploadPhoto,
 } from '@/services/api';
@@ -36,11 +36,14 @@ import {
 } from './OnboardingKit';
 import { OnboardingWelcome } from './OnboardingWelcome';
 import { useAuth } from '@/providers/auth';
-import { detectCity } from '@/utils/cityGeo';
+import { detectCity, type DetectedPlace } from '@/utils/cityGeo';
+import { COUNTRIES, COUNTRY_CODES, countryName } from '@/utils/countries';
 import { haptic } from '@/utils/haptics';
 import { pickPhotoMessage, pickProfilePhoto, type PhotoSource } from '@/services/photoPicker';
 import { PhotoSourceSheet } from '@/components/PhotoSourceSheet';
 import {
+  AGE_MAX,
+  AGE_MIN,
   EDUCATION_OPTIONS,
   FREQUENCY_OPTIONS,
   GOAL_OPTIONS,
@@ -54,10 +57,31 @@ import {
   WANTS_CHILDREN_OPTIONS,
 } from '@/profileOptions';
 import { colors, keyboardAppearance, onLight } from '@/theme';
-import type { City, Gender, MyPhoto } from '@/types';
+import type { City, CountryCode, Gender, MyPhoto } from '@/types';
 import { styles } from './Onboarding.styles';
 import { onIntroDone } from '@/utils/introState';
 import type { InputHandle } from '@/utils/useFocusWhenShown';
+import { Photo } from '@/components/Photo';
+
+// Ce qu'on dit quand la position ne permet pas (encore) de choisir sa ville.
+function placeMessage(place: DetectedPlace, chosen: CountryCode | null): string | null {
+  switch (place.status) {
+    case 'ok':
+      return null;
+    case 'denied':
+      return 'Zola a besoin de ta position pour confirmer ta ville. Sans elle, on ne peut pas continuer.';
+    case 'blocked':
+      return 'La position est désactivée pour Zola. Autorise-la dans les réglages du téléphone pour confirmer ta ville.';
+    case 'unavailable':
+      return 'On n’arrive pas à lire ta position. Vérifie que la localisation du téléphone est activée, idéalement près d’une fenêtre, puis réessaie.';
+    case 'wrong_country':
+      return `Ta position indique que tu es en ${
+        place.country ? COUNTRIES[place.country].short : 'un autre pays'
+      }, pas en ${chosen ? COUNTRIES[chosen].short : 'ce pays'}. Choisis le pays où tu vis.`;
+    case 'outside':
+      return 'Zola est ouvert en RDC et au Congo-Brazzaville. Ta position est en dehors de ces deux pays.';
+  }
+}
 
 // Une question par écran. D'abord ce qui est indispensable pour exister dans
 // le deck (jusqu'aux photos), ensuite ce qui remplit la fiche « Plus d'infos ».
@@ -69,6 +93,7 @@ const STEPS = [
   'gender',
   'lookingFor',
   'goal',
+  'country',
   'city',
   'photos',
   'height',
@@ -132,6 +157,11 @@ const STEP_META: Record<
     icon: 'heart',
     title: 'Que recherches-tu ?',
     subtitle: 'Sois honnête, ça aide à croiser des personnes du même avis. Tu pourras changer à tout moment.',
+  },
+  country: {
+    icon: 'flag',
+    title: 'Dans quel pays vis-tu ?',
+    subtitle: 'Zola est ouvert en RDC et au Congo-Brazzaville. Tu rencontres les personnes de ton pays.',
   },
   city: {
     icon: 'location',
@@ -201,7 +231,6 @@ const STEP_META: Record<
 };
 
 
-
 // Libellés des réponses fermées, à la première personne comme sur la fiche.
 const SMOKING_LABELS: Record<string, string> = {
   jamais: 'Non, jamais',
@@ -225,8 +254,8 @@ const HAS_CHILDREN_LABELS: Record<string, string> = {
 
 const BIO_MAX = 500;
 const MAX_PHOTOS = 6;
-const MIN_AGE = 18;
-const MAX_AGE = 100;
+const MIN_AGE = AGE_MIN;
+const MAX_AGE = AGE_MAX;
 const HEIGHT_MIN = 100;
 const HEIGHT_MAX = 250;
 
@@ -278,8 +307,17 @@ export default function Onboarding() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [lookingFor, setLookingFor] = useState<Gender | null>(null);
   const [goal, setGoal] = useState<string | null>(null);
+  // Le pays d'abord : il décide des seules villes chargées et proposées.
+  const [country, setCountry] = useState<CountryCode | null>(null);
+  // Liste déroulante des pays, ouverte ou fermée.
+  const [countryOpen, setCountryOpen] = useState(false);
   const [cities, setCities] = useState<City[]>([]);
   const [cityId, setCityId] = useState<number | null>(null);
+  // Vérification de position, obligatoire pour passer l'étape de la ville.
+  // null tant qu'elle n'a pas répondu.
+  const [place, setPlace] = useState<DetectedPlace | null>(null);
+  const [locating, setLocating] = useState(false);
+  // Ce que la personne tape pour chercher sa ville.
   const [cityQuery, setCityQuery] = useState('');
   const [photos, setPhotos] = useState<MyPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -296,12 +334,7 @@ export default function Onboarding() {
   const [religion, setReligion] = useState<string | null>(null);
   const [languages, setLanguages] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
-  const [detectedCity, setDetectedCity] = useState<City | null>(null);
   const detectionStarted = useRef(false);
-  // La personne a touché à la ville : la détection de position, si elle
-  // répond en retard, ne doit plus écraser son choix.
-  const cityTouched = useRef(false);
-  const cityConfirmed = useRef(false);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const step: Step = STEPS[stepIndex];
@@ -320,19 +353,64 @@ export default function Onboarding() {
   const meta = STEP_META[step];
 
   useEffect(() => {
-    getCities().then(setCities).catch(() => {});
     getMyPhotos().then(setPhotos).catch(() => {});
   }, []);
+
+  // Changer de pays repart de zéro côté ville : nouvelle liste, nouvelle
+  // vérification par la position. Les villes de l'autre pays ne sont jamais
+  // chargées.
+  const chooseCountry = (code: CountryCode) => {
+    if (code === country) return;
+    setCities([]);
+    setCityId(null);
+    setCityQuery('');
+    setPlace(null);
+    detectionStarted.current = false;
+    setCountry(code);
+  };
+
+  useEffect(() => {
+    if (!country) return;
+    let alive = true;
+    getCities(country)
+      .then((c) => alive && setCities(c))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [country]);
+
+  // Vérifie la position. La ville la plus proche est retenue d'office ; la
+  // personne ne peut choisir que parmi les villes proches de là où elle est.
+  const locate = async () => {
+    if (!cities.length || locating) return;
+    setLocating(true);
+    try {
+      // La ville n'est pas cochée d'office : la personne la cherche et la
+      // choisit, la position sert à vérifier son choix.
+      setPlace(await detectCity(cities));
+    } finally {
+      setLocating(false);
+    }
+  };
 
   useEffect(() => {
     if (step !== 'city' || !cities.length || detectionStarted.current) return;
     detectionStarted.current = true;
-    detectCity(cities).then((det) => {
-      if (!det) return;
-      setDetectedCity(det);
-      if (!cityTouched.current) setCityId((current) => current ?? det.id);
-    });
+    void locate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, cities]);
+
+  // Permission refusée pour de bon : seuls les réglages du téléphone peuvent
+  // la rendre. Au retour dans l'app, on revérifie de soi-même.
+  useEffect(() => {
+    if (step !== 'city' || place?.status !== 'blocked') return;
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void locate();
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, place?.status]);
 
   // Date valide seulement si les trois cases forment un vrai jour du
   // calendrier (le 31 février est refusé).
@@ -346,43 +424,33 @@ export default function Onboarding() {
     return date;
   }, [bDay, bMonth, bYear]);
 
-  const normalize = (s: string) =>
-    s
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '');
 
-  const citySuggestions = useMemo(() => {
-    if (cityId) return [];
-    const q = normalize(cityQuery.trim());
-    // Rien de tapé : toutes les villes, celle de la position en tête. On
-    // choisit d'un toucher, sans avoir à deviner l'orthographe.
-    if (q.length < 2) {
-      return [...cities].sort((a, b) =>
-        a.id === detectedCity?.id ? -1 : b.id === detectedCity?.id ? 1 : 0,
-      );
-    }
-    const isSubsequence = (needle: string, hay: string) => {
-      let i = 0;
-      for (const ch of hay) if (ch === needle[i]) i++;
-      return i === needle.length;
-    };
-    return cities
-      .filter((c) => {
-        const n = normalize(c.name);
-        return n.includes(q) || (q.length >= 3 && isSubsequence(q, n));
-      })
-      .slice(0, 6);
-  }, [cityQuery, cityId, cities, detectedCity]);
-
-  // Changer de ville : on repart d'un champ vide, la liste complète revient.
-  const changeCity = () => {
-    cityTouched.current = true;
-    setCityId(null);
-    setCityQuery('');
-  };
-
+  // La ville où se trouve vraiment le téléphone : la plus proche de la
+  // position, dans le pays choisi. Seule celle-là est acceptée.
+  const positionCity = place?.status === 'ok' ? place.allowed[0] : null;
   const chosenCity = cities.find((c) => c.id === cityId) ?? null;
+  // En développement (simulateur, émulateur, téléphone de test hors des deux
+  // Congo), toute ville du pays passe pour pouvoir tester l'inscription ;
+  // jamais dans l'app publiée.
+  const devBypass = __DEV__ && !!place && place.status !== 'ok';
+  const cityAllowed = !!chosenCity && (devBypass || chosenCity.id === positionCity?.id);
+
+  // Suggestions sous le champ : rien tant qu'on n'a pas tapé, puis les villes
+  // du pays dont le nom commence ou contient ce qui est tapé, accents ignorés.
+  const citySuggestions = useMemo(() => {
+    if (chosenCity) return [];
+    const flat = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '');
+    const q = flat(cityQuery.trim());
+    if (!q) return [];
+    return cities
+      .filter((c) => flat(c.name).includes(q))
+      .sort((a, b) => Number(!flat(a.name).startsWith(q)) - Number(!flat(b.name).startsWith(q)))
+      .slice(0, 6);
+  }, [cityQuery, cities, chosenCity]);
 
   const age = useMemo(() => {
     if (!birthDate) return null;
@@ -400,7 +468,7 @@ export default function Onboarding() {
       case 'birthdate':
         if (!birthDate) return 'Entre une date de naissance valide.';
         if (age !== null && age < MIN_AGE) return 'Zola est réservé aux 18 ans et plus.';
-        if (age !== null && age > MAX_AGE) return 'Vérifie ton année de naissance.';
+        if (age !== null && age > MAX_AGE) return `Zola est ouvert de ${MIN_AGE} à ${MAX_AGE} ans.`;
         return null;
       case 'gender':
         return gender ? null : 'Choisis ton genre.';
@@ -408,8 +476,18 @@ export default function Onboarding() {
         return lookingFor ? null : 'Choisis les profils que tu veux voir.';
       case 'goal':
         return goal ? null : 'Choisis ce que tu recherches.';
+      case 'country':
+        return country ? null : 'Choisis ton pays.';
       case 'city':
-        return cityId ? null : 'Choisis ta ville dans la liste.';
+        // Sans position vérifiée, pas de ville : on ne passe pas l'étape. Et
+        // seule la ville où l'on se trouve vraiment est acceptée.
+        if (locating || !place) return 'On vérifie ta position, un instant.';
+        if (!chosenCity) return 'Cherche ta ville et choisis-la dans la liste.';
+        if (cityAllowed) return null;
+        if (positionCity) {
+          return `Ta position indique que tu es à ${positionCity.name}, pas à ${chosenCity.name}. Choisis la ville où tu te trouves.`;
+        }
+        return placeMessage(place, country) ?? 'Choisis ta ville dans la liste.';
       case 'photos':
         return photos.length >= 1 ? null : 'Ajoute au moins une photo.';
       case 'height': {
@@ -447,30 +525,6 @@ export default function Onboarding() {
     }
     setError(null);
     Keyboard.dismiss();
-
-    if (step === 'city' && detectedCity && cityId !== detectedCity.id && !cityConfirmed.current) {
-      Alert.alert(
-        'Vérifions ta ville',
-        `Ta position indique ${detectedCity.name}, mais tu as choisi ${chosenCity?.name ?? 'une autre ville'}. Laquelle garder ?`,
-        [
-          {
-            text: `Utiliser ${detectedCity.name}`,
-            onPress: () => {
-              setCityId(detectedCity.id);
-              goTo(stepIndex + 1);
-            },
-          },
-          {
-            text: `Garder ${chosenCity?.name ?? 'mon choix'}`,
-            onPress: () => {
-              cityConfirmed.current = true;
-              goTo(stepIndex + 1);
-            },
-          },
-        ],
-      );
-      return;
-    }
 
     if (stepIndex < STEPS.length - 1) {
       haptic.tap();
@@ -540,7 +594,7 @@ export default function Onboarding() {
     }
     setUploading(true);
     try {
-      const uploaded = await uploadPhoto(picked.base64, photos.length);
+      const uploaded = await uploadPhoto(picked.base64, photos.length, picked.thumbBase64);
       setPhotos((p) => [...p, uploaded]);
       haptic.tap();
     } catch (e) {
@@ -581,7 +635,6 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.container}
       >
         <OnboardingHeader step={stepIndex + 1} total={STEPS.length} onBack={back} />
@@ -709,51 +762,115 @@ export default function Onboarding() {
                 </View>
               )}
 
+              {step === 'country' && (
+                <>
+                  {/* Sélecteur : fermé, il montre le pays choisi ; ouvert, la
+                      liste des pays servis apparaît juste dessous. */}
+                  <Pressable
+                    style={({ pressed }) => [styles.searchField, pressed && { opacity: 0.8 }]}
+                    onPress={() => setCountryOpen((o) => !o)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: countryOpen }}
+                    accessibilityLabel={
+                      country ? `Pays, ${COUNTRIES[country].name}. Changer` : 'Choisir ton pays'
+                    }
+                  >
+                    {country ? (
+                      <Text style={styles.countryFlag}>{COUNTRIES[country].flag}</Text>
+                    ) : (
+                      <Ionicons name="earth" size={18} color={colors.textMuted} />
+                    )}
+                    <Text
+                      style={[styles.countryValue, !country && { color: colors.textMuted, fontWeight: '400' }]}
+                      numberOfLines={1}
+                    >
+                      {country ? COUNTRIES[country].name : 'Choisis ton pays'}
+                    </Text>
+                    <Ionicons
+                      name={countryOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </Pressable>
+
+                  {countryOpen && (
+                    <View style={styles.cardStack}>
+                      {COUNTRY_CODES.map((code) => (
+                        <OptionCard
+                          key={code}
+                          emoji={COUNTRIES[code].flag}
+                          label={COUNTRIES[code].name}
+                          selected={country === code}
+                          onPress={() => {
+                            chooseCountry(code);
+                            setCountryOpen(false);
+                          }}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+
               {step === 'city' && (
                 <>
-                  <View style={styles.searchField}>
-                    <Ionicons name="search" size={18} color={colors.textMuted} />
-                    <TextInput
-                      keyboardAppearance={keyboardAppearance}
-                      style={styles.searchInput}
-                      placeholder="Ta ville"
-                      placeholderTextColor={colors.textMuted}
-                      value={chosenCity ? chosenCity.name : cityQuery}
-                      // Toucher le champ quand une ville est déjà choisie le
-                      // vide : on tape directement la nouvelle ville, au lieu
-                      // d'ajouter des lettres au bout de l'ancienne.
-                      onFocus={() => {
-                        if (chosenCity) changeCity();
-                      }}
-                      onChangeText={(t) => {
-                        cityTouched.current = true;
+                  {/* On tape sa ville, les suggestions s'affichent dessous, on
+                      touche la bonne. La position vérifie le choix : seule la
+                      ville où l'on se trouve vraiment est acceptée. */}
+                  {chosenCity ? (
+                    <OptionCard
+                      icon={cityAllowed ? 'checkmark-circle' : 'alert-circle'}
+                      label={`${chosenCity.name}, ${countryName(chosenCity.country)}`}
+                      hint={
+                        cityAllowed
+                          ? place?.status === 'ok'
+                            ? 'Confirmée par ta position'
+                            : chosenCity.province
+                          : positionCity
+                            ? `Ta position indique ${positionCity.name}`
+                            : chosenCity.province
+                      }
+                      selected={cityAllowed}
+                      onPress={() => {
                         setCityId(null);
-                        setCityQuery(t);
+                        setCityQuery('');
                       }}
-                      autoCorrect={false}
-                      autoCapitalize="words"
                     />
-                    {(!!chosenCity || cityQuery.length > 0) && (
-                      <Pressable
-                        hitSlop={10}
-                        onPress={changeCity}
-                        accessibilityLabel="Effacer la ville"
-                      >
-                        <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                      </Pressable>
-                    )}
-                  </View>
+                  ) : (
+                    <View style={styles.searchField}>
+                      <Ionicons name="search" size={18} color={colors.textMuted} />
+                      <TextInput
+                        keyboardAppearance={keyboardAppearance}
+                        style={styles.searchInput}
+                        placeholder="Ta ville"
+                        placeholderTextColor={colors.textMuted}
+                        value={cityQuery}
+                        onChangeText={setCityQuery}
+                        autoCorrect={false}
+                        autoCapitalize="words"
+                        returnKeyType="search"
+                      />
+                      {cityQuery.length > 0 && (
+                        <Pressable
+                          hitSlop={10}
+                          onPress={() => setCityQuery('')}
+                          accessibilityLabel="Effacer"
+                        >
+                          <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
 
                   {citySuggestions.length > 0 && (
                     <View style={styles.cardStack}>
                       {citySuggestions.map((c) => (
                         <OptionCard
                           key={c.id}
-                          icon={detectedCity?.id === c.id ? 'navigate' : 'location-outline'}
+                          icon="location-outline"
                           label={c.name}
-                          hint={`${c.province}${detectedCity?.id === c.id ? ' · ta position' : ''}`}
+                          hint={`${c.province}, ${countryName(c.country)}`}
                           onPress={() => {
-                            cityTouched.current = true;
                             setCityId(c.id);
                             setCityQuery(c.name);
                             Keyboard.dismiss();
@@ -765,27 +882,71 @@ export default function Onboarding() {
 
                   {!chosenCity && cityQuery.trim().length >= 2 && citySuggestions.length === 0 && (
                     <Text style={styles.note}>
-                      Aucune ville trouvée. Zola couvre les grandes villes de la RDC.
+                      Aucune ville trouvée en {country ? COUNTRIES[country].short : 'ce pays'}.
                     </Text>
                   )}
 
                   {!!chosenCity && (
-                    <OptionCard
-                      icon={detectedCity?.id === chosenCity.id ? 'navigate' : 'location'}
-                      label={chosenCity.name}
-                      hint={
-                        detectedCity?.id === chosenCity.id
-                          ? 'Ville confirmée par ta position.'
-                          : `${chosenCity.province} · République démocratique du Congo`
-                      }
-                      selected
-                      onPress={changeCity}
-                    />
-                  )}
-                  {!!chosenCity && (
-                    <Pressable onPress={changeCity} hitSlop={8} style={styles.changeCity}>
+                    <Pressable
+                      onPress={() => {
+                        setCityId(null);
+                        setCityQuery('');
+                      }}
+                      hitSlop={8}
+                      style={styles.changeCity}
+                    >
                       <Text style={styles.changeCityText}>Changer de ville</Text>
                     </Pressable>
+                  )}
+
+                  {/* État de la vérification de position. */}
+                  {(locating || !place) && (
+                    <View style={styles.privacyRow}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={styles.privacyText}>On vérifie ta position…</Text>
+                    </View>
+                  )}
+
+                  {!locating && !!place && place.status !== 'ok' && (
+                    <>
+                      <Text style={styles.note}>{placeMessage(place, country)}</Text>
+                      {place.status === 'wrong_country' && place.country ? (
+                        <OptionCard
+                          emoji={COUNTRIES[place.country].flag}
+                          label={`Passer en ${COUNTRIES[place.country].short}`}
+                          hint="Tes villes seront celles de ce pays."
+                          onPress={() => place.country && chooseCountry(place.country)}
+                        />
+                      ) : place.status === 'blocked' ? (
+                        <OptionCard
+                          icon="settings"
+                          label="Ouvrir les réglages"
+                          hint="Autorise la position pour Zola, puis reviens ici."
+                          onPress={() => Linking.openSettings().catch(() => {})}
+                        />
+                      ) : place.status !== 'outside' ? (
+                        <OptionCard
+                          icon="navigate"
+                          label={place.status === 'denied' ? 'Autoriser la position' : 'Réessayer'}
+                          onPress={() => void locate()}
+                        />
+                      ) : null}
+                      {devBypass && (
+                        <Text style={styles.note}>
+                          Mode développement, toutes les villes du pays sont acceptées pour tester.
+                        </Text>
+                      )}
+                    </>
+                  )}
+
+                  {!locating && place?.status === 'ok' && (
+                    <View style={styles.privacyRow}>
+                      <Ionicons name="lock-closed" size={14} color={colors.textMuted} />
+                      <Text style={styles.privacyText}>
+                        Ta ville est vérifiée par ta position et ne pourra plus changer. Ta position
+                        exacte n’est jamais enregistrée.
+                      </Text>
+                    </View>
                   )}
                 </>
               )}
@@ -799,8 +960,8 @@ export default function Onboarding() {
                         if (photo) {
                           return (
                             <View key={photo.id} style={styles.photoCell}>
-                              <Image
-                                source={{ uri: photoUrl(photo.storage_path) }}
+                              <Photo
+                                path={photo.storage_path}
                                 style={styles.photoImg}
                                 contentFit="cover"
                               />
@@ -1042,7 +1203,12 @@ export default function Onboarding() {
         </ScrollView>
 
         <View style={styles.footer}>
-          {!!error && <Text style={styles.error}>{error}</Text>}
+          {/* Le message d'une étape incomplète s'efface de lui-même dès que
+              l'étape est remplie ; une erreur d'enregistrement (dernière
+              étape) reste affichée. */}
+          {!!error && (isLast || validateStep() !== null) && (
+            <Text style={styles.error}>{error}</Text>
+          )}
           {OPTIONAL_STEPS.includes(step) && !isLast && (
             <SkipLink
               onPress={() => {
@@ -1063,7 +1229,10 @@ export default function Onboarding() {
               title={isLast ? 'Terminer' : 'Continuer'}
               onPress={next}
               loading={saving}
-              disabled={validateStep() !== null}
+              // Grisé tant que l'étape est incomplète, mais jamais bloqué :
+              // le premier appui passe toujours, et s'il manque quelque
+              // chose, next() l'affiche au-dessus du bouton.
+              dimmed={validateStep() !== null}
             />
           )}
         </View>

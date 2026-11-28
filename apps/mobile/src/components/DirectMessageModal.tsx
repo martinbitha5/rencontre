@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -15,15 +14,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView, KEYBOARD_PRESS_RETENTION } from '@/components/keyboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { photoUrl, sendDirectMessage } from '@/services/api';
+import { sendDirectMessage } from '@/services/api';
 import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
 import { PAYMENTS_ENABLED } from '@/config/features';
 import { haptic } from '@/utils/haptics';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 import { useWallet } from '@/providers/wallet';
 import { colors, flame, keyboardAppearance } from '@/theme';
 import type { DirectMessageResult } from '@/types';
+import { Photo } from '@/components/Photo';
 
 // Écran d'envoi du premier message, plein écran et clair : en-tête avec retour
 // et titre centré, la carte du destinataire, un grand champ encadré qui
@@ -89,9 +89,6 @@ export function DirectMessageModal({
   onResult: (result: DirectMessageResult, target: Target) => void;
 }) {
   const { wallet, costs } = useWallet();
-  // Android edge-to-edge : le champ et le bouton Envoyer doivent remonter
-  // au-dessus du clavier (iOS reste sur le KeyboardAvoidingView).
-  const keyboardInset = useKeyboardInset();
   // Marges de la fenêtre, lues dans le contexte du provider racine : elles
   // valent dans une Modal là où la SafeAreaView native ne les voit pas. Si
   // même elles sont nulles sur Android (anciens appareils), la hauteur de la
@@ -190,11 +187,9 @@ export function DirectMessageModal({
         ]}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={[
-            styles.flex,
-            Platform.OS === 'android' && keyboardInset > 0 ? { paddingBottom: keyboardInset } : null,
-          ]}
+          // Le champ et le bouton Envoyer restent au-dessus du clavier, sur
+          // iOS comme sur Android (components/keyboard).
+          style={styles.flex}
         >
           {/* En-tête : retour à gauche, titre centré. */}
           <View style={styles.header}>
@@ -223,8 +218,8 @@ export function DirectMessageModal({
             {showHero && (
               <View style={styles.recipient}>
                 {photoPath ? (
-                  <Image
-                    source={{ uri: photoUrl(photoPath) }}
+                  <Photo
+                    path={photoPath}
                     style={styles.avatar}
                     contentFit="cover"
                   />
@@ -308,6 +303,7 @@ export function DirectMessageModal({
                 haptic.impact();
                 send();
               }}
+              pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
               disabled={!canSend}
               accessibilityRole="button"
               accessibilityLabel="Envoyer le message"

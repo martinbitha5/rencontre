@@ -23,11 +23,13 @@ import { CoinIcon, InsufficientCoinsModal } from '@/components/coins';
 import { formatCoins } from '@/config/economy';
 import { PAYMENTS_ENABLED } from '@/config/features';
 import { haptic } from '@/utils/haptics';
+import { onReconnect } from '@/utils/network';
 import { onPartyAccessChanged } from '@/utils/partySignal';
 import { DirectMessageModal } from '@/components/DirectMessageModal';
 import { FingerprintDraw } from '@/components/ZolaLogo';
 import { PressableScale } from '@/components/motion';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
+import { showToast } from '@/components/TopToast';
 import { SwipeDeck, type SwipeDeckHandle } from './SwipeDeck';
 import { Button, Centered } from '@/components/ui';
 import { useWallet } from '@/providers/wallet';
@@ -97,8 +99,22 @@ export default function Discover() {
     }
   }, []);
 
+  // Premier paquet du fil Rencontres, demandé dès l'ouverture EN MÊME TEMPS
+  // que la détection de soirée. Avant, il attendait la réponse des soirées :
+  // deux allers-retours à la suite, soit une seconde de plus sur un réseau
+  // mobile lent. Le cas courant (aucune soirée) consomme ce paquet ; en
+  // soirée, il est simplement ignoré.
+  const firstFeed = useRef<Promise<FeedProfile[]> | null>(null);
+
   // Premier lancement uniquement.
   useEffect(() => {
+    if (!firstFeed.current) {
+      const p = getDiscoveryFeed(20);
+      // L'erreur éventuelle est lue plus tard par loadFeed : on évite
+      // seulement qu'elle remonte comme « non gérée » en attendant.
+      p.catch(() => {});
+      firstFeed.current = p;
+    }
     syncEvent();
   }, [syncEvent]);
 
@@ -137,6 +153,15 @@ export default function Discover() {
         return;
       }
       setFavoriteIds((prev) => new Set(prev).add(profile.user_id));
+      // Le profil quitte Rencontres sans like ni passe : il est rangé dans
+      // Activité, onglet Favoris. La personne n'en sait rien.
+      haptic.success();
+      setProfiles((prev) => prev.filter((p) => p.user_id !== profile.user_id));
+      showToast({
+        text: `${profile.display_name} est dans tes favoris, onglet Activité. Personne n'est prévenu.`,
+        tone: 'success',
+        duration: 3000,
+      });
     } catch {
       // silencieux, l'étoile restera vide
     }
@@ -153,7 +178,11 @@ export default function Discover() {
       })
       .catch(() => {});
     try {
-      const feed = await fetchFeed(20);
+      // Paquet demandé à l'ouverture : servi une seule fois, et seulement
+      // hors soirée.
+      const early = firstFeed.current;
+      firstFeed.current = null;
+      const feed = early && !eventId ? await early : await fetchFeed(20);
       setProfiles(feed);
       lastLoadedAt.current = Date.now();
     } catch (error) {
@@ -164,7 +193,7 @@ export default function Discover() {
     } finally {
       setLoading(false);
     }
-  }, [fetchFeed, syncEvent]);
+  }, [fetchFeed, syncEvent, eventId]);
 
   // Premier affichage (une fois la soirée connue), et bascule automatique
   // quand la soirée en cours change (elle commence ou se termine).
@@ -184,6 +213,19 @@ export default function Discover() {
     });
     return () => sub.remove();
   }, [syncEvent, loadFeed]);
+
+  // Retour du réseau après une coupure : si le fil n'a jamais pu se charger
+  // (ouverture hors ligne), on le recharge sans attendre un geste. Un fil
+  // déjà affiché n'est pas remplacé sous les doigts de la personne.
+  useEffect(
+    () =>
+      onReconnect(() => {
+        if (lastLoadedAt.current !== 0) return;
+        syncEvent();
+        loadFeed();
+      }),
+    [syncEvent, loadFeed],
+  );
 
   // Le filtre « profils en ligne » peut vider la file sans que rien ne
   // l'explique : on propose de le couper depuis l'écran vide.

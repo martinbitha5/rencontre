@@ -48,6 +48,7 @@ import { SITE } from '@/config/support';
 import { PoseCard } from './PoseCard';
 import { GestureImage } from '@/components/GestureArt';
 import { useAuth } from '@/providers/auth';
+import { countryName, useMyCountry } from '@/utils/countries';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { haptic } from '@/utils/haptics';
 import { colors, isDark, photoScrim, spacing } from '@/theme';
@@ -581,6 +582,8 @@ function MiniCard({
   tag: string;
   tilt?: boolean;
 }) {
+  // Le pays de ma ville, sous mon prénom : RDC ou Congo-Brazzaville.
+  const country = useMyCountry();
   return (
     <View style={[styles.miniCardWrap, tilt && styles.miniCardTilt]}>
       <View style={styles.miniPhotoFrame}>
@@ -605,7 +608,7 @@ function MiniCard({
             {verified && <VerifiedBadge size={18} />}
           </View>
           <Text style={styles.miniPlace} numberOfLines={1}>
-            République démocratique du Congo
+            {countryName(country)}
           </Text>
         </LinearGradient>
       </View>

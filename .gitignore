@@ -24,3 +24,15 @@ supabase/.temp/
 
 # Fichiers temporaires bureautiques
 ~$*
+
+# Jeton pawaPay copié en local, ne jamais commiter
+api.md
+
+# Exports de données personnelles (waitlist), jamais dans git
+exports/
+
+# Archives du site pour Hostinger
+*.zip
+
+# Jeton d API local, jamais dans le depot
+api.txt

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
@@ -20,7 +20,8 @@ import {
   getProfileView,
   getProfileViews,
   likeBack,
-  photoUrl,
+  markActivitySeen,
+  markMessagesRead,
   removeFavorite,
   sendSwipe,
   unmatch,
@@ -37,6 +38,7 @@ import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { prefetchPhotos } from '@/utils/preload';
+import { badgeLabel, useBadges } from '@/utils/badgeSignal';
 import { haptic } from '@/utils/haptics';
 import { useWallet } from '@/providers/wallet';
 import { colors } from '@/theme';
@@ -52,6 +54,7 @@ import {
   type ProfileView,
   type ViewableProfile,
 } from '@/types';
+import { Photo } from '@/components/Photo';
 
 // L'onglet Activité regroupe tout ce qui bouge autour
 // de ton profil : les demandes de message reçues, tes favoris, et les likes.
@@ -61,6 +64,9 @@ type Section = 'requests' | 'favorites' | 'likers' | 'views';
 // navigue au doigt (balayage horizontal) comme au toucher des onglets, les
 // deux restent synchronisés par l'index de page.
 const SECTIONS: Section[] = ['requests', 'likers', 'views', 'favorites'];
+
+// Bleu des deux coches d'un message lu, le repère que tout le monde connaît.
+const READ_BLUE = '#34B7F1';
 
 // État vide centré : la licorne mascotte de Zola, avec le badge propre à
 // chaque page (bulle, cœur, œil, étoile), texte gris en dessous.
@@ -95,8 +101,8 @@ function RowAvatar({
   return (
     <View>
       {path ? (
-        <Image
-          source={{ uri: photoUrl(path) }}
+        <Photo
+          path={path}
           style={styles.rowAvatar}
           contentFit="cover"
           cachePolicy="memory-disk"
@@ -142,6 +148,16 @@ export default function Activity() {
   // Ouverture sur les DMs : c'est la section la plus consultée, elle prime
   // sur les likes.
   const [section, setSection] = useState<Section>('requests');
+  const badges = useBadges();
+
+  // Ouvrir la page Likes ou Vues (onglet Activité à l'écran) remet sa
+  // pastille à zéro côté serveur.
+  useFocusEffect(
+    useCallback(() => {
+      if (section === 'likers') markActivitySeen('likes').catch(() => {});
+      else if (section === 'views') markActivitySeen('views').catch(() => {});
+    }, [section]),
+  );
   // DMs : demandes reçues / invitations envoyées (l'option payante).
   // Les deux vues vivent ici, dans Activité.
   const [dmView, setDmView] = useState<'received' | 'sent'>('received');
@@ -240,6 +256,22 @@ export default function Activity() {
     }, [reloadActivity]),
   );
 
+  // Les invitations reçues se lisent dans la liste des DMs reçus, pas dans une
+  // conversation. Dès que cette liste est à l'écran, leurs messages comptent
+  // comme lus : chez l'expéditeur, les deux coches passent au bleu. Une
+  // invitation ne porte qu'un message, elle n'est donc signalée qu'une fois.
+  const markedRead = useRef(new Set<string>());
+  useFocusEffect(
+    useCallback(() => {
+      if (section !== 'requests' || dmView !== 'received') return;
+      for (const r of requests) {
+        if (markedRead.current.has(r.match_id)) continue;
+        markedRead.current.add(r.match_id);
+        markMessagesRead(r.match_id).catch(() => markedRead.current.delete(r.match_id));
+      }
+    }, [section, dmView, requests]),
+  );
+
   // Un profil bloqué ou signalé disparaît de toutes les listes d'un coup :
   // le serveur l'a déjà retiré, l'écran se met au diapason sans recharger.
   const dropBlocked = useCallback((id: string) => {
@@ -323,10 +355,11 @@ export default function Activity() {
         return;
       }
       consumeLike();
+      // Like envoyé : le favori libère sa place (le serveur l'a déjà retiré,
+      // migration 070), match ou pas.
+      setFavorites((prev) => prev.filter((f) => f.user_id !== profile.user_id));
       if (result.status === 'match') {
         setLikers((prev) => prev.filter((l) => l.user_id !== profile.user_id));
-        // Match créé : le profil sort des favoris, la conversation prend le relais.
-        setFavorites((prev) => prev.filter((f) => f.user_id !== profile.user_id));
         Alert.alert("C'est un match !", `${profile.display_name} et toi pouvez discuter.`);
       } else {
         Alert.alert('Like envoyé', `Si ${profile.display_name} te like aussi, c'est un match.`);
@@ -403,6 +436,9 @@ export default function Activity() {
     } else {
       refreshWallet();
     }
+    // DM parti : la personne quitte les favoris (retirée côté serveur par la
+    // migration 070), sa place se libère.
+    setFavorites((prev) => prev.filter((f) => f.user_id !== target.user_id));
     // La vue Envoyés doit refléter le DM tout de suite, sans attendre un
     // retour sur l'écran.
     reloadActivity().catch(() => {});
@@ -442,11 +478,11 @@ export default function Activity() {
     );
   }
 
-  const tabs: { key: Section; label: string }[] = [
-    { key: 'requests', label: 'DMs' },
-    { key: 'likers', label: 'Likes' },
-    { key: 'views', label: 'Vues' },
-    { key: 'favorites', label: 'Favoris' },
+  const tabs: { key: Section; label: string; count: number }[] = [
+    { key: 'requests', label: 'DMs', count: badges.requests },
+    { key: 'likers', label: 'Likes', count: badges.likes },
+    { key: 'views', label: 'Vues', count: badges.views },
+    { key: 'favorites', label: 'Favoris', count: 0 },
   ];
 
   return (
@@ -470,7 +506,15 @@ export default function Activity() {
             const active = section === t.key;
             return (
               <Pressable key={t.key} style={styles.tab} onPress={() => goToSection(t.key)}>
-                <Text style={active ? styles.tabTextActive : styles.tabText}>{t.label}</Text>
+                <View style={styles.tabLabelRow}>
+                  <Text style={active ? styles.tabTextActive : styles.tabText}>{t.label}</Text>
+                  {/* Nouveautés de la page : pastille rose comme sur l'onglet. */}
+                  {t.count > 0 && (
+                    <View style={styles.tabCount}>
+                      <Text style={styles.tabCountText}>{badgeLabel(t.count)}</Text>
+                    </View>
+                  )}
+                </View>
                 <View style={[styles.tabUnderline, active && styles.tabUnderlineActive]} />
               </Pressable>
             );
@@ -631,19 +675,6 @@ export default function Activity() {
                         Envoyé {timeAgo(item.last_message_at ?? item.matched_at)}
                       </Text>
                     </Pressable>
-                    {/* État de lecture en pastille : rose plein quand c'est lu. */}
-                    <View style={[styles.sentChip, item.sent_read === true && styles.sentChipRead]}>
-                      <Ionicons
-                        name={item.sent_read === true ? 'checkmark-done' : 'checkmark'}
-                        size={14}
-                        color={item.sent_read === true ? colors.textOnAccent : colors.textMuted}
-                      />
-                      <Text
-                        style={[styles.sentChipText, item.sent_read === true && styles.sentChipTextRead]}
-                      >
-                        {item.sent_read === true ? 'Lu' : 'Distribué'}
-                      </Text>
-                    </View>
                   </View>
                   {/* Le message tel qu'il est parti : une bulle comme dans la
                       conversation, alignée à droite. */}
@@ -651,10 +682,22 @@ export default function Activity() {
                     <Text style={styles.sentBubbleText}>{item.last_message ?? 'Message envoyé'}</Text>
                   </View>
                   <View style={styles.sentFooter}>
-                    <View style={styles.sentWaiting}>
-                      <Ionicons name="hourglass-outline" size={14} color={colors.textMuted} />
-                      <Text style={styles.sentStatusText} numberOfLines={1}>
-                        {item.sent_read === true ? 'Vu, en attente de réponse' : 'En attente de lecture'}
+                    {/* Deux coches : grises quand le message est arrivé, bleues
+                        dès que la personne l'a lu. */}
+                    <View
+                      style={styles.sentWaiting}
+                      accessibilityLabel={item.sent_read === true ? 'Message lu' : 'Message reçu'}
+                    >
+                      <Ionicons
+                        name="checkmark-done"
+                        size={17}
+                        color={item.sent_read === true ? READ_BLUE : colors.textMuted}
+                      />
+                      <Text
+                        style={[styles.sentStatusText, item.sent_read === true && { color: READ_BLUE }]}
+                        numberOfLines={1}
+                      >
+                        {item.sent_read === true ? 'Message lu' : 'Message reçu'}
                       </Text>
                     </View>
                     <Pressable
@@ -678,7 +721,10 @@ export default function Activity() {
           {/* Page Likes : rangées blanches, avatar badgé, like retour en
               pilule accent avec son coût. */}
           {likers.length === 0 ? (
-            <EmptyState variant="likes" text="Personne pour l'instant. Continue à liker, ça finit toujours par matcher." />
+            <EmptyState
+              variant="likes"
+              text="Personne pour l'instant. Les likes reçus restent ici 7 jours, continue à liker."
+            />
           ) : (
             <FlatList
               data={likers}
@@ -732,7 +778,7 @@ export default function Activity() {
           {views.length === 0 ? (
             <EmptyState
               variant="views"
-              text="Personne n'a encore ouvert ton profil aujourd'hui. Complète tes photos pour attirer les regards."
+              text="Personne n'a ouvert ton profil ces dernières 24 heures. Complète tes photos pour attirer les regards."
             />
           ) : (
             <FlatList
@@ -775,7 +821,7 @@ export default function Activity() {
           {favorites.length === 0 ? (
             <EmptyState
               variant="favorites"
-              text="Aucun favori. Appuie sur l'étoile d'un profil dans Rencontres pour le garder sous la main."
+              text="Aucun favori. Appuie sur l'étoile d'un profil dans Rencontres pour le garder ici. Personne ne sait que tu l'as mis en favori."
             />
           ) : (
             <FlatList

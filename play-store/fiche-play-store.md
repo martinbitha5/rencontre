@@ -23,6 +23,17 @@ Ordre des captures, les deux premières sont celles qu'on voit sans faire défil
 7. Ton profil, « Un profil vérifié qui te ressemble »
 8. Confidentialité, « Ta vie privée, tes règles »
 
+Captures pour appareils pliables, dossier `4-captures-pliables`, à importer
+dans cet ordre dans la rubrique « Captures d'écran sur appareils pliables ».
+Les trois premières sont celles que Google exige.
+
+1. `pliable-1-deplie-1x1.png`, écran déplié 1:1, 2048 x 2048
+2. `pliable-2-deplie-4x3.png`, écran déplié 4:3, 2048 x 1536
+3. `pliable-3-externe-10x16.png`, écran externe plié 10:16, 1200 x 1920
+4. `pliable-4-deplie-4x3.png`, déplié 4:3
+5. `pliable-5-deplie-1x1.png`, déplié 1:1
+6. `pliable-6-externe-10x16.png`, externe 10:16
+
 Le format 9:16 en 1080 x 1920 rend la fiche éligible aux emplacements mis en
 avant de Google Play (il faut au moins 4 captures de ce format, il y en a 8).
 
@@ -94,7 +105,10 @@ pas les remplir à ta place.
   l'inscription), les messages, et le selfie de vérification (supprimé après
   examen). Déclare-les tels qu'ils sont réellement utilisés.
 - Accès à l'application, Google demande un compte de test pour examiner une
-  application avec connexion. Crée un compte dédié à l'examen.
+  application avec connexion. L'app se connecte d'habitude par un code reçu
+  par e-mail, que Google ne peut pas recevoir. Crée donc un compte dédié avec
+  un mot de passe, l'examinateur passe par le lien « Connexion avec mot de
+  passe » de l'écran de connexion.
 - Normes de sécurité des enfants, la page
   https://zola-rdc.com/securite-enfants peut servir de lien.
 
@@ -124,3 +138,5 @@ Après une modification (titre, ordre, couleurs), relancer depuis `apps/video`
 ```
 node scripts/rendre-play-store.mjs
 ```
+
+Pour ne refaire que les captures pliables, `node scripts/rendre-play-store.mjs Pliable`.

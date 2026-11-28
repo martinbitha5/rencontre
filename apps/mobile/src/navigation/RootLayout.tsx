@@ -3,7 +3,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Font from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from '@/components/keyboard';
 import { AppLockProvider, useAppLock } from '@/providers/applock';
 import { AuthProvider, useAuth } from '@/providers/auth';
 import { wireNotificationNavigation } from '@/services/notifications';
@@ -12,6 +15,7 @@ import { bootThemePreference, watchSystemTheme } from '@/utils/themePreference';
 import { WalletProvider } from '@/providers/wallet';
 import { AppLoading } from '@/components/AppLoading';
 import { IntroSplash } from '@/components/IntroSplash';
+import { LiveSync } from '@/components/LiveSync';
 import { LockScreen } from '@/components/LockScreen';
 import { showToast, TopToastHost } from '@/components/TopToast';
 import { cacheGet, cacheSet } from '@/utils/cache';
@@ -24,6 +28,10 @@ import { preloadWelcomeVideo } from '@/utils/welcomeVideo';
 // l'intro ait peint sa première image : c'est IntroSplash qui le retire, pour
 // un enchaînement sans image vide. Fondu court côté natif.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Polices d'icônes chargées tout de suite, pendant l'écran de lancement :
+// sinon chacune ne se charge qu'à sa première icône, et les pictogrammes
+// (centres d'intérêt d'un profil, par exemple) apparaissaient avec retard.
+Font.loadAsync({ ...Ionicons.font, ...MaterialCommunityIcons.font }).catch(() => {});
 // Le fondu natif n'existe que dans les vraies builds ; Expo Go l'ignore et
 // prévient dans les journaux, on ne l'y demande donc pas.
 if (!IS_EXPO_GO) {
@@ -187,6 +195,8 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Suivi natif du clavier pour toute l'app (voir components/keyboard). */}
+      <KeyboardProvider>
       <ThemeProvider value={navTheme}>
       <AppLockProvider>
         <AuthProvider>
@@ -227,6 +237,7 @@ export default function RootLayout() {
                   <Stack.Screen name="recharge" />
                   <Stack.Screen name="incognito" />
                   <Stack.Screen name="privacy" />
+                  <Stack.Screen name="notifications" />
                   <Stack.Screen name="payment" />
                   <Stack.Screen name="mobile-money" />
                   <Stack.Screen name="checkout" />
@@ -240,6 +251,7 @@ export default function RootLayout() {
               </Gate>
             </LockGate>
             <VerifiedAnnouncer />
+            <LiveSync />
             <TopToastHost />
             {!introDone && (
               <IntroSplash
@@ -253,6 +265,7 @@ export default function RootLayout() {
         </AuthProvider>
       </AppLockProvider>
       </ThemeProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

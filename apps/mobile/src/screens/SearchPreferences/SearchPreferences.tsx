@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getCities, updateMyProfile, updateSearchFilters } from '@/services/api';
+import { updateMyProfile, updateSearchFilters } from '@/services/api';
 import { CoinIcon, InsufficientCoinsModal } from '@/components/coins';
 import { RangeSlider } from './RangeSlider';
 import {
@@ -17,9 +17,11 @@ import { COIN_NAME_PLURAL, formatCoins } from '@/config/economy';
 import { PAYMENTS_ENABLED } from '@/config/features';
 import { useAuth } from '@/providers/auth';
 import { useWallet } from '@/providers/wallet';
-import { GOAL_OPTIONS, goalIcon, RELIGION_OPTIONS } from '@/profileOptions';
+import { AGE_MAX, AGE_MIN, GOAL_OPTIONS, goalIcon, RELIGION_OPTIONS } from '@/profileOptions';
+import { COUNTRIES, countryName, useCitiesOf, useMyCities } from '@/utils/countries';
+import { BottomSheet } from '@/screens/Settings/BottomSheet';
 import { colors, spacing } from '@/theme';
-import type { City, Gender } from '@/types';
+import type { CountryCode, Gender } from '@/types';
 import { styles } from './SearchPreferences.styles';
 import { safeBack } from '@/utils/safeBack';
 
@@ -151,9 +153,14 @@ export default function SearchPreferences() {
   const [insufficientCost, setInsufficientCost] = useState<number | null>(null);
   const [lookingFor, setLookingFor] = useState<Gender | null>(profile?.looking_for ?? null);
   const [ageMin, setAgeMin] = useState(profile?.age_min ?? 18);
-  const [ageMax, setAgeMax] = useState(profile?.age_max ?? 99);
-  const [cityId, setCityId] = useState<number | null>(profile?.city_id ?? null);
-  const [wholeCountry, setWholeCountry] = useState(profile?.search_whole_country ?? false);
+  const [ageMax, setAgeMax] = useState(Math.min(profile?.age_max ?? AGE_MAX, AGE_MAX));
+  const [wholeCountry, setWholeCountry] = useState(
+    profile?.search_scope ? profile.search_scope !== 'city' : (profile?.search_whole_country ?? false),
+  );
+  // L'autre Congo : activé ou non, et la ville choisie là-bas (null = toutes).
+  const [otherCongo, setOtherCongo] = useState(profile?.other_congo_enabled ?? false);
+  const [otherCityId, setOtherCityId] = useState<number | null>(profile?.other_congo_city_id ?? null);
+  const [otherCityOpen, setOtherCityOpen] = useState(false);
   const [dmStrict, setDmStrict] = useState(profile?.filter_dm_strict ?? false);
   const [verifiedOnly, setVerifiedOnly] = useState(profile?.filter_verified_only ?? false);
   const [goals, setGoals] = useState<string[] | null>(profile?.filter_goals ?? null);
@@ -161,18 +168,18 @@ export default function SearchPreferences() {
   const [hasChildren, setHasChildren] = useState<TriState>(profile?.filter_has_children ?? null);
   const [smoking, setSmoking] = useState<TriState>(profile?.filter_smoking ?? null);
   const [onlineOnly, setOnlineOnly] = useState(profile?.filter_online_only ?? false);
-  const [cityPickerOpen, setCityPickerOpen] = useState(false);
-  const [cities, setCities] = useState<City[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    getCities().then(setCities).catch(() => {});
-  }, []);
-
-  const cityName = useMemo(
-    () => cities.find((c) => c.id === cityId)?.name ?? '…',
-    [cities, cityId],
-  );
+  // La ville ne se change pas ici : elle est choisie à l'inscription et
+  // validée par la position. Les filtres ne font qu'élargir à tout le pays.
+  // Seules les villes de mon pays sont chargées.
+  const { country, cities } = useMyCities();
+  const cityName = cities.find((c) => c.id === profile?.city_id)?.name ?? '…';
+  const otherCountry: CountryCode = country === 'CG' ? 'CD' : 'CG';
+  const otherCities = useCitiesOf(otherCongo ? otherCountry : null);
+  const otherCityName = otherCityId
+    ? otherCities.find((c) => c.id === otherCityId)?.name ?? '…'
+    : 'Toutes les villes';
 
   const sameArray = (a: string[] | null, b: string[] | null) =>
     JSON.stringify(a === null ? null : [...a].sort()) ===
@@ -192,9 +199,10 @@ export default function SearchPreferences() {
   const dirty =
     lookingFor !== (profile?.looking_for ?? null) ||
     ageMin !== (profile?.age_min ?? 18) ||
-    ageMax !== (profile?.age_max ?? 99) ||
-    cityId !== (profile?.city_id ?? null) ||
-    wholeCountry !== (profile?.search_whole_country ?? false) ||
+    ageMax !== (profile?.age_max ?? AGE_MAX) ||
+    wholeCountry !== (profile?.search_scope ? profile.search_scope !== 'city' : (profile?.search_whole_country ?? false)) ||
+    otherCongo !== (profile?.other_congo_enabled ?? false) ||
+    otherCityId !== (profile?.other_congo_city_id ?? null) ||
     dmStrict !== (profile?.filter_dm_strict ?? false) ||
     verifiedOnly !== (profile?.filter_verified_only ?? false) ||
     !sameArray(goals, profile?.filter_goals ?? null) ||
@@ -205,15 +213,12 @@ export default function SearchPreferences() {
 
   const save = async () => {
     const min = Math.max(18, ageMin);
-    const max = Math.min(99, ageMax);
+    const max = Math.min(AGE_MAX, ageMax);
     if (min > max) {
       return Alert.alert('Filtres invalides', "L'âge minimum dépasse l'âge maximum.");
     }
     if (!lookingFor) {
       return Alert.alert('Filtres invalides', 'Choisis qui tu veux rencontrer.');
-    }
-    if (!cityId) {
-      return Alert.alert('Filtres invalides', 'Choisis ta ville.');
     }
     setSaving(true);
     try {
@@ -222,8 +227,10 @@ export default function SearchPreferences() {
         looking_for: lookingFor,
         age_min: min,
         age_max: max,
-        city_id: cityId,
         search_whole_country: wholeCountry,
+        search_scope: wholeCountry ? 'country' : 'city',
+        other_congo_enabled: otherCongo,
+        other_congo_city_id: otherCongo ? otherCityId : null,
         filter_verified_only: verifiedOnly,
         filter_religions: religions,
         filter_has_children: hasChildren,
@@ -243,7 +250,6 @@ export default function SearchPreferences() {
       }
       apply({ balance: result.balance });
       await refreshProfile();
-      setCityPickerOpen(false);
       // Une fois enregistré, l'écran se referme de lui-même : on revient là
       // d'où l'on venait (Rencontres ou Paramètres) sans chercher la sortie.
       Alert.alert(
@@ -273,30 +279,14 @@ export default function SearchPreferences() {
         {/* Ville + périmètre de recherche. Le toggle dit « uniquement dans la
             ville » : il est l'inverse de search_whole_country en base. */}
         <View style={styles.card}>
-          <Pressable style={styles.cityRow} onPress={() => setCityPickerOpen((v) => !v)}>
+          {/* Ville fixée à l'inscription, validée par la position : on
+              l'affiche, on ne la change pas ici. */}
+          <View style={styles.cityRow}>
             <Text style={styles.rowLabel}>Ville</Text>
             <Text style={styles.cityValue} numberOfLines={1}>
-              {cityName}, République démocratique du Congo
+              {cityName}, {countryName(country)}
             </Text>
-          </Pressable>
-          {cityPickerOpen && (
-            <View style={[styles.chipWrap, { marginTop: spacing.sm }]}>
-              {cities.map((c) => {
-                const active = cityId === c.id;
-                return (
-                  <Pressable
-                    key={c.id}
-                    style={[styles.checkChip, active && styles.checkChipActive]}
-                    onPress={() => setCityId(c.id)}
-                  >
-                    <Text style={[styles.checkChipText, active && { color: colors.primary }]}>
-                      {c.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
+          </View>
           <View style={[styles.rowBetween, { marginTop: spacing.md }]}>
             <Text style={styles.rowLabel}>Chercher uniquement dans la ville</Text>
             <Switch
@@ -306,6 +296,42 @@ export default function SearchPreferences() {
               thumbColor="#ffffff"
             />
           </View>
+
+          {/* L'autre Congo : en plus de ma zone, des profils de l'autre pays,
+              dans la ville choisie (ou toutes ses villes). */}
+          <View style={styles.divider} />
+          <View style={styles.rowBetween}>
+            <View style={{ flex: 1, paddingRight: spacing.md }}>
+              <Text style={styles.rowLabel}>Voir aussi {COUNTRIES[otherCountry].short}</Text>
+              <Text style={styles.hint}>
+                {otherCountry === 'CG'
+                  ? 'Des profils de Brazzaville, Pointe-Noire ou d’une autre ville du Congo-Brazzaville.'
+                  : 'Des profils de Kinshasa, Lubumbashi ou d’une autre ville de la RDC.'}
+              </Text>
+            </View>
+            <Switch
+              value={otherCongo}
+              onValueChange={setOtherCongo}
+              trackColor={{ true: TOGGLE_PINK, false: colors.border }}
+              thumbColor="#ffffff"
+            />
+          </View>
+          {otherCongo && (
+            <Pressable
+              style={({ pressed }) => [styles.cityPick, pressed && { opacity: 0.7 }]}
+              onPress={() => setOtherCityOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Ville au ${COUNTRIES[otherCountry].short}, ${otherCityName}. Changer`}
+            >
+              {/* Libellé sur sa ligne, la ville en dessous : rien n'est coupé,
+                  même avec un nom long ou un petit écran. */}
+              <Text style={styles.rowLabel}>Ville au {COUNTRIES[otherCountry].short}</Text>
+              <View style={styles.cityPickValue}>
+                <Text style={styles.cityPickText}>{otherCityName}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </View>
+            </Pressable>
+          )}
         </View>
 
         {/* Filtre de réception des DM (premium) */}
@@ -336,8 +362,8 @@ export default function SearchPreferences() {
             </Text>
           </View>
           <RangeSlider
-            min={18}
-            max={99}
+            min={AGE_MIN}
+            max={AGE_MAX}
             initialLow={ageMin}
             initialHigh={ageMax}
             onChange={(low, high) => {
@@ -517,6 +543,40 @@ export default function SearchPreferences() {
         cost={insufficientCost}
         onClose={() => setInsufficientCost(null)}
       />
+      {/* Choix de la ville dans l'autre Congo. */}
+      <BottomSheet
+        visible={otherCityOpen}
+        onClose={() => setOtherCityOpen(false)}
+        title={`Ville au ${COUNTRIES[otherCountry].short}`}
+      >
+        <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+          {[{ id: null as number | null, name: 'Toutes les villes', province: COUNTRIES[otherCountry].name }, ...otherCities].map((c) => {
+            const on = otherCityId === c.id;
+            return (
+              <Pressable
+                key={c.id ?? 'all'}
+                style={({ pressed }) => [styles.sheetRow, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  setOtherCityId(c.id);
+                  setOtherCityOpen(false);
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sheetRowLabel, on && { color: colors.primary }]}>{c.name}</Text>
+                  {!!c.province && <Text style={styles.hint}>{c.province}</Text>}
+                </View>
+                <Ionicons
+                  name={on ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={on ? colors.primary : colors.border}
+                />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </BottomSheet>
     </SafeAreaView>
   );
 }

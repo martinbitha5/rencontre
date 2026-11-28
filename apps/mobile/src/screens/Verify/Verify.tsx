@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView } from '@/components/keyboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, ErrorText, StepIntro } from '@/components/ui';
 import { useAuth } from '@/providers/auth';
@@ -75,7 +76,6 @@ export default function Verify() {
         <Ionicons name="chevron-back" size={26} color={colors.text} />
       </Pressable>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <StepIntro

@@ -6,7 +6,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase-public.js';
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Contact | Zola, l'app de rencontre de la RDC</title>
+  <title>Contact | Zola, l'app de rencontre des deux Congo</title>
   <link rel="canonical" href="https://zola-rdc.com/contact">
   <meta property="og:site_name" content="Zola">
   <meta property="og:locale" content="fr_CD">
@@ -38,8 +38,8 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase-public.js';
       "legalName": "Goblaire Ltd",
       "url": "https://zola-rdc.com/",
       "contactPoint": [
-        { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
-        { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": "CD" },
+        { "@type": "ContactPoint", "contactType": "customer support", "email": "support@zola-rdc.com", "availableLanguage": "fr", "areaServed": ["CD", "CG"] },
+        { "@type": "ContactPoint", "contactType": "sales", "email": "partenaires@zola-rdc.com", "availableLanguage": "fr", "areaServed": ["CD", "CG"] },
         { "@type": "ContactPoint", "contactType": "emergency", "name": "Sécurité des enfants", "email": "securite@zola-rdc.com", "availableLanguage": "fr" },
         { "@type": "ContactPoint", "contactType": "public relations", "email": "contact@zola-rdc.com", "availableLanguage": "fr" }
       ]
@@ -169,7 +169,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase-public.js';
               <input type="text" data-detail="Lieu ou marque" data-required maxlength="120" placeholder="Le Bar Matonge, Vodacom...">
             </label>
             <label class="field" data-for="partenariat">Ville
-              <input type="text" data-detail="Ville" data-required maxlength="80" placeholder="Kinshasa">
+              <input type="text" data-detail="Ville" data-required maxlength="80" placeholder="Kinshasa, Brazzaville...">
             </label>
             <label class="field" data-for="partenariat">Date envisagée
               <input type="text" data-detail="Date envisagée" maxlength="80" placeholder="Samedi 12 décembre">
@@ -217,7 +217,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase-public.js';
               <small class="help" data-for="support donnees">Celui de votre compte Zola, on vous retrouve plus vite.</small>
             </label>
             <label class="field">Téléphone ou WhatsApp <span class="opt">facultatif</span>
-              <input type="tel" name="phone" autocomplete="tel" maxlength="40" placeholder="+243">
+              <input type="tel" name="phone" autocomplete="tel" maxlength="40" placeholder="+243 ou +242">
             </label>
           </div>
 

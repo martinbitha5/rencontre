@@ -74,7 +74,15 @@ export const styles = StyleSheet.create({
   },
   freshCounterText: { fontSize: 18, fontWeight: '800', color: colors.text },
   freshEmptyText: { flex: 1, fontSize: 16, color: colors.textMuted },
-  freshListContent: { gap: spacing.md, paddingRight: spacing.md },
+  // Bande défilante de bord à bord : la marge vit dans le contenu, pour que
+  // le compteur et les avatars glissent jusqu'au bord de l'écran.
+  freshStrip: { flexGrow: 0 },
+  freshListContent: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    // Place pour l'ombre des tuiles, sinon rognée par la liste.
+    paddingVertical: 6,
+  },
   freshAvatar: {
     width: 92,
     height: 92,

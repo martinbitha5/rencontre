@@ -18,10 +18,13 @@ import { cacheGet, cacheSet } from '@/utils/cache';
 WebBrowser.maybeCompleteAuthSession();
 
 // Le profil en mémoire est réutilisé tel quel tant que l'app reste ouverte :
-// naviguer entre les écrans ne le recharge jamais. Il n'est relu au serveur
-// qu'au retour au premier plan après au moins cette absence, ou sur demande
-// explicite (refreshProfile après une modification).
-const PROFILE_STALE_MS = 10 * 60 * 1000;
+// naviguer entre les écrans ne le recharge jamais. Il est relu au serveur au
+// retour au premier plan après au moins cette absence, à la réception d'une
+// notification qui le concerne et au retour du réseau (components/LiveSync),
+// ou sur demande explicite (refreshProfile après une modification). Une
+// minute suffit à rattraper une décision de la modération prise pendant que
+// l'app était en arrière-plan, pour le prix d'une petite requête.
+const PROFILE_STALE_MS = 60 * 1000;
 
 // Dernier profil connu, gardé sur le téléphone (cache local vidé à la
 // déconnexion). Au démarrage, l'app s'ouvre aussitôt avec lui et relit la base
@@ -282,8 +285,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, [loadProfile]);
 
-  // Retour au premier plan après une longue absence : le profil servi peut
-  // dater (solde de filtres, vérification passée entre-temps...), on le relit.
+  // Retour au premier plan après plus d'une minute : le profil servi peut
+  // dater (vérification passée entre-temps, photo retirée...), on le relit.
   // Une absence courte ne déclenche rien, une navigation encore moins.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -384,6 +387,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       new Promise((r) => setTimeout(r, 1000)),
     ]);
     await supabase.auth.signOut({ scope: 'local' });
+    // Les pastilles du compte qui part ne doivent pas s'afficher au suivant.
+    const { resetBadges } = await import('@/utils/badgeSignal');
+    resetBadges();
   }, []);
 
   return (

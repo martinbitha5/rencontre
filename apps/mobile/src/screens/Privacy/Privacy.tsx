@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
+
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
@@ -11,7 +11,6 @@ import { SITE } from '@/config/support';
 import { useAuth } from '@/providers/auth';
 import {
   getMyBlocks,
-  photoUrl,
   setIncognito,
   unblockUser,
   updateMyProfile,
@@ -21,6 +20,7 @@ import {
 import { colors } from '@/theme';
 import { haptic } from '@/utils/haptics';
 import { styles } from './Privacy.styles';
+import { Photo } from '@/components/Photo';
 
 // Gérer ta confidentialité : tout ce qui décide de qui te voit et qui peut
 // t'écrire, au même endroit, avec des réglages qui agissent vraiment.
@@ -195,8 +195,8 @@ export default function Privacy() {
                 {i > 0 && <View style={styles.divider} />}
                 <View style={styles.blockRow}>
                   {b.photo ? (
-                    <Image
-                      source={{ uri: photoUrl(b.photo) }}
+                    <Photo
+                      path={b.photo}
                       style={styles.blockAvatar}
                       contentFit="cover"
                     />

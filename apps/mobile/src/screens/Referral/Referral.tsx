@@ -63,7 +63,7 @@ export default function Referral() {
           chaque parrainage ?
         </Text>
         <Text style={styles.subtitle}>
-          Pour chaque ami que tu invites avec succès à s'inscrire et à faire vérifier son
+          Pour chaque ami que tu invites avec succès à s’inscrire et à faire vérifier son
           compte.
         </Text>
 
@@ -77,7 +77,7 @@ export default function Referral() {
               {formatCoins(sponsorAmount)} pièces gratuites par ami parrainé
             </Text>
             <Text style={styles.benefitText}>
-              Créditées dès que ton ami s'inscrit avec ton code et fait vérifier son
+              Créditées dès que ton ami s’inscrit avec ton code et fait vérifier son
               compte.
             </Text>
           </View>
@@ -93,7 +93,7 @@ export default function Referral() {
               {formatCoins(friendBonus)} pièces offertes à chaque ami
             </Text>
             <Text style={styles.benefitText}>
-              Un bonus crédité à ton ami dès la vérification de son compte, s'il s'est
+              Un bonus crédité à ton ami dès la vérification de son compte, s’il s’est
               inscrit avec ton code.
             </Text>
           </View>
@@ -119,7 +119,7 @@ export default function Referral() {
         )}
 
         <Text style={styles.faqLine}>
-          Tu as d'autres questions ?{' '}
+          Tu as d’autres questions ?{' '}
           <Text
             style={styles.faqLink}
             onPress={() => WebBrowser.openBrowserAsync(`${SITE}/faq.html`).catch(() => {})}

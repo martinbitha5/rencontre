@@ -7,11 +7,12 @@ import {
   useAudioRecorder,
 } from 'expo-audio';
 import { Image } from 'expo-image';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,15 +20,15 @@ import {
   Easing,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView, KEYBOARD_PRESS_RETENTION } from '@/components/keyboard';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   blockUser,
   chatMediaUrl,
@@ -37,7 +38,6 @@ import {
   getProfileView,
   getReactions,
   markMessagesRead,
-  photoUrl,
   reactToMessage,
   removeReaction,
   reportUser,
@@ -45,7 +45,7 @@ import {
   sendMediaMessage,
   sendMessage,
   unmatch,
-  voiceUrl,
+  voiceDurationOf,
 } from '@/services/api';
 import { PhotoViewer } from '@/components/PhotoViewer';
 import { ProfileDetailModal } from '@/components/ProfileDetailModal';
@@ -56,13 +56,14 @@ import { claimAudioFocus, releaseAudioFocus } from '@/utils/audioSession';
 import { cacheGet, cacheSet } from '@/utils/cache';
 import { setActiveChatMatchId } from '@/services/notifications';
 import { haptic } from '@/utils/haptics';
-import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { prefetchVoice, voicePlayUri } from '@/utils/voiceCache';
 import { realtimeChannel, supabase } from '@/services/supabase';
-import { colors, keyboardAppearance } from '@/theme';
+import { colors, keyboardAppearance, spacing } from '@/theme';
 import { timeAgo, type Message, type Reaction, type ViewableProfile } from '@/types';
 import { afterInteractions } from '@/utils/afterInteractions';
 import { styles } from './Chat.styles';
 import { safeBack } from '@/utils/safeBack';
+import { Photo } from '@/components/Photo';
 
 const REACTION_EMOJIS = ['❤️', '😂', '😍', '😮', '😢', '👍'];
 
@@ -140,6 +141,23 @@ function waveFor(path: string): number[] {
 }
 
 // Bulle de note vocale : lecture/pause, onde qui se remplit, durée.
+// Notes vocales légères : mono, 22 kHz, 32 kbit/s en AAC. La voix reste
+// claire, et une minute pèse environ 240 Ko, contre 1 Mo avec le préréglage
+// « haute qualité » (stéréo 44 kHz, 128 kbit/s) utilisé avant. Même format
+// .m4a qu'avant : les anciennes notes se lisent comme les nouvelles.
+// Bord le plus long d'une photo envoyée dans une conversation.
+const CHAT_IMAGE_EDGE = 1280;
+
+// Durée maximale d'une note vocale, comme sur Instagram.
+const MAX_VOICE_SECS = 60;
+
+const VOICE_PRESET = {
+  ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 22050,
+  numberOfChannels: 1,
+  bitRate: 32000,
+};
+
 function VoiceBubble({
   path,
   mine,
@@ -149,10 +167,18 @@ function VoiceBubble({
   mine: boolean;
   onLongPress?: () => void;
 }) {
-  const player = useAudioPlayer({ uri: voiceUrl(path) });
+  // Lecteur vide au départ (pas un décodeur par bulle), mais le FICHIER se
+  // télécharge en tâche de fond dès l'affichage (utils/voiceCache) : l'appui
+  // sur « lire » joue alors le fichier local, sans attendre le réseau.
+  const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
+  const loaded = useRef(false);
+  const knownSecs = voiceDurationOf(path);
   const [owner] = useState<PlaybackOwner>(() => ({}));
   const [bars] = useState(() => waveFor(path));
+  useEffect(() => {
+    prefetchVoice(path);
+  }, [path]);
   const fg = mine ? '#ffffff' : colors.text;
   const dim = mine ? 'rgba(255,255,255,0.45)' : 'rgba(127,110,125,0.45)';
 
@@ -180,6 +206,15 @@ function VoiceBubble({
     [owner],
   );
 
+  // Charge la note dans le lecteur : le fichier local s'il est déjà
+  // téléchargé, sinon le serveur. Appelé dès que le doigt touche la bulle,
+  // pour gagner le temps de l'appui.
+  const load = () => {
+    if (loaded.current) return;
+    loaded.current = true;
+    player.replace({ uri: voicePlayUri(path) });
+  };
+
   const toggle = async () => {
     haptic.tap();
     if (status.playing) {
@@ -188,6 +223,7 @@ function VoiceBubble({
     }
     // Arrête la note ou la vidéo qui jouait avant de lancer celle-ci.
     claimPlayback(owner, () => player.pause());
+    load();
     // didJustFinish ne dure qu'un instant : on se fie à la position réelle.
     // Une note lue jusqu'au bout reste calée à la fin, play() n'y jouerait
     // rien, il faut revenir au début pour pouvoir la réécouter.
@@ -205,11 +241,18 @@ function VoiceBubble({
   const progress =
     status.duration > 0 ? Math.min(1, Math.max(0, status.currentTime / status.duration)) : 0;
   const shownSecs =
-    status.playing || status.currentTime > 0 ? status.currentTime : status.duration;
+    status.playing || status.currentTime > 0
+      ? status.currentTime
+      : status.duration > 0
+        ? status.duration
+        : (knownSecs ?? 0);
 
   return (
     <Pressable
       style={styles.voiceRow}
+      onPressIn={() => {
+        if (!status.playing) load();
+      }}
       onPress={toggle}
       onLongPress={onLongPress}
       delayLongPress={280}
@@ -240,12 +283,119 @@ function VoiceBubble({
   );
 }
 
-// Bulle vidéo : lecteur inline avec contrôles natifs.
+// Menu de l'appui long, positionné sur la bulle (voir MessageRow). Sans
+// mesure disponible, il se replie au centre de l'écran.
+const MENU_GAP = 8;
+const EMOJI_BAR_H = 52;
+const ACTION_H = 48;
+
+function MessageActionMenu({
+  visible,
+  rect,
+  mine,
+  canDelete,
+  onReact,
+  onDelete,
+  onClose,
+}: {
+  visible: boolean;
+  rect: BubbleRect | null;
+  mine: boolean;
+  canDelete: boolean;
+  onReact: (emoji: string) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const top0 = insets.top + MENU_GAP;
+  const bottom0 = screenH - insets.bottom - MENU_GAP;
+
+  const r = rect ?? { x: screenW / 2 - 100, y: screenH / 2 - 20, width: 200, height: 40 };
+  const actionH = canDelete ? ACTION_H : 0;
+  // Réactions au-dessus de la bulle s'il y a la place, sinon en dessous.
+  const emojiAbove = r.y - MENU_GAP - EMOJI_BAR_H >= top0;
+  let emojiTop = emojiAbove ? r.y - MENU_GAP - EMOJI_BAR_H : r.y + r.height + MENU_GAP;
+  let actionTop = emojiAbove ? r.y + r.height + MENU_GAP : emojiTop + EMOJI_BAR_H + MENU_GAP;
+  // Bulle collée en bas : la suppression passe au-dessus des réactions.
+  if (actionH && actionTop + actionH > bottom0) {
+    actionTop = Math.max(top0, emojiTop - MENU_GAP - actionH);
+  }
+  // Bulle très haute qui déborde : la barre reste dans l'écran.
+  emojiTop = Math.min(Math.max(emojiTop, top0), bottom0 - EMOJI_BAR_H);
+
+  // Aligné sur le côté du message : à droite pour les miens, à gauche sinon.
+  const side = mine
+    ? { right: Math.max(spacing.md, screenW - (r.x + r.width)) }
+    : { left: Math.max(spacing.md, r.x) };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.menuVeil} onPress={onClose} accessibilityLabel="Fermer le menu">
+        <View style={[styles.menuEmojiBar, { top: emojiTop }, side]}>
+          {REACTION_EMOJIS.map((emoji) => (
+            <Pressable
+              key={emoji}
+              style={({ pressed }) => [styles.menuEmojiBtn, pressed && { transform: [{ scale: 1.2 }] }]}
+              onPress={() => onReact(emoji)}
+              accessibilityLabel={'Réagir avec ' + emoji}
+            >
+              <Text style={styles.emojiText}>{emoji}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {canDelete && (
+          <Pressable
+            style={({ pressed }) => [styles.menuAction, { top: actionTop }, side, pressed && { opacity: 0.8 }]}
+            onPress={onDelete}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            <Text style={styles.actionRowTextDanger}>Supprimer</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Bulle vidéo, en deux temps pour économiser les données : d'abord une
+// vignette avec un bouton lecture, rien n'est téléchargé. Le lecteur n'est
+// créé qu'au toucher, et la vidéo démarre aussitôt. Avant, chaque vidéo
+// d'une conversation commençait à se charger dès qu'elle apparaissait.
+function LazyVideoBubble({ path }: { path: string }) {
+  const [started, setStarted] = useState(false);
+  if (started) return <VideoBubble path={path} />;
+  return (
+    <Pressable
+      style={[styles.mediaBubble, styles.videoPoster]}
+      onPress={() => {
+        haptic.tap();
+        setStarted(true);
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Lire la vidéo"
+    >
+      <View style={styles.videoPosterPlay}>
+        <Ionicons name="play" size={26} color="#ffffff" style={{ marginLeft: 3 }} />
+      </View>
+      <Text style={styles.videoPosterText}>Vidéo</Text>
+    </Pressable>
+  );
+}
+
+// Lecteur inline avec contrôles natifs, monté au toucher (LazyVideoBubble).
 function VideoBubble({ path }: { path: string }) {
   const player = useVideoPlayer(chatMediaUrl(path), (p) => {
     // Ne coupe la musique que pendant qu'elle joue avec le son (le défaut
     // natif iOS, doNotMix, la couperait même à l'arrêt).
     p.audioMixingMode = 'auto';
+    p.play();
   });
   const [owner] = useState<PlaybackOwner>(() => ({}));
   // expo-video prend le focus quand la vidéo joue mais ne le rend jamais :
@@ -286,6 +436,9 @@ function VideoBubble({ path }: { path: string }) {
     />
   );
 }
+
+// Rectangle d'une bulle à l'écran (coordonnées de la fenêtre).
+type BubbleRect = { x: number; y: number; width: number; height: number };
 
 // Repli stable pour la mémoïsation : une nouvelle [] à chaque rendu
 // casserait React.memo sur toutes les bulles sans réaction.
@@ -353,8 +506,8 @@ function cornerStyle(mine: boolean, pos: GroupPos) {
 // Petite photo ronde de l'autre personne, posée au pied de sa grappe.
 function TinyAvatar({ path, name, size }: { path?: string; name?: string; size: number }) {
   return path ? (
-    <Image
-      source={{ uri: photoUrl(path) }}
+    <Photo
+      path={path}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       contentFit="cover"
       cachePolicy="memory-disk"
@@ -398,11 +551,24 @@ const MessageRow = React.memo(function MessageRow({
   status: 'pending' | 'sent' | 'seen' | null;
   otherPhoto?: string;
   otherName?: string;
-  onLongPress: (m: Message) => void;
+  onLongPress: (m: Message, rect: BubbleRect | null) => void;
   onOpenImage: (url: string) => void;
 }) {
   // Toucher une bulle montre son heure exacte, comme dans les messageries.
   const [showTime, setShowTime] = useState(false);
+  // Position de la bulle à l'écran, mesurée à l'appui long : le menu de
+  // réactions s'ouvre collé à elle, pas en bas de l'écran.
+  const bubbleRef = useRef<ComponentRef<typeof View>>(null);
+  const longPress = () => {
+    const node = bubbleRef.current;
+    if (!node) {
+      onLongPress(item, null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      onLongPress(item, width > 0 ? { x, y, width, height } : null);
+    });
+  };
   const isMedia = item.media_path && (item.kind === 'image' || item.kind === 'video');
   const bigEmoji = item.kind === 'text' && isEmojiOnly(item.content);
   const tail = pos === 'single' || pos === 'last';
@@ -410,11 +576,11 @@ const MessageRow = React.memo(function MessageRow({
 
   const body =
     item.kind === 'audio' && item.media_path ? (
-      <VoiceBubble path={item.media_path} mine={mine} onLongPress={() => onLongPress(item)} />
+      <VoiceBubble path={item.media_path} mine={mine} onLongPress={longPress} />
     ) : item.kind === 'image' && item.media_path ? (
       <Pressable
         onPress={() => onOpenImage(chatMediaUrl(item.media_path!))}
-        onLongPress={() => onLongPress(item)}
+        onLongPress={longPress}
         delayLongPress={280}
       >
         <Image
@@ -425,7 +591,7 @@ const MessageRow = React.memo(function MessageRow({
         />
       </Pressable>
     ) : item.kind === 'video' && item.media_path ? (
-      <VideoBubble path={item.media_path} />
+      <LazyVideoBubble path={item.media_path} />
     ) : bigEmoji ? (
       <Text style={styles.bigEmoji}>{item.content}</Text>
     ) : (
@@ -444,8 +610,9 @@ const MessageRow = React.memo(function MessageRow({
         )}
         <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
           <Pressable
+            ref={bubbleRef}
             onPress={() => setShowTime((v) => !v)}
-            onLongPress={() => onLongPress(item)}
+            onLongPress={longPress}
             delayLongPress={280}
             style={({ pressed }) => [
               bigEmoji
@@ -549,13 +716,11 @@ function RecordingDot() {
 // arrondi avec le micro à l'intérieur, et à droite l'envoi quand il y a du
 // texte, sinon un coeur envoyé d'un seul geste.
 const ChatComposer = React.memo(function ChatComposer({
-  sending,
   sendingMedia,
   onSendText,
   onPickMedia,
   onStartRecording,
 }: {
-  sending: boolean;
   sendingMedia: boolean;
   onSendText: (content: string) => Promise<boolean>;
   onPickMedia: () => void;
@@ -563,19 +728,31 @@ const ChatComposer = React.memo(function ChatComposer({
 }) {
   const [draft, setDraft] = useState('');
   const hasText = !!draft.trim();
+  // Verrou anti double envoi : deux appuis rapprochés (ou un appui qui
+  // rebondit) n'envoient jamais deux fois le même message. Il ne bloque PAS
+  // le message suivant : comme sur Instagram, on peut écrire et envoyer
+  // pendant que le précédent part encore (envoi optimiste).
+  const lastSend = useRef({ text: '', at: 0 });
+  const tooSoon = (text: string) => {
+    const now = Date.now();
+    if (lastSend.current.text === text && now - lastSend.current.at < 600) return true;
+    lastSend.current = { text, at: now };
+    return false;
+  };
 
   const submit = async () => {
     const content = draft.trim();
-    if (!content || sending) return;
+    if (!content || tooSoon(content)) return;
     haptic.impact();
     setDraft('');
     const ok = await onSendText(content);
-    // Échec d'envoi : le texte revient dans le champ.
-    if (!ok) setDraft(content);
+    // Échec d'envoi : le texte revient dans le champ, sauf si on a déjà
+    // recommencé à écrire autre chose.
+    if (!ok) setDraft((d) => (d ? d : content));
   };
 
   const sendHeart = () => {
-    if (sending) return;
+    if (tooSoon('❤️')) return;
     haptic.impact();
     onSendText('❤️');
   };
@@ -586,6 +763,7 @@ const ChatComposer = React.memo(function ChatComposer({
         style={({ pressed }) => [styles.iconBtn, (pressed || sendingMedia) && { opacity: 0.5 }]}
         onPress={onPickMedia}
         disabled={sendingMedia}
+        pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
         hitSlop={6}
         accessibilityLabel="Envoyer une photo ou une vidéo"
       >
@@ -609,7 +787,7 @@ const ChatComposer = React.memo(function ChatComposer({
         {!hasText && (
           <Pressable
             onPress={onStartRecording}
-            disabled={sending}
+            pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
             hitSlop={8}
             style={({ pressed }) => [styles.inPillBtn, pressed && { opacity: 0.5 }]}
             accessibilityLabel="Enregistrer une note vocale"
@@ -621,11 +799,10 @@ const ChatComposer = React.memo(function ChatComposer({
       <Pressable
         style={({ pressed }) => [
           styles.iconBtn,
-          (sending || pressed) && { opacity: 0.5 },
-          pressed && { transform: [{ scale: 0.9 }] },
+          pressed && { opacity: 0.5, transform: [{ scale: 0.9 }] },
         ]}
         onPress={hasText ? submit : sendHeart}
-        disabled={sending}
+        pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
         hitSlop={6}
         accessibilityLabel={hasText ? 'Envoyer' : 'Envoyer un coeur'}
       >
@@ -648,7 +825,6 @@ export default function Chat() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
@@ -656,13 +832,16 @@ export default function Chat() {
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Record<number, Reaction[]>>({});
   const [msgAction, setMsgAction] = useState<Message | null>(null);
+  const [msgRect, setMsgRect] = useState<BubbleRect | null>(null);
   const [profileView, setProfileView] = useState<ViewableProfile | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  // Plusieurs envois peuvent partir à la suite (pas de verrou global).
+  const tempSeq = useRef(0);
+  const voiceSending = useRef(false);
+  const recorder = useAudioRecorder(VOICE_PRESET);
   const headerHeight = useHeaderHeight();
   // Android edge-to-edge : hauteur à ajouter sous le composeur pour qu'il
   // reste collé au clavier (voir src/lib/keyboard.ts).
-  const keyboardInset = useKeyboardInset();
 
   // Un DM initial parti et resté sans réponse n'est PAS une conversation :
   // l'expéditeur a payé pour un message, pas pour un fil. Tant que la personne
@@ -712,7 +891,7 @@ export default function Chat() {
 
   useEffect(() => {
     if (!recording) return;
-    const timer = setInterval(() => setRecordSecs((s) => s + 1), 1000);
+    const timer = setInterval(() => setRecordSecs((s) => Math.min(s + 1, MAX_VOICE_SECS)), 1000);
     return () => clearInterval(timer);
   }, [recording]);
 
@@ -884,8 +1063,9 @@ export default function Chat() {
   const sendText = useCallback(
     async (content: string): Promise<boolean> => {
       if (!matchId || !myId) return false;
-      setSending(true);
-      const tempId = -Date.now();
+      // Identifiant provisoire unique, même pour deux envois dans la même
+      // milliseconde.
+      const tempId = -(Date.now() * 100 + (tempSeq.current++ % 100));
       const temp: Message = {
         id: tempId,
         match_id: matchId,
@@ -911,8 +1091,6 @@ export default function Chat() {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         Alert.alert('Erreur', "Le message n'a pas pu être envoyé.");
         return false;
-      } finally {
-        setSending(false);
       }
     },
     [matchId, myId],
@@ -925,13 +1103,39 @@ export default function Chat() {
       mediaTypes: ['images', 'videos'],
       quality: 0.7,
       videoMaxDuration: 60,
+      // iPhone : la vidéo est réencodée en qualité moyenne avant l'envoi,
+      // plusieurs fois plus légère pour qui la reçoit. Android l'envoie
+      // telle quelle (pas de réencodage dans le sélecteur).
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
     });
     const asset = result.assets?.[0];
     if (result.canceled || !asset) return;
     const kind = asset.type === 'video' ? 'video' : 'image';
     setSendingMedia(true);
     try {
-      const msg = await sendMediaMessage(matchId, asset.uri, kind, asset.mimeType ?? undefined);
+      // Photo : bornée à 1280 pixels et recompressée. Une photo de galerie
+      // pèse souvent 3 à 5 Mo, elle part à 150 à 250 Ko.
+      let uri = asset.uri;
+      let mime = asset.mimeType ?? undefined;
+      if (kind === 'image') {
+        try {
+          const ctx = ImageManipulator.manipulate(asset.uri);
+          const longest = Math.max(asset.width ?? 0, asset.height ?? 0);
+          if (longest > CHAT_IMAGE_EDGE) {
+            const portrait = (asset.height ?? 0) >= (asset.width ?? 0);
+            ctx.resize(portrait ? { height: CHAT_IMAGE_EDGE } : { width: CHAT_IMAGE_EDGE });
+          }
+          const out = await (await ctx.renderAsync()).saveAsync({
+            format: SaveFormat.JPEG,
+            compress: 0.72,
+          });
+          uri = out.uri;
+          mime = 'image/jpeg';
+        } catch {
+          // Préparation impossible : on envoie l'original plutôt que rien.
+        }
+      }
+      const msg = await sendMediaMessage(matchId, uri, kind, mime);
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
     } catch {
       Alert.alert(
@@ -981,25 +1185,61 @@ export default function Chat() {
     await releaseAudioFocus();
   }, [recorder]);
 
+  // Note vocale instantanée : la bulle apparaît sous le doigt dès l'appui sur
+  // « envoyer », lisible tout de suite depuis le fichier du téléphone, avec
+  // la petite horloge. L'envoi se fait derrière ; la ligne du serveur
+  // remplace la bulle provisoire. Avant, rien ne s'affichait pendant les
+  // quelques secondes de l'envoi.
   const sendRecording = useCallback(async () => {
-    if (!matchId || sending) return;
+    if (!matchId || !myId || voiceSending.current) return;
+    voiceSending.current = true;
     // Même sensation que l'envoi d'un texte : l'appui sur « envoyer » compte.
     haptic.impact();
-    setSending(true);
     setRecording(false);
+    const secs = recordSecs;
+    let uri: string | null = null;
     try {
       await recorder.stop();
-      await releaseAudioFocus();
-      const uri = recorder.uri;
-      if (!uri) throw new Error('enregistrement introuvable');
-      const msg = await sendAudioMessage(matchId, uri);
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      uri = recorder.uri;
     } catch {
-      Alert.alert('Erreur', "La note vocale n'a pas pu être envoyée.");
-    } finally {
-      setSending(false);
+      uri = null;
     }
-  }, [matchId, sending, recorder]);
+    await releaseAudioFocus();
+    voiceSending.current = false;
+    if (!uri) {
+      Alert.alert('Erreur', "La note vocale n'a pas pu être envoyée.");
+      return;
+    }
+    const tempId = -(Date.now() * 100 + (tempSeq.current++ % 100));
+    const temp: Message = {
+      id: tempId,
+      match_id: matchId,
+      sender_id: myId,
+      content: 'Note vocale',
+      kind: 'audio',
+      media_path: `${uri}#d${Math.max(1, Math.round(secs))}`,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      pending: true,
+    };
+    setMessages((prev) => [...prev, temp]);
+    try {
+      const msg = await sendAudioMessage(matchId, uri, secs);
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => m.id !== tempId);
+        return withoutTemp.some((m) => m.id === msg.id) ? withoutTemp : [...withoutTemp, msg];
+      });
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      Alert.alert('Erreur', "La note vocale n'a pas pu être envoyée.");
+    }
+  }, [matchId, myId, recorder, recordSecs]);
+
+  // Comme Instagram : une note vocale dure une minute au plus. À 1:00,
+  // l'enregistrement s'arrête et part tout seul.
+  useEffect(() => {
+    if (recording && recordSecs >= MAX_VOICE_SECS) sendRecording();
+  }, [recording, recordSecs, sendRecording]);
 
   // Voir le profil complet de la personne, match ou pas.
   const openProfile = useCallback(async () => {
@@ -1012,7 +1252,11 @@ export default function Chat() {
 
   // Poignées stables passées aux bulles mémoïsées : leur identité ne doit
   // pas changer à chaque rendu, sinon React.memo ne sert à rien.
-  const openMsgAction = useCallback((m: Message) => setMsgAction(m), []);
+  const openMsgAction = useCallback((m: Message, rect: BubbleRect | null) => {
+    haptic.impact();
+    setMsgRect(rect);
+    setMsgAction(m);
+  }, []);
   const openImage = useCallback((url: string) => setFullImage(url), []);
 
   const pickReaction = async (emoji: string) => {
@@ -1146,8 +1390,8 @@ export default function Chat() {
             <Pressable style={styles.headerTitle} onPress={openProfile} hitSlop={6}>
               <View>
                 {photoPath ? (
-                  <Image
-                    source={{ uri: photoUrl(photoPath) }}
+                  <Photo
+                    path={photoPath}
                     style={styles.headerAvatar}
                     contentFit="cover"
                     cachePolicy="memory-disk"
@@ -1185,13 +1429,11 @@ export default function Chat() {
       />
       <KeyboardAvoidingView
         style={styles.container}
-        // iOS seulement : sur Android, l'edge-to-edge du SDK 54 rend le
-        // KeyboardAvoidingView inopérant, c'est useKeyboardInset qui pousse
-        // le composeur (jamais les deux à la fois : pas de double décalage).
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Composant clavier commun (components/keyboard) : il suit le vrai
+        // mouvement du clavier sur iOS comme sur Android edge-to-edge.
         // Hauteur réelle de l'en-tête (varie selon encoche / Dynamic Island) :
         // un décalage faussé, même de quelques pixels, cache la barre de saisie.
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+        keyboardVerticalOffset={headerHeight}
       >
         {loading ? (
           <Centered>
@@ -1203,6 +1445,9 @@ export default function Chat() {
             data={messages}
             keyExtractor={(m) => String(m.id)}
             contentContainerStyle={styles.list}
+            // Clavier ouvert : un appui sur une bulle (lire un vocal, ouvrir
+            // une photo) agit tout de suite, sans d'abord fermer le clavier.
+            keyboardShouldPersistTaps="handled"
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             // Historique plafonné à ~50 messages : des fenêtres de rendu
             // modérées suffisent et allègent le premier affichage.
@@ -1265,16 +1510,7 @@ export default function Chat() {
           />
         )}
 
-        {/* Sur Android, ce cadre pousse le composeur juste au-dessus du
-            clavier ; sur iOS il ne fait rien (KeyboardAvoidingView s'en
-            charge), l'inset restant à zéro. */}
-        <View
-          style={
-            Platform.OS === 'android' && keyboardInset > 0
-              ? { paddingBottom: keyboardInset }
-              : null
-          }
-        >
+        <View>
           {locked === null ? null : locked ? (
             // Aucun composeur, aucun bouton média, aucun micro : il n'y a rien
             // à rouvrir tant que la personne n'a pas répondu.
@@ -1291,23 +1527,30 @@ export default function Chat() {
                 <RecordingDot />
                 <Text style={styles.recordingTimer}>{formatSeconds(recordSecs)}</Text>
                 <Text style={styles.recordingLabel} numberOfLines={1}>
-                  Note vocale…
+                  {MAX_VOICE_SECS - recordSecs <= 10
+                    ? `Envoi automatique dans ${MAX_VOICE_SECS - recordSecs} s`
+                    : 'Note vocale, 1 min max'}
                 </Text>
               </View>
-              <Pressable style={styles.cancelBtn} onPress={cancelRecording} hitSlop={6}>
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={cancelRecording}
+                pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+                hitSlop={6}
+              >
                 <Ionicons name="trash-outline" size={20} color={colors.danger} />
               </Pressable>
               <Pressable
-                style={[styles.sendBtn, sending && { opacity: 0.5 }]}
+                style={styles.sendBtn}
                 onPress={sendRecording}
-                disabled={sending}
+                pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+                hitSlop={6}
               >
                 <Ionicons name="paper-plane" size={20} color={colors.textOnAccent} />
               </Pressable>
             </View>
           ) : (
             <ChatComposer
-              sending={sending}
               sendingMedia={sendingMedia}
               onSendText={sendText}
               onPickMedia={pickAndSendMedia}
@@ -1325,41 +1568,26 @@ export default function Chat() {
       />
 
       {/* Profil de l'autre personne, accessible depuis l'en-tête */}
-      <ProfileDetailModal profile={profileView} onClose={() => setProfileView(null)} />
+      <ProfileDetailModal
+        profile={profileView}
+        onClose={() => setProfileView(null)}
+        inConversation
+      />
 
-      {/* Appui long sur un message : réagir ou supprimer */}
-      <Modal
+      {/* Appui long sur un message : réagir ou supprimer. Le menu s'ouvre
+          collé à la bulle touchée, sur un voile léger qui laisse le message
+          bien lisible : les réactions juste au-dessus, la suppression juste
+          en dessous (ou l'inverse si la bulle touche le haut ou le bas de
+          l'écran). Toucher à côté referme. */}
+      <MessageActionMenu
         visible={msgAction !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMsgAction(null)}
-      >
-        <Pressable style={styles.actionOverlay} onPress={() => setMsgAction(null)}>
-          <View style={styles.actionCard}>
-            <View style={styles.emojiRow}>
-              {REACTION_EMOJIS.map((emoji) => (
-                <Pressable
-                  key={emoji}
-                  style={({ pressed }) => [styles.emojiBtn, pressed && { opacity: 0.6 }]}
-                  onPress={() => pickReaction(emoji)}
-                >
-                  <Text style={styles.emojiText}>{emoji}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {msgAction?.sender_id === myId && (
-              <Pressable style={styles.actionRow} onPress={confirmDeleteMessage}>
-                <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                <Text style={styles.actionRowTextDanger}>Supprimer le message</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.actionRow} onPress={() => setMsgAction(null)}>
-              <Ionicons name="close-outline" size={20} color={colors.textMuted} />
-              <Text style={styles.actionRowText}>Annuler</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+        rect={msgRect}
+        mine={msgAction?.sender_id === myId}
+        canDelete={msgAction?.sender_id === myId}
+        onReact={pickReaction}
+        onDelete={confirmDeleteMessage}
+        onClose={() => setMsgAction(null)}
+      />
 
       {/* Photo en plein écran : la même galerie que sur les profils. */}
       <PhotoViewer
