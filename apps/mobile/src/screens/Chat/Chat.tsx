@@ -12,7 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import React, { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Reanimated, {
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { KeyboardAvoidingView, KEYBOARD_PRESS_RETENTION } from '@/components/keyboard';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -35,6 +43,7 @@ import {
   deleteMessage,
   getMatchState,
   getMessages,
+  getPresence,
   getProfileView,
   getReactions,
   markMessagesRead,
@@ -59,7 +68,7 @@ import { haptic } from '@/utils/haptics';
 import { prefetchVoice, voicePlayUri } from '@/utils/voiceCache';
 import { realtimeChannel, supabase } from '@/services/supabase';
 import { colors, keyboardAppearance, spacing } from '@/theme';
-import { timeAgo, type Message, type Reaction, type ViewableProfile } from '@/types';
+import { activeLabel, timeAgo, type Message, type Reaction, type ViewableProfile } from '@/types';
 import { afterInteractions } from '@/utils/afterInteractions';
 import { styles } from './Chat.styles';
 import { safeBack } from '@/utils/safeBack';
@@ -228,8 +237,7 @@ function VoiceBubble({
     // Une note lue jusqu'au bout reste calée à la fin, play() n'y jouerait
     // rien, il faut revenir au début pour pouvoir la réécouter.
     const dur = player.duration || status.duration;
-    const atEnd =
-      status.didJustFinish || (dur > 0 && player.currentTime >= dur - 0.25);
+    const atEnd = status.didJustFinish || (dur > 0 && player.currentTime >= dur - 0.25);
     if (atEnd) await player.seekTo(0);
     if (!holdsFocus.current) {
       holdsFocus.current = true;
@@ -257,7 +265,9 @@ function VoiceBubble({
       onLongPress={onLongPress}
       delayLongPress={280}
       accessibilityRole="button"
-      accessibilityLabel={status.playing ? 'Mettre la note vocale en pause' : 'Écouter la note vocale'}
+      accessibilityLabel={
+        status.playing ? 'Mettre la note vocale en pause' : 'Écouter la note vocale'
+      }
     >
       <View style={[styles.voicePlay, mine ? styles.voicePlayMine : styles.voicePlayTheirs]}>
         <Ionicons
@@ -273,7 +283,10 @@ function VoiceBubble({
             key={i}
             style={[
               styles.waveBar,
-              { height: 4 + h * 20, backgroundColor: i / WAVE_BARS < progress ? fg : dim },
+              {
+                height: 4 + h * 20,
+                backgroundColor: i / WAVE_BARS < progress ? fg : dim,
+              },
             ]}
           />
         ))}
@@ -311,7 +324,12 @@ function MessageActionMenu({
   const top0 = insets.top + MENU_GAP;
   const bottom0 = screenH - insets.bottom - MENU_GAP;
 
-  const r = rect ?? { x: screenW / 2 - 100, y: screenH / 2 - 20, width: 200, height: 40 };
+  const r = rect ?? {
+    x: screenW / 2 - 100,
+    y: screenH / 2 - 20,
+    width: 200,
+    height: 40,
+  };
   const actionH = canDelete ? ACTION_H : 0;
   // Réactions au-dessus de la bulle s'il y a la place, sinon en dessous.
   const emojiAbove = r.y - MENU_GAP - EMOJI_BAR_H >= top0;
@@ -342,7 +360,10 @@ function MessageActionMenu({
           {REACTION_EMOJIS.map((emoji) => (
             <Pressable
               key={emoji}
-              style={({ pressed }) => [styles.menuEmojiBtn, pressed && { transform: [{ scale: 1.2 }] }]}
+              style={({ pressed }) => [
+                styles.menuEmojiBtn,
+                pressed && { transform: [{ scale: 1.2 }] },
+              ]}
               onPress={() => onReact(emoji)}
               accessibilityLabel={'Réagir avec ' + emoji}
             >
@@ -352,7 +373,12 @@ function MessageActionMenu({
         </View>
         {canDelete && (
           <Pressable
-            style={({ pressed }) => [styles.menuAction, { top: actionTop }, side, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [
+              styles.menuAction,
+              { top: actionTop },
+              side,
+              pressed && { opacity: 0.8 },
+            ]}
             onPress={onDelete}
           >
             <Ionicons name="trash-outline" size={18} color={colors.danger} />
@@ -427,14 +453,7 @@ function VideoBubble({ path }: { path: string }) {
       }
     };
   }, [player, owner]);
-  return (
-    <VideoView
-      player={player}
-      style={styles.mediaBubble}
-      nativeControls
-      contentFit="cover"
-    />
-  );
+  return <VideoView player={player} style={styles.mediaBubble} nativeControls contentFit="cover" />;
 }
 
 // Rectangle d'une bulle à l'écran (coordonnées de la fenêtre).
@@ -447,7 +466,10 @@ const EMPTY_REACTIONS: Reaction[] = [];
 // Un message fait d'emojis seuls (jusqu'à 6) s'affiche en grand, sans bulle.
 let EMOJI_ONLY: RegExp | null = null;
 try {
-  EMOJI_ONLY = new RegExp('^(?:\\p{Extended_Pictographic}|\\p{Emoji_Modifier}|\\u200d|\\ufe0f|\\s)+$', 'u');
+  EMOJI_ONLY = new RegExp(
+    '^(?:\\p{Extended_Pictographic}|\\p{Emoji_Modifier}|\\u200d|\\ufe0f|\\s)+$',
+    'u',
+  );
 } catch {
   EMOJI_ONLY = null;
 }
@@ -461,8 +483,18 @@ function isEmojiOnly(text: string | null): boolean {
 // Repère horaire centré : l'heure seule aujourd'hui, le jour et l'heure dans
 // la semaine, la date au-delà. Ex. « MAR. 12:08 ».
 const MONTHS_SHORT = [
-  'JANV.', 'FÉVR.', 'MARS', 'AVR.', 'MAI', 'JUIN',
-  'JUIL.', 'AOÛT', 'SEPT.', 'OCT.', 'NOV.', 'DÉC.',
+  'JANV.',
+  'FÉVR.',
+  'MARS',
+  'AVR.',
+  'MAI',
+  'JUIN',
+  'JUIL.',
+  'AOÛT',
+  'SEPT.',
+  'OCT.',
+  'NOV.',
+  'DÉC.',
 ];
 const TIME_GAP_MS = 60 * 60 * 1000;
 const GROUP_GAP_MS = 10 * 60 * 1000;
@@ -513,16 +545,75 @@ function TinyAvatar({ path, name, size }: { path?: string; name?: string; size: 
       cachePolicy="memory-disk"
     />
   ) : (
-    <View
-      style={[
-        styles.tinyFallback,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
+    <View style={[styles.tinyFallback, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[styles.tinyFallbackText, { fontSize: size * 0.45 }]}>
         {name?.[0]?.toUpperCase() ?? '?'}
       </Text>
     </View>
+  );
+}
+
+// Texte court d'un message cité : son texte, ou la nature du média.
+function quotePreview(m: Message): string {
+  if (m.kind === 'audio') return 'Note vocale';
+  if (m.kind === 'image') return 'Photo';
+  if (m.kind === 'video') return 'Vidéo';
+  return m.content.replace(/\s+/g, ' ').trim();
+}
+
+// Distance de balayage qui déclenche la réponse, comme WhatsApp ou Instagram.
+const REPLY_TRIGGER = 56;
+const REPLY_MAX = 80;
+
+// Balayer une bulle vers la droite pour y répondre. Le geste ne s'active
+// qu'à l'horizontale (un défilement vertical de la liste n'est jamais pris
+// pour une réponse), la bulle suit le doigt avec une petite flèche, et au-
+// delà du seuil la réponse est armée avec une vibration, au relâcher.
+function SwipeToReply({ onReply, children }: { onReply: () => void; children: React.ReactNode }) {
+  const tx = useSharedValue(0);
+  const armed = useSharedValue(false);
+  const buzz = () => haptic.impact();
+  const pan = Gesture.Pan()
+    .activeOffsetX(14)
+    .failOffsetX(-14)
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => {
+      const x = Math.max(0, Math.min(REPLY_MAX, e.translationX * 0.6));
+      tx.set(x);
+      if (!armed.value && x >= REPLY_TRIGGER) {
+        armed.set(true);
+        runOnJS(buzz)();
+      } else if (armed.value && x < REPLY_TRIGGER) {
+        armed.set(false);
+      }
+    })
+    .onEnd(() => {
+      if (armed.value) runOnJS(onReply)();
+    })
+    .onFinalize(() => {
+      armed.set(false);
+      tx.set(withSpring(0, { damping: 20, stiffness: 260 }));
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }],
+  }));
+  const iconStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(tx.value, [12, REPLY_TRIGGER], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(tx.value, [12, REPLY_TRIGGER], [0.6, 1], 'clamp') }],
+  }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <Reanimated.View>
+        <Reanimated.View style={[styles.swipeReplyIcon, iconStyle]} pointerEvents="none">
+          <View style={styles.swipeReplyCircle}>
+            <Ionicons name="arrow-undo" size={16} color={colors.textMuted} />
+          </View>
+        </Reanimated.View>
+        <Reanimated.View style={rowStyle}>{children}</Reanimated.View>
+      </Reanimated.View>
+    </GestureDetector>
   );
 }
 
@@ -540,9 +631,18 @@ const MessageRow = React.memo(function MessageRow({
   otherName,
   onLongPress,
   onOpenImage,
+  replied,
+  repliedMine,
+  onReply,
+  onOpenQuote,
 }: {
   item: Message;
   mine: boolean;
+  // Message cité par celui-ci (déjà chargé), et s'il est de moi.
+  replied: Message | null;
+  repliedMine: boolean;
+  onReply: (m: Message) => void;
+  onOpenQuote: (id: number) => void;
   // Repère horaire à afficher au-dessus, ou null.
   stamp: string | null;
   pos: GroupPos;
@@ -574,6 +674,31 @@ const MessageRow = React.memo(function MessageRow({
   const tail = pos === 'single' || pos === 'last';
   const grouped = pos === 'middle' || pos === 'last';
 
+  const who = otherName ?? 'Ton match';
+  const quote = item.reply_to_id ? (
+    <>
+      <Text style={[styles.replyLabel, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
+        {mine
+          ? repliedMine
+            ? 'Tu as répondu à ton message'
+            : `Tu as répondu à ${who}`
+          : repliedMine
+            ? `${who} t’a répondu`
+            : `${who} a répondu à son message`}
+      </Text>
+      <Pressable
+        onPress={() => replied && onOpenQuote(replied.id)}
+        style={[styles.quoteBubble, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}
+        accessibilityRole="button"
+        accessibilityLabel="Voir le message cité"
+      >
+        <Text style={styles.quoteBubbleText} numberOfLines={2}>
+          {replied ? quotePreview(replied) : 'Message indisponible'}
+        </Text>
+      </Pressable>
+    </>
+  ) : null;
+
   const body =
     item.kind === 'audio' && item.media_path ? (
       <VoiceBubble path={item.media_path} mine={mine} onLongPress={longPress} />
@@ -601,50 +726,58 @@ const MessageRow = React.memo(function MessageRow({
   return (
     <View style={grouped ? styles.rowGrouped : styles.rowNewGroup}>
       {!!stamp && <Text style={styles.stamp}>{stamp}</Text>}
-      <View style={[styles.msgLine, mine ? styles.msgLineMine : styles.msgLineTheirs]}>
-        {/* Colonne avatar : la photo n'apparaît qu'au pied de la grappe. */}
-        {!mine && (
-          <View style={styles.avatarCol}>
-            {tail && <TinyAvatar path={otherPhoto} name={otherName} size={28} />}
-          </View>
-        )}
-        <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
-          <Pressable
-            ref={bubbleRef}
-            onPress={() => setShowTime((v) => !v)}
-            onLongPress={longPress}
-            delayLongPress={280}
-            style={({ pressed }) => [
-              bigEmoji
-                ? styles.emojiBubble
-                : [
-                    styles.bubble,
-                    mine ? styles.bubbleMine : styles.bubbleTheirs,
-                    cornerStyle(mine, pos),
-                    isMedia && styles.bubbleMedia,
-                    item.pending && styles.bubblePending,
-                  ],
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            {body}
-          </Pressable>
-          {msgReactions.length > 0 && (
-            <View style={[styles.reactionsPill, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
-              {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
-                const count = msgReactions.filter((r) => r.emoji === emoji).length;
-                return (
-                  <Text key={emoji} style={styles.reactionText}>
-                    {emoji}
-                    {count > 1 ? ` ${count}` : ''}
-                  </Text>
-                );
-              })}
+      <SwipeToReply onReply={() => onReply(item)}>
+        <View style={[styles.msgLine, mine ? styles.msgLineMine : styles.msgLineTheirs]}>
+          {/* Colonne avatar : la photo n'apparaît qu'au pied de la grappe. */}
+          {!mine && (
+            <View style={styles.avatarCol}>
+              {tail && <TinyAvatar path={otherPhoto} name={otherName} size={28} />}
             </View>
           )}
-          {showTime && <Text style={styles.tapTime}>{formatStamp(item.created_at)}</Text>}
+          <View style={mine ? styles.msgColMine : styles.msgColTheirs}>
+            {quote}
+            <Pressable
+              ref={bubbleRef}
+              // Un balayage pour répondre ne doit pas faire clignoter la
+              // bulle : l'effet d'appui n'arrive qu'après un court instant.
+              unstable_pressDelay={120}
+              onPress={() => setShowTime((v) => !v)}
+              onLongPress={longPress}
+              delayLongPress={280}
+              style={({ pressed }) => [
+                bigEmoji
+                  ? styles.emojiBubble
+                  : [
+                      styles.bubble,
+                      mine ? styles.bubbleMine : styles.bubbleTheirs,
+                      cornerStyle(mine, pos),
+                      isMedia && styles.bubbleMedia,
+                      item.pending && styles.bubblePending,
+                    ],
+                pressed && { opacity: 0.85 },
+              ]}
+            >
+              {body}
+            </Pressable>
+            {msgReactions.length > 0 && (
+              <View
+                style={[styles.reactionsPill, mine ? styles.reactionsMine : styles.reactionsTheirs]}
+              >
+                {[...new Set(msgReactions.map((r) => r.emoji))].map((emoji) => {
+                  const count = msgReactions.filter((r) => r.emoji === emoji).length;
+                  return (
+                    <Text key={emoji} style={styles.reactionText}>
+                      {emoji}
+                      {count > 1 ? ` ${count}` : ''}
+                    </Text>
+                  );
+                })}
+              </View>
+            )}
+            {showTime && <Text style={styles.tapTime}>{formatStamp(item.created_at)}</Text>}
+          </View>
         </View>
-      </View>
+      </SwipeToReply>
       {/* Sous mon dernier message : la photo de l'autre quand c'est lu,
           sinon depuis quand c'est parti. */}
       {status === 'seen' ? (
@@ -692,9 +825,17 @@ function RecordingDot() {
         style={[
           styles.recordingDotHalo,
           {
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
+            opacity: pulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.35, 0],
+            }),
             transform: [
-              { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.8] }) },
+              {
+                scale: pulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.8, 1.8],
+                }),
+              },
             ],
           },
         ]}
@@ -702,7 +843,12 @@ function RecordingDot() {
       <Animated.View
         style={[
           styles.recordingDot,
-          { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.55] }) },
+          {
+            opacity: pulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 0.55],
+            }),
+          },
         ]}
       />
     </View>
@@ -720,7 +866,14 @@ const ChatComposer = React.memo(function ChatComposer({
   onSendText,
   onPickMedia,
   onStartRecording,
+  replyTo,
+  replyName,
+  onCancelReply,
 }: {
+  // Message auquel on répond (balayage), affiché au-dessus du champ.
+  replyTo: Message | null;
+  replyName: string;
+  onCancelReply: () => void;
   sendingMedia: boolean;
   onSendText: (content: string) => Promise<boolean>;
   onPickMedia: () => void;
@@ -728,6 +881,11 @@ const ChatComposer = React.memo(function ChatComposer({
 }) {
   const [draft, setDraft] = useState('');
   const hasText = !!draft.trim();
+  const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
+  // Balayer une bulle ouvre le clavier, prêt à répondre.
+  useEffect(() => {
+    if (replyTo) inputRef.current?.focus();
+  }, [replyTo]);
   // Verrou anti double envoi : deux appuis rapprochés (ou un appui qui
   // rebondit) n'envoient jamais deux fois le même message. Il ne bloque PAS
   // le message suivant : comme sur Instagram, on peut écrire et envoyer
@@ -758,56 +916,84 @@ const ChatComposer = React.memo(function ChatComposer({
   };
 
   return (
-    <View style={styles.composer}>
-      <Pressable
-        style={({ pressed }) => [styles.iconBtn, (pressed || sendingMedia) && { opacity: 0.5 }]}
-        onPress={onPickMedia}
-        disabled={sendingMedia}
-        pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
-        hitSlop={6}
-        accessibilityLabel="Envoyer une photo ou une vidéo"
-      >
-        {sendingMedia ? (
-          <ActivityIndicator size="small" color={colors.accent} />
-        ) : (
-          <Ionicons name="add-circle" size={30} color={colors.accent} />
-        )}
-      </Pressable>
-      <View style={styles.inputPill}>
-        <TextInput
-          keyboardAppearance={keyboardAppearance}
-          style={styles.input}
-          placeholder="Message"
-          placeholderTextColor={colors.textMuted}
-          value={draft}
-          onChangeText={setDraft}
-          multiline
-          maxLength={2000}
-        />
-        {!hasText && (
+    <View>
+      {replyTo && (
+        <View style={styles.replyBar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.replyBarName} numberOfLines={1}>
+              Réponse à {replyName}
+            </Text>
+            <Text style={styles.replyBarText} numberOfLines={1}>
+              {quotePreview(replyTo)}
+            </Text>
+          </View>
           <Pressable
-            onPress={onStartRecording}
-            pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+            onPress={onCancelReply}
             hitSlop={8}
-            style={({ pressed }) => [styles.inPillBtn, pressed && { opacity: 0.5 }]}
-            accessibilityLabel="Enregistrer une note vocale"
+            pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+            style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
+            accessibilityLabel="Annuler la réponse"
           >
-            <Ionicons name="mic" size={22} color={colors.accent} />
+            <Ionicons name="close" size={20} color={colors.textMuted} />
           </Pressable>
-        )}
+        </View>
+      )}
+      <View style={styles.composer}>
+        <Pressable
+          style={({ pressed }) => [styles.iconBtn, (pressed || sendingMedia) && { opacity: 0.5 }]}
+          onPress={onPickMedia}
+          disabled={sendingMedia}
+          pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+          hitSlop={6}
+          accessibilityLabel="Envoyer une photo ou une vidéo"
+        >
+          {sendingMedia ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons name="add-circle" size={30} color={colors.accent} />
+          )}
+        </Pressable>
+        <View style={styles.inputPill}>
+          <TextInput
+            ref={inputRef}
+            keyboardAppearance={keyboardAppearance}
+            style={styles.input}
+            placeholder="Message"
+            placeholderTextColor={colors.textMuted}
+            value={draft}
+            onChangeText={setDraft}
+            multiline
+            maxLength={2000}
+          />
+          {!hasText && (
+            <Pressable
+              onPress={onStartRecording}
+              pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+              hitSlop={8}
+              style={({ pressed }) => [styles.inPillBtn, pressed && { opacity: 0.5 }]}
+              accessibilityLabel="Enregistrer une note vocale"
+            >
+              <Ionicons name="mic" size={22} color={colors.accent} />
+            </Pressable>
+          )}
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.iconBtn,
+            pressed && { opacity: 0.5, transform: [{ scale: 0.9 }] },
+          ]}
+          onPress={hasText ? submit : sendHeart}
+          pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
+          hitSlop={6}
+          accessibilityLabel={hasText ? 'Envoyer' : 'Envoyer un coeur'}
+        >
+          <Ionicons
+            name={hasText ? 'send' : 'heart'}
+            size={hasText ? 24 : 28}
+            color={colors.accent}
+          />
+        </Pressable>
       </View>
-      <Pressable
-        style={({ pressed }) => [
-          styles.iconBtn,
-          pressed && { opacity: 0.5, transform: [{ scale: 0.9 }] },
-        ]}
-        onPress={hasText ? submit : sendHeart}
-        pressRetentionOffset={KEYBOARD_PRESS_RETENTION}
-        hitSlop={6}
-        accessibilityLabel={hasText ? 'Envoyer' : 'Envoyer un coeur'}
-      >
-        <Ionicons name={hasText ? 'send' : 'heart'} size={hasText ? 24 : 28} color={colors.accent} />
-      </Pressable>
     </View>
   );
 });
@@ -832,6 +1018,12 @@ export default function Chat() {
   const [fullImage, setFullImage] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Record<number, Reaction[]>>({});
   const [msgAction, setMsgAction] = useState<Message | null>(null);
+  // Message auquel on répond : posé par un balayage, vidé à l'envoi.
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const replyToRef = useRef<Message | null>(null);
+  useEffect(() => {
+    replyToRef.current = replyTo;
+  }, [replyTo]);
   const [msgRect, setMsgRect] = useState<BubbleRect | null>(null);
   const [profileView, setProfileView] = useState<ViewableProfile | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
@@ -884,7 +1076,7 @@ export default function Chat() {
   // (après que le padding du composeur s'est posé).
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidShow', () => {
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
     });
     return () => sub.remove();
   }, []);
@@ -919,6 +1111,43 @@ export default function Chat() {
     });
     return () => task.cancel();
   }, [resolveOtherId]);
+
+  // Présence sous le nom, comme sur Instagram : « En ligne », sinon « En
+  // ligne il y a 5 min ». Relue chaque minute tant que la conversation est
+  // ouverte. Rien ne s'affiche pour qui cache son statut.
+  const [otherSeenAt, setOtherSeenAt] = useState<string | null>(null);
+  const presenceVisible = useRef(false);
+  const [, setPresenceTick] = useState(0);
+  useEffect(() => {
+    const otherId = resolveOtherId();
+    if (!otherId) return;
+    let alive = true;
+    const read = () =>
+      getPresence(otherId)
+        .then((at) => {
+          if (!alive) return;
+          presenceVisible.current = at !== null;
+          setOtherSeenAt(at);
+        })
+        .catch(() => {});
+    read();
+    const timer = setInterval(() => {
+      read();
+      // Fait aussi vieillir le libellé (« il y a 2 min » puis 3).
+      setPresenceTick((t) => t + 1);
+    }, 60000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [resolveOtherId]);
+  // Un message reçu, ou un « vu » posé sur le mien, prouve que la personne
+  // est là : on passe « En ligne » tout de suite, sans attendre la relecture.
+  // Seulement si elle montre son statut.
+  const markOtherActive = useCallback(() => {
+    if (presenceVisible.current) setOtherSeenAt(new Date().toISOString());
+  }, []);
+  const presence = activeLabel(otherSeenAt);
 
   const applyReaction = useCallback((r: Reaction) => {
     setReactions((prev) => {
@@ -979,10 +1208,9 @@ export default function Chat() {
         },
         (payload) => {
           const msg = payload.new as Message;
-          setMessages((prev) =>
-            prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
-          );
+          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
           if (msg.sender_id !== myIdRef.current) {
+            markOtherActive();
             // Petit retour au creux de la main quand un message tombe.
             haptic.message();
             markMessagesRead(matchId);
@@ -1002,9 +1230,8 @@ export default function Chat() {
         },
         (payload) => {
           const updated = payload.new as Message;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
-          );
+          if (updated.read_at && updated.sender_id === myIdRef.current) markOtherActive();
+          setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
         },
       )
       // Les DELETE realtime ne portent que la clé primaire : filtre côté client.
@@ -1026,7 +1253,10 @@ export default function Chat() {
         },
         (payload) => {
           if (payload.eventType === 'DELETE') {
-            const old = payload.old as { message_id?: number; user_id?: string };
+            const old = payload.old as {
+              message_id?: number;
+              user_id?: string;
+            };
             if (old.message_id && old.user_id) {
               setReactions((prev) => ({
                 ...prev,
@@ -1046,7 +1276,7 @@ export default function Chat() {
       deferred.cancel();
       supabase.removeChannel(channel);
     };
-  }, [matchId]);
+  }, [matchId, markOtherActive]);
 
   // La fin de conversation reste en cache locale à mesure qu'elle évolue :
   // rouvrir le chat montre l'historique dans le même état qu'en le quittant,
@@ -1066,11 +1296,18 @@ export default function Chat() {
       // Identifiant provisoire unique, même pour deux envois dans la même
       // milliseconde.
       const tempId = -(Date.now() * 100 + (tempSeq.current++ % 100));
+      // La réponse vise le message balayé ; on la consomme tout de suite pour
+      // que le message suivant ne la reprenne pas.
+      const replyId =
+        replyToRef.current && replyToRef.current.id > 0 ? replyToRef.current.id : null;
+      replyToRef.current = null;
+      setReplyTo(null);
       const temp: Message = {
         id: tempId,
         match_id: matchId,
         sender_id: myId,
         content,
+        reply_to_id: replyId,
         kind: 'text',
         media_path: null,
         created_at: new Date().toISOString(),
@@ -1078,8 +1315,9 @@ export default function Chat() {
         pending: true,
       };
       setMessages((prev) => [...prev, temp]);
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
       try {
-        const msg = await sendMessage(matchId, content);
+        const msg = await sendMessage(matchId, content, replyId);
         setMessages((prev) => {
           // Le realtime a pu livrer la ligne serveur avant la réponse du RPC :
           // on retire la bulle provisoire et on dédoublonne.
@@ -1125,7 +1363,9 @@ export default function Chat() {
             const portrait = (asset.height ?? 0) >= (asset.width ?? 0);
             ctx.resize(portrait ? { height: CHAT_IMAGE_EDGE } : { width: CHAT_IMAGE_EDGE });
           }
-          const out = await (await ctx.renderAsync()).saveAsync({
+          const out = await (
+            await ctx.renderAsync()
+          ).saveAsync({
             format: SaveFormat.JPEG,
             compress: 0.72,
           });
@@ -1258,6 +1498,39 @@ export default function Chat() {
     setMsgAction(m);
   }, []);
   const openImage = useCallback((url: string) => setFullImage(url), []);
+  const startReply = useCallback((m: Message) => {
+    // Une bulle encore en cours d'envoi n'a pas d'identifiant serveur.
+    if (m.pending || m.id <= 0) return;
+    setReplyTo(m);
+  }, []);
+  const cancelReply = useCallback(() => setReplyTo(null), []);
+  // La liste est inversée (le plus récent en premier) : comme toutes les
+  // messageries, elle s'ouvre sur la fin de la conversation, sans défiler.
+  // Avant, elle s'ouvrait en haut puis sautait en bas une fois mesurée, et
+  // sur une longue conversation il fallait parfois descendre à la main.
+  const listData = useMemo(() => [...messages].reverse(), [messages]);
+  // Index des messages par identifiant : retrouve le message cité.
+  const byId = useMemo(() => {
+    const map = new Map<number, number>();
+    messages.forEach((m, i) => map.set(m.id, i));
+    return map;
+  }, [messages]);
+  // Toucher une citation fait défiler jusqu'au message d'origine.
+  const openQuote = useCallback(
+    (id: number) => {
+      const at = byId.get(id);
+      if (at === undefined) return;
+      // Position dans la liste inversée.
+      const index = messages.length - 1 - at;
+      haptic.tap();
+      listRef.current?.scrollToIndex({
+        index,
+        viewPosition: 0.4,
+        animated: true,
+      });
+    },
+    [byId, messages.length],
+  );
 
   const pickReaction = async (emoji: string) => {
     const msg = msgAction;
@@ -1398,9 +1671,7 @@ export default function Chat() {
                   />
                 ) : (
                   <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
-                    <Text style={styles.headerAvatarLetter}>
-                      {name?.[0]?.toUpperCase() ?? '?'}
-                    </Text>
+                    <Text style={styles.headerAvatarLetter}>{name?.[0]?.toUpperCase() ?? '?'}</Text>
                   </View>
                 )}
                 {/* Badge certifié posé en bas à gauche de l'avatar */}
@@ -1410,9 +1681,19 @@ export default function Chat() {
                   </View>
                 )}
               </View>
-              <Text style={styles.headerName} numberOfLines={1}>
-                {name ?? 'Discussion'}
-              </Text>
+              <View style={styles.headerText}>
+                <Text style={styles.headerName} numberOfLines={1}>
+                  {name ?? 'Discussion'}
+                </Text>
+                {presence && (
+                  <View style={styles.headerPresence}>
+                    {presence === 'En ligne' && <View style={styles.onlineDot} />}
+                    <Text style={styles.headerPresenceText} numberOfLines={1}>
+                      {presence}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </Pressable>
           ),
           headerRight: () => (
@@ -1442,24 +1723,42 @@ export default function Chat() {
         ) : (
           <FlatList
             ref={listRef}
-            data={messages}
+            data={listData}
+            inverted
             keyExtractor={(m) => String(m.id)}
             contentContainerStyle={styles.list}
             // Clavier ouvert : un appui sur une bulle (lire un vocal, ouvrir
             // une photo) agit tout de suite, sans d'abord fermer le clavier.
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            // Message cité hors de la zone déjà mesurée : on s'en approche,
+            // puis on réessaie une fois la liste posée.
+            onScrollToIndexFailed={(info) => {
+              listRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: true,
+              });
+              setTimeout(() => {
+                listRef.current?.scrollToIndex({
+                  index: info.index,
+                  viewPosition: 0.4,
+                  animated: true,
+                });
+              }, 250);
+            }}
             // Historique plafonné à ~50 messages : des fenêtres de rendu
             // modérées suffisent et allègent le premier affichage.
             initialNumToRender={25}
             maxToRenderPerBatch={25}
             windowSize={11}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>
-                {"C'est un match ! Envoie le premier message."}
-              </Text>
+              // Liste inversée : le message vide est remis à l'endroit.
+              <View style={{ flex: 1, justifyContent: 'center', transform: [{ scaleY: -1 }] }}>
+                <Text style={styles.emptyText}>{'C’est un match ! Envoie le premier message.'}</Text>
+              </View>
             }
-            renderItem={({ item, index }) => {
+            renderItem={({ item, index: shown }) => {
+              // Indice dans l'ordre chronologique (la liste est inversée).
+              const index = messages.length - 1 - shown;
               const prev = index > 0 ? messages[index - 1] : null;
               const next = index < messages.length - 1 ? messages[index + 1] : null;
               const at = (m: Message) => new Date(m.created_at).getTime();
@@ -1469,7 +1768,10 @@ export default function Chat() {
               const stamp = !prev || breaks(prev, item) ? formatStamp(item.created_at) : null;
               // Grappe : même personne, sans repère entre deux, à moins de 10 min.
               const joinsPrev =
-                !!prev && !stamp && prev.sender_id === item.sender_id && at(item) - at(prev) < GROUP_GAP_MS;
+                !!prev &&
+                !stamp &&
+                prev.sender_id === item.sender_id &&
+                at(item) - at(prev) < GROUP_GAP_MS;
               const joinsNext =
                 !!next &&
                 !breaks(item, next) &&
@@ -1483,6 +1785,8 @@ export default function Chat() {
                   ? 'first'
                   : 'single';
               const mine = item.sender_id === myId;
+              const repliedIndex = item.reply_to_id ? byId.get(item.reply_to_id) : undefined;
+              const replied = repliedIndex !== undefined ? messages[repliedIndex] : null;
               // L'état ne s'écrit que sous mon dernier message, s'il clôt le fil.
               const status =
                 mine && item.id === lastMineId && item.id === lastId
@@ -1504,6 +1808,10 @@ export default function Chat() {
                   otherName={name}
                   onLongPress={openMsgAction}
                   onOpenImage={openImage}
+                  replied={replied}
+                  repliedMine={!!replied && replied.sender_id === myId}
+                  onReply={startReply}
+                  onOpenQuote={openQuote}
                 />
               );
             }}
@@ -1555,6 +1863,11 @@ export default function Chat() {
               onSendText={sendText}
               onPickMedia={pickAndSendMedia}
               onStartRecording={startRecording}
+              replyTo={replyTo}
+              replyName={
+                replyTo ? (replyTo.sender_id === myId ? 'toi' : (name ?? 'ce message')) : ''
+              }
+              onCancelReply={cancelReply}
             />
           )}
         </View>
@@ -1590,10 +1903,7 @@ export default function Chat() {
       />
 
       {/* Photo en plein écran : la même galerie que sur les profils. */}
-      <PhotoViewer
-        uris={fullImage ? [fullImage] : null}
-        onClose={() => setFullImage(null)}
-      />
+      <PhotoViewer uris={fullImage ? [fullImage] : null} onClose={() => setFullImage(null)} />
     </SafeAreaView>
   );
 }

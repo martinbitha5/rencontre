@@ -34,6 +34,11 @@ export const styles = StyleSheet.create({
     color: colors.text,
     maxWidth: 200,
   },
+  headerText: { justifyContent: 'center' },
+  // Présence sous le nom : point vert pour « En ligne », sinon texte gris.
+  headerPresence: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  headerPresenceText: { fontSize: 12.5, color: colors.textMuted, maxWidth: 200 },
   emptyText: {
     textAlign: 'center',
     color: colors.textMuted,
@@ -302,6 +307,47 @@ export const styles = StyleSheet.create({
   voiceText: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'], minWidth: 32 },
 
   // ---- Barre de saisie ----
+  // Réponse à un message, à la manière d'Instagram : rien de coloré. Une
+  // petite ligne grise « Tu as répondu », le message cité en bulle grise
+  // estompée juste au-dessus, puis la réponse.
+  swipeReplyIcon: {
+    position: 'absolute',
+    left: 6,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  swipeReplyCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+  },
+  replyLabel: { fontSize: 12, color: colors.textMuted, marginBottom: 3, marginHorizontal: 4 },
+  quoteBubble: {
+    maxWidth: '100%',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingTop: 7,
+    paddingBottom: 12,
+    marginBottom: -6,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : '#f4f5f7',
+  },
+  quoteBubbleText: { fontSize: 14, lineHeight: 19, color: colors.textMuted },
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  replyBarName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  replyBarText: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

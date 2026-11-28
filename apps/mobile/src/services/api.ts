@@ -662,11 +662,22 @@ export async function getMessages(matchId: string, limit = 50): Promise<Message[
   return (data as Message[]).reverse();
 }
 
-export async function sendMessage(matchId: string, content: string): Promise<Message> {
+export async function sendMessage(
+  matchId: string,
+  content: string,
+  replyToId?: number | null,
+): Promise<Message> {
   const userId = await requireUserId();
   const { data, error } = await supabase
     .from('messages')
-    .insert({ match_id: matchId, sender_id: userId, content })
+    .insert({
+      match_id: matchId,
+      sender_id: userId,
+      content,
+      // Réponse à un message précis (balayage sur la bulle). Le serveur
+      // efface la référence si elle vise une autre conversation.
+      ...(replyToId && replyToId > 0 ? { reply_to_id: replyToId } : {}),
+    })
     .select('*')
     .single();
   if (error) throw error;
@@ -809,6 +820,19 @@ export async function removeReaction(messageId: number): Promise<void> {
 }
 
 // Profil complet d'un utilisateur (la RLS n'expose que les profils visibles).
+// Dernière activité d'une personne, pour l'en-tête d'une conversation.
+// null quand elle cache son statut (mode Invisible ou « statut en ligne »
+// coupé dans Confidentialité) : même règle que getProfileView.
+export async function getPresence(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('last_active_at, incognito, show_online')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!data || data.incognito || data.show_online === false) return null;
+  return (data.last_active_at as string | null) ?? null;
+}
+
 export async function getProfileView(userId: string): Promise<ViewableProfile | null> {
   const { data, error } = await supabase
     .from('profiles')

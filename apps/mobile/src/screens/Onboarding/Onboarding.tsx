@@ -127,6 +127,10 @@ const OPTIONAL_STEPS: Step[] = [
 
 // Nombre minimum de centres d'intérêt à choisir pour continuer.
 const MIN_INTERESTS = 5;
+// Plafond posé par la base (profiles_interests_check) et par l'écran
+// Modifier le profil. Sans lui, l'inscription laissait en cocher plus, et
+// l'enregistrement final était refusé au dernier écran.
+const MAX_INTERESTS = 10;
 
 // Chaque étape a son icône, son titre et sa ligne d'explication.
 const STEP_META: Record<
@@ -276,6 +280,9 @@ function profileSaveError(e: unknown): string {
   if (/display_name/.test(msg)) return 'Ce prénom ne convient pas (1 à 50 caractères).';
   if (/city_id|cities/.test(msg)) return 'Cette ville est introuvable. Choisis-la dans la liste.';
   if (/bio/.test(msg)) return 'Ta bio dépasse 500 caractères.';
+  if (/interests/.test(msg)) {
+    return `Garde ${MAX_INTERESTS} centres d'intérêt au maximum. Reviens à l'étape des centres d'intérêt pour en retirer.`;
+  }
   if (/network|fetch|timeout/i.test(msg)) {
     return 'Connexion perdue. Vérifie ton réseau et réessaie.';
   }
@@ -498,6 +505,9 @@ export default function Onboarding() {
           : 'Indique ta taille en centimètres (100 à 250).';
       }
       case 'interests': {
+        if (interests.length > MAX_INTERESTS) {
+          return `Garde ${MAX_INTERESTS} centres d'intérêt au maximum.`;
+        }
         const left = MIN_INTERESTS - interests.length;
         return left <= 0
           ? null
@@ -1159,9 +1169,11 @@ export default function Onboarding() {
               {step === 'interests' && (
                 <>
                   <Text style={styles.interestCount}>
-                    {interests.length >= MIN_INTERESTS
-                      ? `${interests.length} choisis, c'est parfait.`
-                      : `${interests.length} sur ${MIN_INTERESTS} minimum`}
+                    {interests.length >= MAX_INTERESTS
+                      ? `${MAX_INTERESTS} choisis, c'est le maximum.`
+                      : interests.length >= MIN_INTERESTS
+                        ? `${interests.length} choisis, c'est parfait (${MAX_INTERESTS} au maximum).`
+                        : `${interests.length} sur ${MIN_INTERESTS} minimum`}
                   </Text>
                   <View style={styles.chipWrap}>
                     {INTEREST_OPTIONS.map((o) => (
@@ -1171,9 +1183,15 @@ export default function Onboarding() {
                         icon={interestIcon(o)}
                         active={interests.includes(o)}
                         onPress={() =>
-                          setInterests((prev) =>
-                            prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
-                          )
+                          setInterests((prev) => {
+                            if (prev.includes(o)) return prev.filter((x) => x !== o);
+                            // Déjà 10 : on n'en ajoute pas, une vibration le dit.
+                            if (prev.length >= MAX_INTERESTS) {
+                              haptic.warning();
+                              return prev;
+                            }
+                            return [...prev, o];
+                          })
                         }
                       />
                     ))}
@@ -1195,7 +1213,10 @@ export default function Onboarding() {
                     textAlignVertical="top"
                   />
                   <FocusLine active={bio.trim().length > 0} />
-                  <Text style={styles.bioCount}>{BIO_MAX - bio.length} caractères</Text>
+                  <Text style={styles.bioCount}>
+                    {BIO_MAX - bio.length} caractère{BIO_MAX - bio.length > 1 ? 's' : ''} restant
+                    {BIO_MAX - bio.length > 1 ? 's' : ''}
+                  </Text>
                 </View>
               )}
             </View>

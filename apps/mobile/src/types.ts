@@ -278,6 +278,8 @@ export interface Message {
   media_path: string | null;
   created_at: string;
   read_at: string | null;
+  // Message cité par cette réponse (migration 087), null sinon.
+  reply_to_id?: number | null;
   // Vrai uniquement côté client, le temps que le serveur confirme l'envoi :
   // la bulle apparaît sous le doigt avec une petite horloge, puis la ligne
   // serveur la remplace. Jamais présent sur une ligne venue de la base.
